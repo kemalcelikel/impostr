@@ -31,7 +31,7 @@ isolation and operator inputs remain gates at the relevant item.
 
 ---
 
-## [ ] IMP-001 — Bootstrap app and database baseline
+## [x] IMP-001 — Bootstrap app and database baseline
 
 Type: feature
 **Depends on:** None
@@ -39,7 +39,7 @@ Type: feature
 Alembic migration baseline and reproducible development checks; do not add project
 or OpenCode behavior yet.
 **Required capabilities:** Operator-provisioned Docker/Compose on a development
-host (unavailable in this shell); pinned Python/Node dependencies.
+host (verified in this checkout); pinned Python/Node dependencies.
 
 ### Done looks like
 - A Vite/React/Tailwind client reaches a Python/FastAPI health endpoint through
@@ -56,6 +56,8 @@ host (unavailable in this shell); pinned Python/Node dependencies.
 **Documentation impact:** AGENTS.md environment/command table and operator setup.
 **Open decisions:** Actual host paths, TLS/domain and secret provisioning belong to
 the operator; no deployment address or credentials may be guessed.
+**Verified commit:** `af0c9e7` on `feature/impostr-v1` (local only); bootstrap and
+recovery checks passed. No shared-server release or Python dependency audit claimed.
 
 ---
 
