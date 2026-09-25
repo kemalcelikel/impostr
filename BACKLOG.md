@@ -61,7 +61,7 @@ recovery checks passed. No shared-server release or Python dependency audit clai
 
 ---
 
-## [ ] IMP-002 — Prove safe OpenCode web-session integration
+## [!] IMP-002 — Prove safe OpenCode web-session integration
 
 Type: feature
 **Depends on:** IMP-001
@@ -87,10 +87,15 @@ sessions and isolation; do not expose a shared-host agent endpoint yet.
 boundary changes only if the proven contract differs.
 **Open decisions:** Runtime/API mechanism depends on measured OpenCode behavior;
 do not assume `opencode run` or a JS SDK is a resumable Python web adapter.
+**Blocker:** No approved secret-safe model access or proven isolated agent runtime;
+live session protocol and containment tests remain unverified. No shared-host endpoint.
+**Checkpoint:** One bounded probe: OpenCode 1.18.32/`tech-lead` available;
+`bwrap` 0.6.1 empty namespace smoke passed, but no live model session or agent
+denial tests ran. Resume only with an approved broker and fail-closed runtime.
 
 ---
 
-## [ ] IMP-003 — Admin-provisioned login and private project access
+## [x] IMP-003 — Admin-provisioned login and private project access
 
 Type: feature
 **Depends on:** IMP-001
@@ -113,6 +118,10 @@ server sessions, project creator/administrator policy and minimal accessible UI.
 passwords or test credentials in Git).
 **Open decisions:** None for first-release behavior; establish real bootstrap/check
 commands under IMP-001 before promoting implementation.
+**Verified commit:** `e4558ae` on `feature/impostr-v1` (local only); API,
+PostgreSQL migration/integration, web, toolkit, and local browser checks passed.
+External proxy/TLS, agent isolation, backup/restore, and dependency audit remain
+release gates, not shared-server readiness.
 
 ---
 
