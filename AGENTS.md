@@ -3,8 +3,8 @@
 ## Sources and current state
 
 - `PROJECT.md` is the product, data, security and UI contract; `BACKLOG.md` holds
-  future slices and readiness. `PROJECT.md` contains pre-bootstrap status statements
-  that are now stale; current local operation instructions are in
+  future slices and readiness. `PROJECT.md` distinguishes the target first release
+  from the currently implemented slice; local operation instructions are in
   `docs/local-development.md`. Root `PROJECT.md.example`, `AGENTS.md.example`, and
   `BACKLOG.md.example` are canonical _inputs_ for Impostr-created projects, not
   Impostr's live instructions. Root `scripts/backlog.py` defines the compatible
@@ -14,13 +14,19 @@
   current OpenCode CLI can list the installed `tech-lead`, `architect`,
   `ui-designer`, `developer`, `senior-developer`, `reviewer`, `docs` and `overnight`.
   `overnight` is runner-only; web planning uses `tech-lead`.
-- This checkout now contains the IMP-001 application bootstrap: Compose services,
-  a FastAPI health endpoint, a static web front door, PostgreSQL, and an initial
-  Alembic baseline. It is not yet the planned user-facing application: there is no
-  sign-in, test account, domain schema, project workflow, or shared-server release.
-  Do not substitute toolkit runner tests or the current health checks for those
-  missing application acceptance tests. The supported local setup and exact
+- This checkout contains the IMP-001 bootstrap and the IMP-003 identity/account
+  administration and private project-metadata slice: Compose services, a FastAPI
+  API, a static front door, PostgreSQL, offline first-admin bootstrap/recovery,
+  authenticated accounts, and creator/admin-scoped metadata reads. It still does
+  not implement project creation, planning documents, chat, approvals, exports, or
+  a shared-server release. Do not substitute toolkit runner tests or health checks
+  for the missing product acceptance tests. The supported local setup and exact
   verified commands are in `docs/local-development.md`.
+- IMP-002 remains blocked: OpenCode 1.18.32 and the installed agents are present,
+  but no brokered, secret-safe isolated agent integration has been demonstrated.
+  A bare `bwrap` 0.6.1 namespace smoke test exiting 0 is not proof of a usable boundary;
+  live sessions, protocol events/questions, permission handling, and denial cases
+  have not been verified. Do not claim an agent gateway or shared-server readiness.
 - The published planning baseline was `v1` at `1731c81`; the IMP-001 batch started
   from `86a97a4` on `feature/impostr-v1`. This work branch is not itself a published
   release. Confirm the current published baseline and workflow before future work
@@ -63,17 +69,23 @@ limits are maintained in `docs/local-development.md`.
 | Toolchain inspection                                                                        | `python3 --version`; `node --version`; `npm --version`; `opencode --version` | Host observed Python 3.10.12, Node v24.12.0, npm 11.6.2, OpenCode 1.18.32. App containers pin Python 3.12.11, Node 22.17.0/npm 10.9.2, PostgreSQL 17.6, and nginx 1.29.0. |
 | Docker/Compose baseline | `docker info --format '{{.ServerVersion}}'`; `docker compose version` | Verified Docker server 29.8.0 and Compose v5.5.1. Docker socket access is host-root-equivalent; web planning agents must not receive it. |
 | GitHub PR tooling (read-only) | `gh --version`; `gh repo view --json nameWithOwner -q .nameWithOwner`; `gh pr list --state open --json number,headRefName,baseRefName --limit 20` | Verified GitHub CLI 2.101.0 is authenticated and can read `kemalcelikel/impostr`; PR creation and new branch push have not been exercised. Do not log tokens. |
-| IMP-001 install/start/migrations/tests/lint/format/typecheck/build/container checks          | Exact verified commands below; expanded setup in `docs/local-development.md` | Coordinator verification passed: API 4 tests/checks, web 4 tests/checks, container/health/recovery checks, and six toolkit tests. No test accounts or end-to-end product workflow tests exist. |
-| Dependency/security checks                                                                    | From `web/`: `npm audit --audit-level=moderate` | Coordinator verified 0 moderate-or-higher npm findings. Host `pip-audit` is not installed; no final independent Python dependency audit was run. No release security gate/policy is configured. |
+| IMP-001/003 local install, migrations, app gates, and recovery checks | Exact verified commands below; expanded setup in `docs/local-development.md` | API gate: 32 passed, 3 PostgreSQL-only skipped, plus Ruff/format/mypy exit 0. Separate PostgreSQL migration and 3 integration tests exited 0. Web: 6 tests plus lint/format/typecheck/build exit 0. Toolkit: 6 tests. No full project-planning end-to-end workflow exists. |
+| IMP-002 agent runtime integration | No verified integration command | Blocked: no brokered, secret-safe isolation or live session/protocol/question/permission/denial evidence. Do not infer capability from `opencode agent list` or a bare namespace smoke test. |
+| Dependency/security checks | From `web/`: `npm audit --audit-level=moderate` | An earlier check found 0 moderate-or-higher npm findings; the latest attempt was blocked by `EAI_AGAIN` resolving the npm registry. Host `pip-audit` is not installed; no final independent Python dependency audit was run. No release security gate/policy is configured. |
 
-### IMP-001 verified local commands
+### IMP-001/003 verified local commands
 
 Run from the repository root with a local `.env` created from `.env.example`;
 never copy its generated secrets elsewhere. Compose reads `POSTGRES_DB`,
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DB_USER`, `DB_PASSWORD`,
-`APP_BIND_ADDRESS`, and `APP_PORT`. The password values are required; the example
-defaults to database `impostr`, owner `impostr_owner`, app role `impostr_app`, and
-loopback `127.0.0.1:8080`. The app dependency/runtime locks are
+`IMPOSTR_RATE_LIMIT_KEY`, `IMPOSTR_PUBLIC_ORIGIN`, and `APP_PORT`. The database
+password values are required; the example defaults to database `impostr`, owner
+`impostr_owner`, app role `impostr_app`, and loopback `127.0.0.1:8080`.
+`IMPOSTR_PUBLIC_ORIGIN` defaults to the loopback HTTP origin derived from
+`APP_PORT`; leave it unset for this local setup. A blank
+`IMPOSTR_RATE_LIMIT_KEY` falls back to `DB_PASSWORD`; a separately configured key
+must contain at least 32 bytes. `APP_BIND_ADDRESS` is not a current setting. The
+app dependency/runtime locks are
 `api/requirements.lock`, `api/requirements-dev.lock`, and
 `web/package-lock.json` (`web/.npmrc` enforces Node/npm versions).
 
@@ -88,12 +100,26 @@ docker compose -p impostr-verify1 run --rm api alembic current
 docker compose -p impostr-verify1 up -d
 docker compose -p impostr-verify1 ps
 curl --fail --silent --show-error http://127.0.0.1:8080/api/health
+docker compose -p impostr-verify1 run --rm -it api \
+  python -m app.bootstrap_admin bootstrap --username adminname
 docker compose -p impostr-verify1 restart
 docker compose -p impostr-verify1 run --rm api alembic current
 ```
 
-The current migration revision is `20260925_0001`. All commands in the setup and
-recovery sequences exited 0.
+The bootstrap command prompts twice for the new administrator password without
+putting it in command arguments. Use a real, chosen username in place of
+`adminname`; it must satisfy the account username rules. Bootstrap succeeds only
+once on an empty users table after migrations. For an existing administrator,
+offline recovery uses:
+
+```sh
+docker compose -p impostr-verify1 run --rm -it api \
+  python -m app.bootstrap_admin recover --username adminname
+```
+
+It re-enables that admin, changes its password, and revokes its active sessions.
+Neither operation has a public or network recovery endpoint. The current migration
+revision is `20260925_0002`. All listed setup and recovery checks exited 0.
 The only published host port was loopback `127.0.0.1:8080`; health returned 200.
 Coordinator recovery checks also confirmed database stop returned health 503,
 database start restored health 200, and `/api/agents` returned 404:
@@ -116,23 +142,26 @@ docker compose -p impostr-verify1 --profile checks run --build --rm web-check sh
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-Both app gates passed with four tests each and all listed checks at exit 0; the
-toolkit suite passed six tests. Browser checks at 1440, 1024, 768, and 375 px found
-no horizontal overflow and confirmed keyboard focus. The first API gate exposed a
-Ruff cache write failure in the read-only check image; Compose now sets
-`RUFF_CACHE_DIR=/tmp/ruff` and `MYPY_CACHE_DIR=/tmp/mypy`, and the rerun passed.
-See `docs/local-development.md` for local secret setup, health/recovery details,
-and operating limits.
+The latest API gate passed 32 tests, skipped 3 PostgreSQL-only integration tests,
+and passed Ruff, format, and mypy checks. The separate PostgreSQL migration and
+integration gate passed 3 tests; the web gate passed 6 tests plus lint, format,
+typecheck, and build; the toolkit suite passed 6 tests. Browser checks at 1440,
+1024, 768, and 375 px found no horizontal overflow and confirmed keyboard focus.
+See `docs/local-development.md` for local secret setup, account bootstrap/recovery,
+health and database recovery, and operating limits.
 
 Do not commit `.env`, database dumps, private transcripts, provider config or
 `.opencode/progress.md`/runner logs. The checked-in `.env.example` contains empty
 local-development secret fields, not usable credentials. Current Compose publishes
-only the front door on loopback; it provides no TLS, domain, account bootstrap, or
-shared-server deployment. Use the local-only setup instructions and do not infer
-production or release readiness from a passing container check. The installed
+only the front door on loopback. The application now has cookie-backed sign-in and
+offline account bootstrap/recovery, but has no TLS or domain setup, trusted external
+proxy contract, backup/restore runbook, agent broker/isolation, or shared-server
+deployment. Use the local-only setup instructions and do not infer production or
+release readiness from passing container checks. The installed
 `ui-ux-pro-max` and `ui-styling` skills are optional design aids; the `ui-designer`
 may use them without reinstalling them. Browser tools are available, but no
-application browser-test command or test login has been established.
+automated application browser-test command or checked-in/reusable test credentials
+have been established.
 
 ## Implementation and review boundaries
 

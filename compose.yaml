@@ -36,6 +36,9 @@ services:
       DB_NAME: ${POSTGRES_DB:-impostr}
       DB_USER: ${DB_USER:-impostr_app}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      APP_PORT: ${APP_PORT:-8080}
+      IMPOSTR_PUBLIC_ORIGIN: ${IMPOSTR_PUBLIC_ORIGIN:-}
+      IMPOSTR_RATE_LIMIT_KEY: ${IMPOSTR_RATE_LIMIT_KEY:-${DB_PASSWORD:?Set DB_PASSWORD in .env}}
     depends_on:
       db:
         condition: service_healthy
@@ -67,7 +70,8 @@ services:
       context: ./web
       target: runtime
     ports:
-      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:8080"
+      # Loopback-only until trusted reverse-proxy client-IP handling is implemented and tested.
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
     depends_on:
       api:
         condition: service_healthy
@@ -102,6 +106,37 @@ services:
       - ALL
     networks:
       - checks
+
+  api-integration-check:
+    build:
+      context: ./api
+      target: development
+    profiles:
+      - integration
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-impostr}
+      DB_USER: ${DB_USER:-impostr_app}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      APP_PORT: ${APP_PORT:-8080}
+      IMPOSTR_PUBLIC_ORIGIN: ${IMPOSTR_PUBLIC_ORIGIN:-}
+      IMPOSTR_RATE_LIMIT_KEY: ${IMPOSTR_RATE_LIMIT_KEY:-${DB_PASSWORD:?Set DB_PASSWORD in .env}}
+      IMPOSTR_TEST_POSTGRES: "1"
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
 
   web-check:
     build:

@@ -24,24 +24,50 @@ collaboration/invitations, public signup, and importing runner outcomes. Downloa
 files are planning artifacts, not evidence that a repository is ready to run. The
 owner continues to prepare application repositories and launch the runner manually.
 
-### Existing repository versus planned application
+### Current implementation boundary (IMP-001/003)
 
-- This checkout currently contains root `PROJECT.md.example`, `AGENTS.md.example`,
+The checkout has an earlier, limited application slice; the first-release scope
+above is not yet implemented. The current UI supports operator-provisioned sign-in,
+administrator-managed accounts, own-password changes, and reads of project
+metadata. The first administrator is created or recovered through an offline CLI;
+there is no public signup or network recovery route. Administrators can create,
+reset, and deactivate accounts. Members can read metadata for projects they own;
+administrators can read all project metadata, and administrator metadata reads are
+audited. Project creation is not implemented, so a new database can contain no
+projects. Planning documents, project workflow, chat, approvals, downloads, and an
+agent gateway are not part of this slice.
+
+The API uses Argon2id password hashing, server-side cookie sessions, CSRF and exact
+Origin checks on unsafe requests, and database-backed rate limits. These are
+implemented local-app controls, not evidence of a shared-server security boundary.
+The agent-runtime gate is still blocked: installed OpenCode agents and a bare
+`bwrap` 0.6.1 namespace smoke test do not demonstrate a brokered, secret-safe
+isolated agent integration. Local setup and account recovery instructions are in
+[`docs/local-development.md`](docs/local-development.md). Do not infer TLS,
+reverse-proxy, backup/restore, production, or shared-server readiness from this
+slice.
+
+### Current implementation versus planned application
+
+- This checkout contains the root `PROJECT.md.example`, `AGENTS.md.example`,
   `BACKLOG.md.example`, `scripts/backlog.py`, and `run-tonight.sh`; a nested
   `overnight-agent/` distribution carries duplicates and global agent definitions.
-  There is no Impostr application, database schema, UI, or app-specific run command.
+  The limited IMP-001/003 application is in `api/`, `web/`, and `compose.yaml`;
+  its supported local commands are in `docs/local-development.md`.
 - Root `.example` files are the canonical **input templates** for Impostr-created
   projects; retain their identity/version for each created project. The nested
   distribution is a reference, not a second source of truth. The root helper is
   the compatibility reference for exported backlog syntax. These root planning
   files describe Impostr itself and are not the templates for user projects.
 - OpenCode agents are installed for the current CLI environment (including
-  `tech-lead`, `architect`, `ui-designer`, `developer`, and `overnight`); a working
-  web-session API and isolated runtime have **not** been demonstrated. This
-  repository uses GitHub and an existing `v1` planning baseline. The owner chose
-  one work branch based on `v1`, ending in a single PR to `development`; this
-  replaces the former per-task sprint-PR proposal. See `AGENTS.md` for the
-  execution contract, effective after its publication.
+  `tech-lead`, `architect`, `ui-designer`, `developer`, and `overnight`), but a
+  working web-session API and brokered, secret-safe isolated runtime have **not**
+  been demonstrated. The bare `bwrap` 0.6.1 namespace smoke test is not proof of such an
+  integration; session events/questions, permission handling, and denials remain
+  unverified. This repository uses GitHub and an existing `v1` planning baseline.
+  The owner chose one work branch based on `v1`, ending in a single PR to
+  `development`; this replaces the former per-task sprint-PR proposal. See
+  `AGENTS.md` for the execution contract, effective after its publication.
 
 ## People, permissions, and workflow
 
@@ -205,7 +231,7 @@ successful mock integration test with an isolated, working OpenCode deployment.
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
 | UI/backend/deployment stack | Owner decided / technical choice | Vite/React/Tailwind, Python/PostgreSQL/Alembic/Nginx; FastAPI/ORM and major-version baselines are technical proposals to confirm in bootstrap. |
 | Safe live OpenCode integration | Open capability gate | Spike must prove session resume, events/questions, config/agent discovery, secret handling and isolation before gateway is implementation-ready. |
-| Deployment environment, exact app commands and secrets provision | Partly verified / open release gate | Docker daemon, Compose and GitHub CLI read access now work in the agent session. No separate host PostgreSQL install is required. Actual app commands, web-agent isolation, TLS and release checks remain to be established by their backlog items. |
+| Deployment environment, exact app commands and secrets provision | Local-only setup verified / release gate open | Docker/Compose setup, migrations, local account bootstrap/recovery, API health and database recovery commands are documented in `docs/local-development.md`. No separate host PostgreSQL install is required. Web-agent isolation, TLS/reverse-proxy handling, backup/restore, and release checks remain unverified. |
 | This repository's execution/delivery policy | Owner approved / publication gate | Base from published `v1`; perform verified slices on one long-lived feature branch; continue independently eligible work after a blocker; submit one final PR to `development` for human merge. All 12 dependency-gated items are owner-approved ready; publish this changed execution contract before launch. |
 
 Implementation slices, dependencies and verification are in `BACKLOG.md`; actual

@@ -1,26 +1,19 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-
-import pytest
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.config import AppSettings
 from app.database import database_url_from_environment
 from app.main import create_app
 
 
-@pytest.fixture
-def engine() -> Iterator[Engine]:
-    database_engine = create_engine("sqlite+pysqlite:///:memory:")
-    yield database_engine
-    database_engine.dispose()
-
-
-def test_health_executes_a_database_query_and_disables_caching(engine: Engine) -> None:
-    with TestClient(create_app(engine)) as client:
+def test_health_executes_a_database_query_and_disables_caching(
+    engine: Engine, settings: AppSettings
+) -> None:
+    with TestClient(create_app(engine, settings)) as client:
         response = client.get("/api/health")
 
     assert response.status_code == 200
@@ -29,14 +22,14 @@ def test_health_executes_a_database_query_and_disables_caching(engine: Engine) -
 
 
 def test_database_failure_returns_generic_service_unavailable(
-    engine: Engine, monkeypatch: MonkeyPatch
+    engine: Engine, settings: AppSettings, monkeypatch: MonkeyPatch
 ) -> None:
     def unavailable_connect() -> None:
         raise SQLAlchemyError("test-only database diagnostic")
 
     monkeypatch.setattr(engine, "connect", unavailable_connect)
 
-    with TestClient(create_app(engine)) as client:
+    with TestClient(create_app(engine, settings)) as client:
         response = client.get("/api/health")
 
     assert response.status_code == 503
@@ -59,8 +52,11 @@ def test_database_url_preserves_special_characters_in_password() -> None:
     assert url.password == password_marker
 
 
-def test_only_health_route_is_exposed(engine: Engine) -> None:
-    with TestClient(create_app(engine)) as client:
+def test_docs_signup_and_unimplemented_agent_routes_are_not_exposed(
+    engine: Engine, settings: AppSettings
+) -> None:
+    with TestClient(create_app(engine, settings)) as client:
         assert client.get("/docs").status_code == 404
         assert client.get("/openapi.json").status_code == 404
         assert client.get("/api/agents").status_code == 404
+        assert client.post("/api/auth/register").status_code == 404
