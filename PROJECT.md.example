@@ -1,0 +1,222 @@
+# Project: <PROJECT_NAME>
+
+> STARTER TEMPLATE — copy to the target repository as `PROJECT.md`.
+> This is the durable product/technical specification, not a diary or task queue.
+> Replace every `<PLACEHOLDER>`, remove inapplicable optional sections, and remove
+> these setup notes. Mark genuine unknowns with an owner and decision point;
+> do not disguise assumptions as settled requirements.
+
+## Starter checklist
+
+1. Define users, problem, intended outcomes, and explicit scope boundaries.
+2. Specify observable behavior and important failure cases, not just technologies.
+   Include examples wherever interpretations could differ.
+3. Choose supported stack versions and describe the actual/planned architecture.
+   For existing repositories, distinguish current behavior from planned changes.
+4. Establish canonical interfaces, data semantics, ownership, and compatibility
+   before parallel implementation across modules or repositories.
+5. Define relevant UI, operational, and quality requirements with measurable
+   acceptance criteria. Remove irrelevant sections rather than imposing them.
+   Explicitly classify security exposure and sensitive data; do not assume that
+   using a framework or passing tests establishes a security model.
+6. Fill decisions and definition of done. Put implementable work in
+   `<BACKLOG_OR_ISSUE_TRACKER>`, with task-level acceptance and dependencies.
+    Use BACKLOG.md.example for Markdown queues; tech-lead drafts start `[-]` until
+    the owner approves readiness. Preserve IDs when refining existing work.
+7. Fill AGENTS.md with exact setup/check commands and execution policies.
+   Link larger specifications/design documents instead of duplicating them.
+8. Resolve contract/architecture decisions before assigning dependent work.
+   Update this specification when agreed requirements change, not after every step.
+
+## 1. Purpose and users — required
+
+- Summary: `<WHAT_THE_PRODUCT_DOES_IN_TWO_OR_THREE_SENTENCES>`.
+- Problem: `<USER_PROBLEM_AND_WHY_EXISTING_OPTIONS_ARE_INSUFFICIENT>`.
+- Primary users: `<ROLES_AND_RELEVANT_EXPERTISE>`.
+- Usage context: `<WHERE_WHEN_AND_ON_WHICH_PLATFORMS_IT_IS_USED>`.
+- Product outcomes: `<OBSERVABLE_SUCCESS_CRITERIA>`.
+
+## 2. Scope — required
+
+### In scope
+
+- `<CORE_CAPABILITY_AND_BOUNDARY>`.
+- `<NEXT_CORE_CAPABILITY_AND_BOUNDARY>`.
+
+### Out of scope
+
+- `<EXPLICITLY_EXCLUDED_CAPABILITY_AND_REASON_IF_USEFUL>`.
+
+### Release boundaries — optional
+
+`<FIRST_DELIVERABLE_REQUIREMENTS_AND_WHAT_IS_INTENTIONALLY_LATER>`.
+Keep task status and scheduling in the backlog/tracker, not in this file.
+
+## 3. Behavior and domain rules — required
+
+| Workflow / capability | Inputs and preconditions | Observable result | Failure / edge behavior |
+|---|---|---|---|
+| `<PRIMARY_WORKFLOW>` | `<INPUTS_AUTH_STATE>` | `<OUTPUT_OR_STATE_TRANSITION>` | `<INVALID_EMPTY_PARTIAL_REPEATED_CASES>` |
+| `<SECONDARY_WORKFLOW>` | `<INPUTS_AUTH_STATE>` | `<OUTPUT_OR_STATE_TRANSITION>` | `<RECOVERY_OR_RETRY_BEHAVIOR>` |
+
+- Domain terms and invariants: `<DEFINITIONS_AND_RULES_THAT_MUST_ALWAYS_HOLD>`.
+- Validations and limits: `<REQUIRED_FIELDS_RANGES_AND_SIZE_LIMITS>`.
+- Worked examples / canonical fixtures: `<EXAMPLES_OR_LINKS>`.
+- Standards or calculations: `<NAMED_PROTOCOL_VERSION_AND_CANONICAL_REFERENCE_OR_NA>`.
+  Define units, normalization, ordering, rounding/tie handling, thresholds, and
+  empty cases where they affect results. Do not claim "standard-compatible"
+  behavior without naming the standard and explaining intentional deviations.
+
+## 4. Technology and environment — required
+
+| Area | Choice and supported version | Constraints / rationale |
+|---|---|---|
+| Languages / runtimes | `<CHOICES_AND_VERSIONS>` | `<CONSTRAINTS>` |
+| Application frameworks | `<CHOICES_OR_NONE>` | `<CONSTRAINTS>` |
+| Package manager / lockfiles | `<CHOICES>` | `<REPRODUCIBILITY_POLICY>` |
+| Persistence / queues / caches | `<CHOICES_OR_NONE>` | `<OWNERSHIP_AND_LIFECYCLE>` |
+| External services / libraries | `<CHOICES_OR_NONE>` | `<COMPATIBILITY_REQUIREMENTS>` |
+| Tests / browser tooling | `<CHOICES>` | `<WHAT_EACH_LAYER_VERIFIES>` |
+| Linter / formatter / type checker | `<SEPARATE_TOOL_CHOICES_OR_NA>` | `<ENFORCEMENT>` |
+| Deployment / supported platforms | `<TARGETS_AND_VERSIONS>` | `<HARDWARE_OR_ENVIRONMENT_REQUIREMENTS>` |
+
+Exact installation, run, and check commands belong in AGENTS.md. Identify required
+configuration by name and example-file location; never embed credentials.
+
+## 5. Architecture and repository map — required
+
+Describe boundaries and data/control flow with a short explanation or existing
+diagram. Do not prescribe a generic directory tree that does not fit the project.
+
+| Path / component | Responsibility | Dependencies / owner |
+|---|---|---|
+| `<SOURCE_PATH>` | `<RESPONSIBILITY_AND_BOUNDARY>` | `<DEPENDENCIES_OR_OWNER>` |
+| `<TEST_PATH>` | `<VERIFICATION_SCOPE>` | `<FIXTURES_OR_SERVICES>` |
+| `<CONTRACT_OR_DOC_PATH>` | `<CANONICAL_DEFINITION>` | `<OWNER>` |
+
+- Current implementation: `<EXISTING_STATE_OR_NEW_PROJECT>`.
+- Intended changes: `<ARCHITECTURAL_DELTA_OR_NONE>`.
+- Dependency direction and extension points: `<RULES_AND_EXISTING_PATTERNS>`.
+- Generated code/assets and their sources: `<PATHS_OR_NONE>`.
+
+### Multi-repository / multi-service system — optional
+
+- System specification: `<UNIFIED_SPEC_PATH_OR_CANONICAL_REFERENCE>`.
+- This repository's responsibility: `<BOUNDARY>`.
+
+| Repository / service | Owner and role | Provided / consumed contract | Version and integration dependency |
+|---|---|---|---|
+| `<REPOSITORY>` | `<OWNER_AND_ROLE>` | `<CANONICAL_CONTRACT_LINK>` | `<SUPPORTED_VERSION_AND_ORDER>` |
+
+Specify contract-change coordination, integration-test ownership, compatibility
+windows, deployment ordering, and access prerequisites. Mark missing contracts
+explicitly with an owner; do not let each repository invent its own version.
+
+## 6. Interfaces and data contracts — fill relevant subsections
+
+### External and internal interfaces
+
+For each API, CLI, event, library entry point, or file format, define:
+- Canonical schema/specification and version: `<PATH_OR_REFERENCE>`.
+- Inputs/outputs with examples: `<FIELDS_TYPES_REQUIRED_OPTIONAL_DEFAULTS>`.
+- Error semantics: `<ERROR_CODES_EXIT_CODES_RETRYABLE_FAILURES>`.
+- Authentication/authorization or trust boundary: `<POLICY_OR_NA>`.
+- Compatibility and evolution: `<BREAKING_CHANGE_AND_DEPRECATION_POLICY>`.
+- Pagination, ordering, idempotency, retries, concurrency: `<RULES_OR_NA>`.
+
+### Data semantics and lifecycle
+
+- Ownership, identifiers, units, encodings, time zones, and transformations:
+  `<DEFINITIONS_AND_COMPONENT_RESPONSIBILITIES>`.
+- Storage, retention/deletion, import/export, migrations/backfills, recovery:
+  `<REQUIREMENTS_OR_NA>`.
+- Reproducibility/audit metadata: `<VERSIONS_CONFIG_INPUT_IDS_OR_NA>`.
+- Consistency, transactions, partial failure, duplicate handling: `<RULES_OR_NA>`.
+
+## 7. UI/UX requirements — optional; remove for non-UI projects
+
+- Target platforms, devices, locales, accessibility requirements: `<TARGETS>`.
+- Main journeys and information hierarchy: `<FLOWS_OR_DESIGN_REFERENCE>`.
+- Canonical design principles/system and override precedence: `<ACTUAL_PATHS>`.
+- Existing component library, tokens, approved references: `<LOCATIONS>`.
+- Optional project-installed design skills: `<SKILL_NAMES_AND_PURPOSES_OR_NONE>`;
+  record setup/provenance in AGENTS.md. Agents must not install them during work.
+- Responsive behavior, input modes, and applicable loading/error/empty/recovery
+  states: `<REQUIREMENTS_BY_FLOW>`.
+- Visual/interaction acceptance: `<OBSERVABLE_CRITERIA_AND_EVIDENCE_REQUIRED>`.
+
+Separate approved constraints from suggestions and assumptions. Request design
+where decisions are needed, not a new design system for every small UI change.
+Define rendering/browser tools and commands in AGENTS.md.
+
+## 8. Quality and operations — include only relevant requirements
+
+| Concern | Concrete target / boundary | How it is verified |
+|---|---|---|
+| Correctness / reliability | `<TARGET_AND_FAILURE_TOLERANCE>` | `<CHECK_OR_EVIDENCE>` |
+| Performance / scale | `<MEASURABLE_BUDGET_OR_OUT_OF_SCOPE>` | `<WORKLOAD_AND_MEASUREMENT>` |
+| Security / privacy | `<ACTUAL_DATA_AND_TRUST_REQUIREMENTS>` | `<CHECK_OR_REVIEW>` |
+| Observability / support | `<LOG_METRIC_DIAGNOSTIC_REQUIREMENTS>` | `<CHECK_OR_RUNBOOK>` |
+| Deployment / recovery | `<RELEASE_ROLLBACK_BACKUP_REQUIREMENTS_OR_NA>` | `<VALIDATION>` |
+
+Avoid vague "production-ready" requirements and invented compliance obligations.
+Tie requirements to actual users, data, operating conditions, and failure costs.
+
+### Security model and hardening — required, depth proportional to exposure
+
+For a local tool, this may be a few explicit boundaries and input-handling rules.
+For public, multi-tenant, or sensitive-data systems, define the relevant details
+below or link a maintained threat model. Mark inapplicable items with a reason.
+
+- Exposure and actors: `<LOCAL_INTERNAL_PUBLIC_USERS_ADMINS_SERVICES_AND_UNTRUSTED_ACTORS>`.
+- Protected assets/data: `<SENSITIVITY_OWNERSHIP_RETENTION_AND_REDACTION_REQUIREMENTS>`.
+- Trust boundaries: `<ENTRY_POINTS_DATA_FLOWS_AND_ENFORCEMENT_COMPONENTS>`.
+- Identity/access: `<AUTHENTICATION_AUTHORIZATION_ROLES_OWNERSHIP_TENANT_ISOLATION_OR_NA>`.
+- Input/output handling: `<VALIDATION_UPLOAD_PATH_URL_RENDERING_AND_INJECTION_BOUNDARIES>`.
+- Secret/session/crypto policy: `<ESTABLISHED_MECHANISMS_STORAGE_ROTATION_AND_TRANSPORT_OR_NA>`.
+- Abuse controls: `<PAYLOAD_TIME_RATE_CONCURRENCY_AND_RESOURCE_LIMITS_OR_NA>`.
+- Deployment defaults: `<EXPOSED_INTERFACES_SERVICE_PRIVILEGES_NETWORK_AND_DEBUG_POLICY>`.
+- Dependency/supply-chain policy: `<SUPPORTED_VERSIONS_UPDATE_OWNERSHIP_AND_BUILD_TRUST>`.
+- Misuse cases and acceptance: `<REALISTIC_DENIED_ACTIONS_AND_REQUIRED_NEGATIVE_TESTS>`.
+- Residual risks and owner: `<EXPLICIT_DECISIONS_OR_NONE>`.
+- Required standards, if any: `<APPLICABLE_STANDARD_VERSION_AND_SCOPE_OR_NONE>`.
+
+Put executable security check commands, CI gates, and finding-handling policy in
+AGENTS.md. Security decisions belong in plans before dependent implementation;
+final hardening/runbook writeups follow the stable feature/batch boundary.
+
+## 9. Decisions, risks, and open questions — required
+
+| Topic | Status: decided / assumption / open | Decision or question and rationale | Owner / decision needed by |
+|---|---|---|---|
+| `<TOPIC>` | `<STATUS>` | `<RATIONALE_OR_QUESTION>` | `<OWNER_AND_DEPENDENT_WORK>` |
+
+Link substantial architecture decisions instead of duplicating them here. Identify
+which implementation slices can proceed independently of unresolved questions.
+
+## 10. Definition of done — required
+
+A feature or coherent work batch is complete when:
+- Behavior meets explicit acceptance criteria and applicable contracts;
+  required decisions are resolved.
+- Meaningful tests cover affected behavior and relevant failures/regressions.
+  Required AGENTS.md gates pass for the delivered revision. Unavailable checks
+  are reported, never silently treated as passing.
+- Required independent code/design reviews are complete and required findings
+  resolved. UI evidence is rendered/interactive where the criteria require it.
+- Applicable compatibility, migration, integration, and operational requirements
+  are satisfied.
+- Affected security controls and relevant misuse cases are verified. Required
+  security checks/findings are resolved according to AGENTS.md, with any explicit
+  risk acceptance attributable to its authorized owner; no silent agent waivers.
+- Affected documentation reflects the stable result at the agreed batch boundary,
+  rather than being rewritten after every development subtask.
+- Commit/delivery and tracking policies in AGENTS.md are satisfied. Commit only
+  under that explicit authorization policy, not merely because work ended.
+  The coordinator verifies the result and updates BACKLOG.md directly; when a
+  commit is required, confirm it succeeded before marking work complete.
+  Backlog completion on an execution branch is distinct from merge/deployment;
+  record the branch/worktree and let the owner reconcile other checkouts.
+
+Additional project-specific gates: `<MEASURABLE_CRITERIA_OR_NONE>`.
+Task acceptance/dependency tracking: `<BACKLOG_OR_ISSUE_TRACKER>`.

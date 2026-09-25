@@ -1,0 +1,10 @@
+node_modules
+package.json
+bun.lock
+
+# Local run state and credentials are not team configuration.
+.opencode/progress.md
+.opencode/*.log
+.env
+.env.*
+!.env.example

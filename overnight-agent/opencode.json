@@ -1,0 +1,76 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "azure/gpt-6-sol",
+  "small_model": "azure/gpt-6-luna",
+  "default_agent": "build",
+  "provider": {
+    "azure": {
+      "models": {
+        "gpt-5.4": {
+          "name": "gpt-5.4",
+          "options": { "store": false }
+        },
+        "gpt-6-sol": {
+          "name": "gpt-6-sol",
+          "id": "gpt-6-sol",
+          "options": { "store": false }
+        },
+        "gpt-6-luna": {
+          "name": "gpt-6-luna",
+          "id": "gpt-6-luna",
+          "options": { "store": false }
+        },
+        "gpt-6-astra": {
+          "name": "gpt-6-astra",
+          "id": "gpt-6-astra",
+          "options": {
+            "store": false
+          }
+        }
+      }
+    }
+  },
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest", "--headless", "--isolated"],
+      "enabled": true,
+      "timeout": 20000
+    }
+  },
+  "permission": {
+    "read": "allow",
+    "edit": "allow",
+    "doom_loop": "allow",
+    "external_directory": "deny",
+    "bash": {
+      "*": "allow",
+      "rm -rf /*": "deny",
+      "git push*": "deny",
+      "git * push*": "deny",
+      "git merge*": "deny",
+      "git * merge*": "deny",
+      "git pull*": "deny",
+      "git * pull*": "deny",
+      "git rebase*": "deny",
+      "git * rebase*": "deny",
+      "git cherry-pick*": "deny",
+      "git * cherry-pick*": "deny",
+      "gh pr merge*": "deny",
+      "gh * pr merge*": "deny",
+      "sudo *": "deny"
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 15000
+  },
+  "agent": {
+    "astra": {
+      "description": "Development agent powered by GPT-6 Astra",
+      "mode": "primary",
+      "model": "azure/gpt-6-astra"
+    }
+  }
+}
