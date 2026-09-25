@@ -37,9 +37,10 @@ owner continues to prepare application repositories and launch the runner manual
   files describe Impostr itself and are not the templates for user projects.
 - OpenCode agents are installed for the current CLI environment (including
   `tech-lead`, `architect`, `ui-designer`, `developer`, and `overnight`); a working
-  web-session API and isolated runtime have **not** been demonstrated. The root
-  Git remote is GitHub; the installed optional sprint skill documents a Bitbucket
-  flow and is not selected for this development plan.
+  web-session API and isolated runtime have **not** been demonstrated. This
+  repository uses GitHub and an existing `v1` sprint branch. The installed sprint
+  skill's Bitbucket examples are superseded by the GitHub-specific delivery rules
+  in `AGENTS.md`.
 
 ## People, permissions, and workflow
 
@@ -203,8 +204,8 @@ successful mock integration test with an isolated, working OpenCode deployment.
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
 | UI/backend/deployment stack | Owner decided / technical choice | Vite/React/Tailwind, Python/PostgreSQL/Alembic/Nginx; FastAPI/ORM and major-version baselines are technical proposals to confirm in bootstrap. |
 | Safe live OpenCode integration | Open capability gate | Spike must prove session resume, events/questions, config/agent discovery, secret handling and isolation before gateway is implementation-ready. |
-| Deployment environment, exact app commands and secrets provision | Open setup gate | Docker is unavailable in this current shell; operator supplies private-host runtime, TLS/model credentials and DB provisioning. Record tested commands in AGENTS.md when they exist. |
-| This repository's execution/delivery policy | Open owner decision | No sprint workflow selected. Backlog stays draft until scope/readiness and Git/runner policy are approved; no automatic commits/pushes. |
+| Deployment environment, exact app commands and secrets provision | Open setup gate | Owner reports Docker installed on their host, but it is unavailable to this tool shell; no separate host PostgreSQL install is required. Verify Compose/isolation, TLS/model credentials and actual app commands before execution. |
+| This repository's execution/delivery policy | Owner decided / capability gate | Existing `v1` sprint; human-merged GitHub task PRs target `v1`, then a final `v1` → `development` PR. All backlog items remain draft by owner choice. GitHub PR tooling/auth, development host and runner checks need verification before readiness. |
 
 Implementation slices, dependencies and verification are in `BACKLOG.md`; actual
 verified repository commands and automation constraints are in `AGENTS.md`.

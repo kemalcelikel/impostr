@@ -1,9 +1,13 @@
-# Impostr backlog — proposed first release
+# Sprint v1 — Impostr proposed first release
+
+- Sprint branch: v1
+- Version control: GitHub
 
 Canonical scope/contracts: `PROJECT.md`; execution/check policy: `AGENTS.md`.
 This is a **draft**; every item is `[-]` until the owner reviews scope, execution
-capabilities and a Git/delivery policy and explicitly approves readiness. No
-sprint workflow is selected. Permanent IDs and `## [state] ID — Title` headings
+capabilities and explicitly approves readiness. The installed sprint workflow is
+selected with GitHub exceptions in AGENTS.md, but no execution is authorized while
+all items are draft. Permanent IDs and `## [state] ID — Title` headings
 follow the root helper's format. `[-]` draft/deferred; `[ ]` owner-approved ready;
 `[~]` runner claimed; `[x]` verified delivered under project policy; `[!]`
 blocked/incomplete with recovery decision. A first-release Impostr user can only
@@ -20,6 +24,7 @@ or runner assignments exist yet.
 
 ## [-] IMP-001 — Bootstrap app and database baseline
 
+Type: feature
 **Depends on:** None
 **Scope:** Impostr frontend/API skeleton, PostgreSQL Docker service, Nginx routing,
 Alembic migration baseline and reproducible development checks; do not add project
@@ -47,6 +52,7 @@ the operator; no deployment address or credentials may be guessed.
 
 ## [-] IMP-002 — Prove safe OpenCode web-session integration
 
+Type: feature
 **Depends on:** IMP-001
 **Scope:** Bounded integration experiment/contract for project-scoped `tech-lead`
 sessions and isolation; do not expose a shared-host agent endpoint yet.
@@ -75,6 +81,7 @@ do not assume `opencode run` or a JS SDK is a resumable Python web adapter.
 
 ## [-] IMP-003 — Admin-provisioned login and private project access
 
+Type: feature
 **Depends on:** IMP-001
 **Scope:** Users/admin bootstrap, no-signup login/logout, admin user management,
 server sessions, project creator/administrator policy and minimal accessible UI.
@@ -100,6 +107,7 @@ commands under IMP-001 before promoting implementation.
 
 ## [-] IMP-004 — Seed projects and versioned Markdown drafts
 
+Type: feature
 **Depends on:** IMP-001, IMP-003
 **Scope:** Authenticated project creation and DB document history for the three
 root starter examples; no Git/repo initialization or runner launch.
@@ -125,6 +133,7 @@ private project workspace storage.
 
 ## [-] IMP-005 — Project-scoped resumable planning chats
 
+Type: feature
 **Depends on:** IMP-002, IMP-004
 **Scope:** Authenticated API gateway for `tech-lead` plus separate project session
 tabs; import proposed document diffs as versioned drafts, not approvals.
@@ -149,6 +158,7 @@ tabs; import proposed document diffs as versioned drafts, not approvals.
 
 ## [-] IMP-006 — Review and jointly approve first two documents
 
+Type: feature
 **Depends on:** IMP-004, IMP-005
 **Scope:** Stage-aware dark UI for chat beside PROJECT.md/AGENTS.md, direct Markdown
 review/edit and API for atomic, human-initiated version-bound pair approval.
@@ -174,6 +184,7 @@ is specified in PROJECT.md.
 
 ## [-] IMP-007 — Validate and edit runner-compatible backlog
 
+Type: feature
 **Depends on:** IMP-004, IMP-006
 **Scope:** Backlog document API, parser-compatible task model, direct task edits
 and human-only `[-]`/`[ ]` readiness transitions; no runner outcome management.
@@ -199,6 +210,7 @@ and human-only `[-]`/`[ ]` readiness transitions; no runner outcome management.
 
 ## [-] IMP-008 — Live chat and collapsible backlog planning layout
 
+Type: feature
 **Depends on:** IMP-005, IMP-006, IMP-007
 **Scope:** Stage 2 UI: standard chat next to collapsible task rail with on-row
 draft/ready toggles, expand/edit task detail, and live agent-change indicators.
@@ -224,6 +236,7 @@ draft/ready toggles, expand/edit task detail, and live agent-change indicators.
 
 ## [-] IMP-009 — Approve backlog and serve immutable downloads
 
+Type: feature
 **Depends on:** IMP-006, IMP-007
 **Scope:** Human backlog approval, snapshot manifest, and individual file downloads
 for approved `PROJECT.md`, `AGENTS.md`, `BACKLOG.md` versions; no repo write.
@@ -250,6 +263,7 @@ for approved `PROJECT.md`, `AGENTS.md`, `BACKLOG.md` versions; no repo write.
 
 ## [-] IMP-010 — Three-file final review experience
 
+Type: feature
 **Depends on:** IMP-008, IMP-009
 **Scope:** Stage 3 version/status overview with three simultaneous desktop document
 panes and accessible narrower-screen review/download flow.
@@ -273,6 +287,7 @@ panes and accessible narrower-screen review/download flow.
 
 ## [-] IMP-011 — Shared-server security and recovery acceptance
 
+Type: feature
 **Depends on:** IMP-003, IMP-005, IMP-008, IMP-009, IMP-010
 **Scope:** Integrated release verification, independent security/design review,
 backups/restore, operational documentation and gates; fix defects in owning slices
@@ -297,3 +312,31 @@ isolated OpenCode model access, two provisioned test accounts and browser tools.
 stable release; do not store secrets or private chat in reports.
 **Open decisions:** Operator must provision deployment host, credentials, TLS and
 agreed security tooling; release cannot be called ready until these are tested.
+
+---
+
+## [-] IMP-012 — Verify integrated sprint and open development PR
+
+Type: sprint-finalization
+**Depends on:** IMP-011
+**Scope:** Read-only integrated-sprint checks and GitHub PR from `v1` to
+`development`; no implementation on the sprint and no automated merge.
+**Required capabilities:** Human-merged feature PRs, fetched current `origin/v1`,
+actual app checks, independent review, and verified GitHub PR tooling/auth.
+
+### Done looks like
+- All intended task PRs and outcomes are actually integrated into `v1` (or the
+  owner has explicitly removed them from scope). Verify the fetched sprint tip
+  with the established tests and security/UI gates; a moved tip requires retest.
+- Open or reuse a normal review-ready PR with explicit source `v1` and destination
+  `development`, record its URL and verification evidence, and leave the merge to
+  a human. If PR submission is unavailable, preserve verified local evidence and
+  report blocked delivery rather than claiming this item complete.
+
+### Verification
+- Inspect GitHub PR states and integrated commit history, run full release checks
+  on the current sprint tip, and confirm the open PR has the intended base/head.
+
+**Documentation impact:** Release summary and outstanding owner merge action.
+**Open decisions:** GitHub CLI/auth are currently unverified in this shell; no
+  automatic alternative transport or integration permission is assumed.

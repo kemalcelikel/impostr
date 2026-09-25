@@ -14,9 +14,11 @@
   tests, configured app URL, or test login. Do not substitute the toolkit's fake
   runner tests for application tests. Record concrete setup/check commands here
   when bootstrap has implemented and verified them; never execute a placeholder.
-- The current branch is `v1`; root Git remote is GitHub `origin`. A project-local
-  sprint skill exists but **is not selected** for Impostr development. The
-  distribution skill's Bitbucket-specific guidance is not a GitHub delivery policy.
+- The current branch is `v1`; root Git remote is GitHub `origin`. After the owner
+  published the first draft, local `v1` and `origin/v1` were observed aligned at
+  `7fca090`. Fetch and recheck before future Git writes/publication; do not assume
+  this alignment persists. The installed sprint skill is selected with the GitHub
+  exceptions below, not its Bitbucket-specific API examples.
 
 ## Start of work and delegation
 
@@ -33,9 +35,9 @@ installs/updates skills or tooling to make missing capabilities appear present.
 Generated items are `[-]` until owner approval of their readiness. Do not claim
 or reset another run's `[~]`, or requeue `[!]` without owner approval. The root
 runner is **not selected to implement this draft backlog**: although this repo
-already has Git history, it still needs an approved committed planning baseline,
-approved `[ ]` items, available agents/credentials and an explicit execution/commit
-policy. Do not run it just because it exists here. For
+already has an aligned published sprint branch and a committed first draft, it
+still needs owner-approved `[ ]` items and verified Docker, isolated agent access,
+checks and GitHub PR capability. Do not run it just because it exists here. For
 future user-created projects, exporting files does not initialize a repo or make
 its runner safe to launch. Avoid two writers in the same checkout or the same
 project's planning files.
@@ -52,6 +54,7 @@ exist yet. Run from repository root unless otherwise stated.
 | Inspect agent availability                                                                  | `opencode agent list`                                                        | Verified CLI responds and includes relevant agents; not a live web integration test.                                  |
 | Toolchain inspection                                                                        | `python3 --version`; `node --version`; `npm --version`; `opencode --version` | Observed Python 3.10.12, Node v24.12.0, npm 11.6.2, OpenCode 1.18.32 on this host; not the planned runtime baselines. |
 | Docker/Compose, PostgreSQL                                                                  | Not runnable in this shell (`docker` not found)                              | Operator must provision and verify the deployment host.                                                               |
+| GitHub PR tooling                                                                           | `gh` not found in this shell                                                  | Owner must provision usable GitHub CLI/auth or agree a supported, permitted alternative before PR delivery.           |
 | App install/start, migrations, focused/integration/UI tests, lint, format, typecheck, build | Not defined: no app exists                                                   | Bootstrap slice must implement and verify exact commands, fixtures and services before promoting dependent work.      |
 | Secret/dependency/security/container checks                                                 | Not configured                                                               | Define tested commands and severity/finding policy before shared-server release; do not claim passing gates.          |
 
@@ -88,15 +91,28 @@ are unconfigured until bootstrap.
 
 ## Git, workflow and reporting
 
-Workflow selection: manual, owner-directed development; **no sprint-workflow
-selection and no unattended execution authorization yet**. The owner must choose
-a Git/PR/runner policy and approve ready task IDs before implementation automation.
-No agent may infer permission to commit, push, create PRs, merge, initialize Git,
-or publish solely from editing these files. Without explicit owner instructions,
-leave planning changes uncommitted. Do not push `development`, `master`, `main`,
-`v1`, or any sprint/task branch on implicit authority; never merge or force-push.
-If the owner later selects a sprint flow, reconcile it with this GitHub remote and
-an existing aligned sprint branch before selecting the installed workflow.
+Use the installed `sprint-workflow` skill for branching and pull requests.
+The active sprint is recorded in BACKLOG.md.
+
+GitHub exceptions/owner decisions: the existing sprint branch is `v1` on `origin`;
+feature/bug task PRs explicitly target `v1`, and a final sprint PR targets
+`development`. All merges are human actions. Use existing GitHub authentication and
+`gh` for listing, creating and inspecting PRs once verified; the Bitbucket Cloud
+API/token instructions in the skill do not apply. Do not invent PR numbers, URLs,
+credentials, a GitHub API transport, or a different remote to bypass a denial.
+The owner prefers verified local commits if PR capability is unavailable; in that
+case preserve the code/branch and report the delivery block rather than marking a
+task `[x]` as PR-delivered or pushing to another destination. A GitHub PR is not a
+merge; fetch and verify `v1` contains prerequisite code before a dependent task.
+
+This workflow selects the runner's one-task sprint mode, **not** authorization to
+run it now. All current items are owner-designated drafts; the owner must separately
+approve ready IDs after their prerequisites and commands are verified. Planning
+file commits/pushes to the existing aligned `v1` are limited to owner-approved
+`PROJECT.md`, `AGENTS.md`, `BACKLOG.md` changes under the selected skill; do not
+include task code or unrelated files. Never push `development`, `master`, `main`,
+or `v1` on implicit authority; never merge or force-push. No agent initializes a
+Git repo for an Impostr-created project merely because its files were exported.
 
 The coordinator owns delivery outcomes: `[ ]` owner-approved ready, `[~]` claimed,
 `[x]` verified complete under the chosen delivery policy, `[!]` blocked with
