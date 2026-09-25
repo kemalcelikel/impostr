@@ -1,28 +1,37 @@
-# Sprint v1 — Impostr proposed first release
+# Impostr v1 — owner-approved single-branch batch
 
+- Base branch: origin/v1
 - Sprint branch: v1
+- Work branch: feature/impostr-v1 (create after approved plan is published)
+- Final PR: feature/impostr-v1 → development (human merge)
 - Version control: GitHub
 
 Canonical scope/contracts: `PROJECT.md`; execution/check policy: `AGENTS.md`.
-This is a **draft**; every item is `[-]` until the owner reviews scope, execution
-capabilities and explicitly approves readiness. The installed sprint workflow is
-selected with GitHub exceptions in AGENTS.md, but no execution is authorized while
-all items are draft. Permanent IDs and `## [state] ID — Title` headings
-follow the root helper's format. `[-]` draft/deferred; `[ ]` owner-approved ready;
+The owner approved all 12 slices and one final merge. This workflow transition
+and its `[ ]` markers must be published before running; dependency eligibility
+and real checks still gate work. The `Sprint branch` field retains the declared
+planning-publication target from the previous workflow; the new runner uses the
+work branch and does not select sprint mode. Permanent IDs and
+`## [state] ID — Title` headings follow the root helper's format.
+`[-]` draft/deferred; `[ ]` owner-approved ready;
 `[~]` runner claimed; `[x]` verified delivered under project policy; `[!]`
 blocked/incomplete with recovery decision. A first-release Impostr user can only
 toggle a project task between draft and ready, not invent runner outcomes.
 
 Dependency lines are comma-separated IDs; the helper selects dependency-eligible
-`[ ]` tasks in file order only when prerequisites are `[x]`. This plan's IDs are
-for building **Impostr**, not pre-filled tasks for the projects it will create.
+`[ ]` tasks in file order only when prerequisites are `[x]` on the same work
+branch. The non-sprint runner can continue independently eligible tasks after a
+blocker; it stops when nothing eligible remains and never skips a prerequisite.
+These IDs are for building **Impostr**, not pre-filled tasks for the projects it
+will create.
 App commands below are not invented: where no command exists, verification names
-the evidence to establish during implementation. No owner-approved ready items
-or runner assignments exist yet.
+the evidence to establish during implementation. No runner assignments exist yet.
+Queueing every item does not guarantee overnight completion: actual checks,
+isolation and operator inputs remain gates at the relevant item.
 
 ---
 
-## [-] IMP-001 — Bootstrap app and database baseline
+## [ ] IMP-001 — Bootstrap app and database baseline
 
 Type: feature
 **Depends on:** None
@@ -50,7 +59,7 @@ the operator; no deployment address or credentials may be guessed.
 
 ---
 
-## [-] IMP-002 — Prove safe OpenCode web-session integration
+## [ ] IMP-002 — Prove safe OpenCode web-session integration
 
 Type: feature
 **Depends on:** IMP-001
@@ -79,7 +88,7 @@ do not assume `opencode run` or a JS SDK is a resumable Python web adapter.
 
 ---
 
-## [-] IMP-003 — Admin-provisioned login and private project access
+## [ ] IMP-003 — Admin-provisioned login and private project access
 
 Type: feature
 **Depends on:** IMP-001
@@ -105,7 +114,7 @@ commands under IMP-001 before promoting implementation.
 
 ---
 
-## [-] IMP-004 — Seed projects and versioned Markdown drafts
+## [ ] IMP-004 — Seed projects and versioned Markdown drafts
 
 Type: feature
 **Depends on:** IMP-001, IMP-003
@@ -131,7 +140,7 @@ private project workspace storage.
 
 ---
 
-## [-] IMP-005 — Project-scoped resumable planning chats
+## [ ] IMP-005 — Project-scoped resumable planning chats
 
 Type: feature
 **Depends on:** IMP-002, IMP-004
@@ -156,7 +165,7 @@ tabs; import proposed document diffs as versioned drafts, not approvals.
 
 ---
 
-## [-] IMP-006 — Review and jointly approve first two documents
+## [ ] IMP-006 — Review and jointly approve first two documents
 
 Type: feature
 **Depends on:** IMP-004, IMP-005
@@ -182,7 +191,7 @@ is specified in PROJECT.md.
 
 ---
 
-## [-] IMP-007 — Validate and edit runner-compatible backlog
+## [ ] IMP-007 — Validate and edit runner-compatible backlog
 
 Type: feature
 **Depends on:** IMP-004, IMP-006
@@ -208,7 +217,7 @@ and human-only `[-]`/`[ ]` readiness transitions; no runner outcome management.
 
 ---
 
-## [-] IMP-008 — Live chat and collapsible backlog planning layout
+## [ ] IMP-008 — Live chat and collapsible backlog planning layout
 
 Type: feature
 **Depends on:** IMP-005, IMP-006, IMP-007
@@ -234,7 +243,7 @@ draft/ready toggles, expand/edit task detail, and live agent-change indicators.
 
 ---
 
-## [-] IMP-009 — Approve backlog and serve immutable downloads
+## [ ] IMP-009 — Approve backlog and serve immutable downloads
 
 Type: feature
 **Depends on:** IMP-006, IMP-007
@@ -261,7 +270,7 @@ for approved `PROJECT.md`, `AGENTS.md`, `BACKLOG.md` versions; no repo write.
 
 ---
 
-## [-] IMP-010 — Three-file final review experience
+## [ ] IMP-010 — Three-file final review experience
 
 Type: feature
 **Depends on:** IMP-008, IMP-009
@@ -285,7 +294,7 @@ panes and accessible narrower-screen review/download flow.
 
 ---
 
-## [-] IMP-011 — Shared-server security and recovery acceptance
+## [ ] IMP-011 — Shared-server security and recovery acceptance
 
 Type: feature
 **Depends on:** IMP-003, IMP-005, IMP-008, IMP-009, IMP-010
@@ -315,28 +324,30 @@ agreed security tooling; release cannot be called ready until these are tested.
 
 ---
 
-## [-] IMP-012 — Verify integrated sprint and open development PR
+## [ ] IMP-012 — Verify work branch and open single development PR
 
-Type: sprint-finalization
+Type: release-finalization
 **Depends on:** IMP-011
-**Scope:** Read-only integrated-sprint checks and GitHub PR from `v1` to
-`development`; no implementation on the sprint and no automated merge.
-**Required capabilities:** Human-merged feature PRs, fetched current `origin/v1`,
-actual app checks, independent review, and verified GitHub PR tooling/auth.
+**Scope:** Integrated checks and the one GitHub PR from `feature/impostr-v1` to
+`development`; no implementation on `v1` and no automated merge.
+**Required capabilities:** All in-scope feature items verified and locally
+committed in the same branch, actual app checks, independent review, and usable
+GitHub branch push/PR tooling and auth.
 
 ### Done looks like
-- All intended task PRs and outcomes are actually integrated into `v1` (or the
-  owner has explicitly removed them from scope). Verify the fetched sprint tip
-  with the established tests and security/UI gates; a moved tip requires retest.
-- Open or reuse a normal review-ready PR with explicit source `v1` and destination
-  `development`, record its URL and verification evidence, and leave the merge to
-  a human. If PR submission is unavailable, preserve verified local evidence and
-  report blocked delivery rather than claiming this item complete.
+- All intended feature outcomes are `[x]` and integrated on the current feature
+  branch (or the owner explicitly removed an item from scope). Verify that exact
+  branch head with established tests and security/UI gates; a moved head requires
+  retest. A `[!]` prerequisite cannot be passed off as delivered.
+- Push only the checked feature branch and open/reuse a normal review-ready PR
+  with explicit source `feature/impostr-v1` and destination `development`; record
+  URL and evidence and leave merge to a human. If push or PR submission fails,
+  preserve local commits and report blocked delivery rather than claiming success.
 
 ### Verification
-- Inspect GitHub PR states and integrated commit history, run full release checks
-  on the current sprint tip, and confirm the open PR has the intended base/head.
+- Inspect commits and outcomes on the work branch, run full release checks on
+  its current head, verify the published head and confirm PR base/head and content.
 
 **Documentation impact:** Release summary and outstanding owner merge action.
-**Open decisions:** GitHub CLI/auth are currently unverified in this shell; no
-  automatic alternative transport or integration permission is assumed.
+**Open decisions:** GitHub CLI/auth are verified for read access here; branch
+push/PR-write access remains to be proven at delivery without bypasses.

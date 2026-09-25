@@ -38,9 +38,10 @@ owner continues to prepare application repositories and launch the runner manual
 - OpenCode agents are installed for the current CLI environment (including
   `tech-lead`, `architect`, `ui-designer`, `developer`, and `overnight`); a working
   web-session API and isolated runtime have **not** been demonstrated. This
-  repository uses GitHub and an existing `v1` sprint branch. The installed sprint
-  skill's Bitbucket examples are superseded by the GitHub-specific delivery rules
-  in `AGENTS.md`.
+  repository uses GitHub and an existing `v1` planning baseline. The owner chose
+  one work branch based on `v1`, ending in a single PR to `development`; this
+  replaces the former per-task sprint-PR proposal. See `AGENTS.md` for the
+  execution contract, effective after its publication.
 
 ## People, permissions, and workflow
 
@@ -204,8 +205,8 @@ successful mock integration test with an isolated, working OpenCode deployment.
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
 | UI/backend/deployment stack | Owner decided / technical choice | Vite/React/Tailwind, Python/PostgreSQL/Alembic/Nginx; FastAPI/ORM and major-version baselines are technical proposals to confirm in bootstrap. |
 | Safe live OpenCode integration | Open capability gate | Spike must prove session resume, events/questions, config/agent discovery, secret handling and isolation before gateway is implementation-ready. |
-| Deployment environment, exact app commands and secrets provision | Open setup gate | Owner reports Docker installed on their host, but it is unavailable to this tool shell; no separate host PostgreSQL install is required. Verify Compose/isolation, TLS/model credentials and actual app commands before execution. |
-| This repository's execution/delivery policy | Owner decided / capability gate | Existing `v1` sprint; human-merged GitHub task PRs target `v1`, then a final `v1` → `development` PR. All backlog items remain draft by owner choice. GitHub PR tooling/auth, development host and runner checks need verification before readiness. |
+| Deployment environment, exact app commands and secrets provision | Partly verified / open release gate | Docker daemon, Compose and GitHub CLI read access now work in the agent session. No separate host PostgreSQL install is required. Actual app commands, web-agent isolation, TLS and release checks remain to be established by their backlog items. |
+| This repository's execution/delivery policy | Owner approved / publication gate | Base from published `v1`; perform verified slices on one long-lived feature branch; continue independently eligible work after a blocker; submit one final PR to `development` for human merge. All 12 dependency-gated items are owner-approved ready; publish this changed execution contract before launch. |
 
 Implementation slices, dependencies and verification are in `BACKLOG.md`; actual
 verified repository commands and automation constraints are in `AGENTS.md`.

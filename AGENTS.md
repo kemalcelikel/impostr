@@ -14,11 +14,11 @@
   tests, configured app URL, or test login. Do not substitute the toolkit's fake
   runner tests for application tests. Record concrete setup/check commands here
   when bootstrap has implemented and verified them; never execute a placeholder.
-- The current branch is `v1`; root Git remote is GitHub `origin`. After the owner
-  published the first draft, local `v1` and `origin/v1` were observed aligned at
-  `7fca090`. Fetch and recheck before future Git writes/publication; do not assume
-  this alignment persists. The installed sprint skill is selected with the GitHub
-  exceptions below, not its Bitbucket-specific API examples.
+- The planning checkout is on `v1`; root Git remote is GitHub `origin`. Local
+  `v1` and `origin/v1` were observed aligned at `1731c81`; fetch and recheck
+  before publication or starting a work branch. The owner approved replacing
+  the selected sprint flow with the single-branch batch contract below; do not
+  run under the new contract until it has been published.
 
 ## Start of work and delegation
 
@@ -34,10 +34,9 @@ installs/updates skills or tooling to make missing capabilities appear present.
 
 Generated items are `[-]` until owner approval of their readiness. Do not claim
 or reset another run's `[~]`, or requeue `[!]` without owner approval. The root
-runner is **not selected to implement this draft backlog**: although this repo
-already has an aligned published sprint branch and a committed first draft, it
-still needs owner-approved `[ ]` items and verified Docker, isolated agent access,
-checks and GitHub PR capability. Do not run it just because it exists here. For
+runner is **not yet authorized to implement this unpublished backlog**: publish the
+approved batch contract and readiness markers, then create the work branch from
+the aligned published baseline. Do not run it just because it exists here. For
 future user-created projects, exporting files does not initialize a repo or make
 its runner safe to launch. Avoid two writers in the same checkout or the same
 project's planning files.
@@ -53,8 +52,8 @@ exist yet. Run from repository root unless otherwise stated.
 | Backlog parser smoke                                                                        | `python3 scripts/backlog.py list-all BACKLOG.md.example`                     | Verified against starter backlog; use `BACKLOG.md` for the live plan after drafting.                                  |
 | Inspect agent availability                                                                  | `opencode agent list`                                                        | Verified CLI responds and includes relevant agents; not a live web integration test.                                  |
 | Toolchain inspection                                                                        | `python3 --version`; `node --version`; `npm --version`; `opencode --version` | Observed Python 3.10.12, Node v24.12.0, npm 11.6.2, OpenCode 1.18.32 on this host; not the planned runtime baselines. |
-| Docker/Compose, PostgreSQL                                                                  | Not runnable in this shell (`docker` not found)                              | Operator must provision and verify the deployment host.                                                               |
-| GitHub PR tooling                                                                           | `gh` not found in this shell                                                  | Owner must provision usable GitHub CLI/auth or agree a supported, permitted alternative before PR delivery.           |
+| Docker/Compose baseline | `docker info --format '{{.ServerVersion}}'`; `docker compose version` | Verified in refreshed agent session: Docker server 29.8.0 and Compose v5.5.1. Owner separately exercised `docker run hello-world`. No Impostr DB/Compose service exists yet. Docker socket access is host-root-equivalent; web planning agents must not receive it. |
+| GitHub PR tooling (read-only) | `gh --version`; `gh repo view --json nameWithOwner -q .nameWithOwner`; `gh pr list --state open --json number,headRefName,baseRefName --limit 20` | Verified GitHub CLI 2.101.0 is authenticated and can read `kemalcelikel/impostr`; PR creation and new branch push have not been exercised. Do not log tokens. |
 | App install/start, migrations, focused/integration/UI tests, lint, format, typecheck, build | Not defined: no app exists                                                   | Bootstrap slice must implement and verify exact commands, fixtures and services before promoting dependent work.      |
 | Secret/dependency/security/container checks                                                 | Not configured                                                               | Define tested commands and severity/finding policy before shared-server release; do not claim passing gates.          |
 
@@ -91,31 +90,42 @@ are unconfigured until bootstrap.
 
 ## Git, workflow and reporting
 
-Use the installed `sprint-workflow` skill for branching and pull requests.
-The active sprint is recorded in BACKLOG.md.
+Owner-approved workflow, pending publication: **single-branch batch,
+not sprint mode**. The published `origin/v1` is the starting baseline. The owner
+creates `feature/impostr-v1` from the fetched, aligned `origin/v1` after the plan
+and readiness markers are published, and runs the root `run-tonight.sh` from that
+work branch, not from `v1`. In non-sprint mode the runner can claim up to three
+currently dependency-eligible tasks per session and continue while eligible work
+remains; timeouts, failed checks and dependency blocks may stop it early.
 
-GitHub exceptions/owner decisions: the existing sprint branch is `v1` on `origin`;
-feature/bug task PRs explicitly target `v1`, and a final sprint PR targets
-`development`. All merges are human actions. Use existing GitHub authentication and
-`gh` for listing, creating and inspecting PRs once verified; the Bitbucket Cloud
-API/token instructions in the skill do not apply. Do not invent PR numbers, URLs,
-credentials, a GitHub API transport, or a different remote to bypass a denial.
-The owner prefers verified local commits if PR capability is unavailable; in that
-case preserve the code/branch and report the delivery block rather than marking a
-task `[x]` as PR-delivered or pushing to another destination. A GitHub PR is not a
-merge; fetch and verify `v1` contains prerequisite code before a dependent task.
+Keep implementation, migrations, tests, and backlog outcomes on **the same work
+branch**. After each item passes its actual checks and independent review where
+required, verified local commits may record it. `[x]` means locally verified and
+committed in that branch, not PR-submitted or merged. There are no per-task PRs
+or pushes. Do not start a dependent item until its prerequisite's `[x]` code is
+already in the same branch. Leave failed or unverified items `[!]` with blocker,
+attempt and partial-work evidence; continue only independent eligible items. Do
+not skip tests or claim unavailable services passed to drain the queue. A later
+run resumes the same branch and reviews earlier outcomes. Do not reset another
+run's active claim or requeue a blocker without the owner's decision.
 
-This workflow selects the runner's one-task sprint mode, **not** authorization to
-run it now. All current items are owner-designated drafts; the owner must separately
-approve ready IDs after their prerequisites and commands are verified. Planning
-file commits/pushes to the existing aligned `v1` are limited to owner-approved
-`PROJECT.md`, `AGENTS.md`, `BACKLOG.md` changes under the selected skill; do not
-include task code or unrelated files. Never push `development`, `master`, `main`,
-or `v1` on implicit authority; never merge or force-push. No agent initializes a
-Git repo for an Impostr-created project merely because its files were exported.
+After all in-scope feature items are verified on that branch, finalization checks
+the whole branch. `overnight` may push only the checked
+`feature/impostr-v1` head to `origin` and open/reuse **one** review-ready GitHub
+PR with explicit source `feature/impostr-v1` and destination `development`, using
+existing `gh` authentication. Verify the published head and PR contents/URL. If
+push or PR submission fails, preserve local commits and mark final delivery
+blocked; never substitute another transport. Humans perform every merge. No
+agent pushes `v1`, `development`, `master` or `main`, force-pushes, or merges;
+no agent initializes Git for an Impostr-created project on export.
+
+The tech-lead may publish this **approved planning-only transition** on the
+existing aligned `v1` under the *previously selected* sprint skill before the
+work branch starts. This exception does not extend to code or runner outcomes.
+After publication, the explicit single-branch policy above governs delivery.
 
 The coordinator owns delivery outcomes: `[ ]` owner-approved ready, `[~]` claimed,
-`[x]` verified complete under the chosen delivery policy, `[!]` blocked with
+`[x]` verified/committed in the work branch, `[!]` blocked with
 checkpoint, and `[-]` draft/deferred. `[-]` and `[ ]` are the first-release web
 editor's only writable task markers. The root helper considers dependency-
 eligible only a ready item whose declared prerequisites are `[x]`; a submitted PR
