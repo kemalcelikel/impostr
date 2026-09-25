@@ -1,0 +1,19 @@
+.env
+
+# Python application
+api/.venv/
+api/__pycache__/
+api/**/__pycache__/
+api/.pytest_cache/
+api/.mypy_cache/
+api/.ruff_cache/
+api/.coverage
+api/htmlcov/
+
+# Frontend application
+web/node_modules/
+web/dist/
+web/coverage/
+
+# Local tooling and generated artifacts
+*.py[cod]
