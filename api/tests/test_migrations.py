@@ -12,7 +12,13 @@ from sqlalchemy.orm import Session
 
 from app.config import AppSettings
 from app.main import create_app
-from app.models import BootstrapState, Project, ProjectDocument, ProjectDocumentRevision
+from app.models import (
+    BootstrapState,
+    Project,
+    ProjectDocument,
+    ProjectDocumentPairApproval,
+    ProjectDocumentRevision,
+)
 from app.project_names import project_name_key
 from app.project_templates import default_template_root
 
@@ -44,6 +50,7 @@ def test_identity_and_private_metadata_migration_upgrades_and_downgrades(
                 "bootstrap_state",
                 "project_documents",
                 "project_document_revisions",
+                "project_document_pair_approvals",
                 "document_conflict_proposals",
             }.issubset(table_names)
             assert connection.scalar(select(BootstrapState.completed)) is False
@@ -153,6 +160,8 @@ def test_document_migration_preserves_legacy_projects_and_backfills_drafts(
                 assert len(revisions) == 6
                 assert all(revision.revision_number == 1 for revision in revisions)
                 assert all(revision.origin == "template" for revision in revisions)
+                # Historical drafts are not silently converted into human approvals.
+                assert db.scalar(select(ProjectDocumentPairApproval.id).limit(1)) is None
             assert not workspace_root.exists()
 
         with engine.begin() as connection:

@@ -23,6 +23,7 @@ import unittest
 import uuid
 
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from http.cookiejar import Cookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -114,7 +115,7 @@ class UsernameContractTests(unittest.TestCase):
 class MigrationVerificationTests(unittest.TestCase):
     def test_revision_output_is_reduced_to_a_fixed_safe_status(self) -> None:
         self.assertEqual(
-            fixture.migration_revision_status("20260925_0002 (head)\n"),
+            fixture.migration_revision_status("20260925_0004 (head)\n"),
             "expected",
         )
         self.assertEqual(fixture.migration_revision_status(""), "empty")
@@ -123,6 +124,190 @@ class MigrationVerificationTests(unittest.TestCase):
             fixture.migration_revision_status(f"unknown {secret}"),
             "unexpected",
         )
+
+
+class CommittedMigrationProfileTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.source = Path(self.temporary.name) / "source"
+        self.versions = self.source / "api" / "migrations" / "versions"
+        self.versions.mkdir(parents=True)
+
+    def _write_revisions(self, names: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+        pinned = []
+        for name in names:
+            content = f"synthetic migration body for {name}\n".encode("utf-8")
+            path = self.versions / name
+            path.write_bytes(content)
+            path.chmod(0o644)
+            pinned.append((name, hashlib.sha256(content).hexdigest()))
+        return tuple(pinned)
+
+    def test_profile_digests_match_the_repository_migration_sources(self) -> None:
+        repository_root = Path(__file__).resolve().parents[1]
+        for profile in fixture.COMMITTED_APP_MIGRATION_PROFILES:
+            for filename, expected_digest in profile.revision_files:
+                with self.subTest(profile=profile.name, migration=filename):
+                    source = (
+                        repository_root / "api" / "migrations" / "versions" / filename
+                    )
+                    self.assertEqual(
+                        hashlib.sha256(source.read_bytes()).hexdigest(),
+                        expected_digest,
+                    )
+
+    def test_current_0004_and_future_0005_committed_snapshots_select_distinct_profiles(
+        self,
+    ) -> None:
+        repository_root = Path(__file__).resolve().parents[1]
+        filenames_0004 = tuple(
+            name for name, _digest in fixture.COMMITTED_APP_MIGRATION_FILES_0004
+        )
+        for filename in filenames_0004:
+            source = repository_root / "api" / "migrations" / "versions" / filename
+            target = self.versions / filename
+            target.write_bytes(source.read_bytes())
+            target.chmod(0o644)
+
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                fixture.IMP013_CANDIDATE_BASE_COMMIT,
+            ),
+            "imp004",
+        )
+
+        migration_0005_name = fixture.COMMITTED_APP_MIGRATION_FILES_0005[-1][0]
+        migration_0005_source = (
+            repository_root / "api" / "migrations" / "versions" / migration_0005_name
+        )
+        migration_0005_target = self.versions / migration_0005_name
+        migration_0005_target.write_bytes(migration_0005_source.read_bytes())
+        migration_0005_target.chmod(0o644)
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(self.source, "b" * 40),
+            "imp013",
+        )
+
+    def test_committed_0004_and_0005_profiles_require_exact_revision_bytes(self) -> None:
+        filenames_0004 = (
+            "20260925_0001_initial_baseline.py",
+            "20260925_0002_identity_and_project_metadata.py",
+            "20260925_0003_project_document_revisions.py",
+            "20260925_0004_bounded_project_name_keys.py",
+        )
+        filenames_0005 = (*filenames_0004, "20260929_0005_document_pair_approvals.py")
+        pinned_0004 = self._write_revisions(filenames_0004)
+        fifth_content = f"synthetic migration body for {filenames_0005[-1]}\n".encode("utf-8")
+        profiles = (
+            fixture.CommittedMigrationProfile("imp004", "a" * 40, pinned_0004),
+            fixture.CommittedMigrationProfile(
+                "imp013",
+                None,
+                (
+                    *pinned_0004,
+                    (filenames_0005[-1], hashlib.sha256(fifth_content).hexdigest()),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "a" * 40,
+                profiles=profiles,
+            ),
+            "imp004",
+        )
+        self._write_revisions((filenames_0005[-1],))
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "b" * 40,
+                profiles=profiles,
+            ),
+            "imp013",
+        )
+
+        self.assertEqual(
+            fixture.COMMITTED_APP_MIGRATION_PROFILES[0].commit,
+            fixture.IMP013_CANDIDATE_BASE_COMMIT,
+        )
+        self.assertEqual(
+            tuple(
+                name
+                for name, _digest in fixture.COMMITTED_APP_MIGRATION_PROFILES[1].revision_files
+            ),
+            filenames_0005,
+        )
+
+    def test_unknown_missing_forked_and_modified_migration_heads_fail_closed(self) -> None:
+        filenames_0004 = (
+            "20260925_0001_initial_baseline.py",
+            "20260925_0002_identity_and_project_metadata.py",
+            "20260925_0003_project_document_revisions.py",
+            "20260925_0004_bounded_project_name_keys.py",
+        )
+        filenames_0005 = (*filenames_0004, "20260929_0005_document_pair_approvals.py")
+        pinned_0004 = self._write_revisions(filenames_0004)
+        fifth_content = f"synthetic migration body for {filenames_0005[-1]}\n".encode("utf-8")
+        pinned_0005_file = (filenames_0005[-1], hashlib.sha256(fifth_content).hexdigest())
+        profiles = (
+            fixture.CommittedMigrationProfile("imp004", "a" * 40, pinned_0004),
+            fixture.CommittedMigrationProfile("imp013", None, (*pinned_0004, pinned_0005_file)),
+        )
+
+        with self.assertRaises(fixture.FixtureError):
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "c" * 40,
+                profiles=profiles,
+            )
+
+        migration_0005 = self.versions / filenames_0005[-1]
+        with self.assertRaises(fixture.FixtureError):
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "b" * 40,
+                profiles=profiles,
+            )
+
+        self._write_revisions((filenames_0005[-1],))
+        with self.assertRaises(fixture.FixtureError):
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "a" * 40,
+                profiles=profiles,
+            )
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "b" * 40,
+                profiles=profiles,
+            ),
+            "imp013",
+        )
+
+        fork = self.versions / "20260930_0006_unreviewed_fork.py"
+        fork.write_text("unexpected migration fork\n", encoding="utf-8")
+        fork.chmod(0o644)
+        with self.assertRaises(fixture.FixtureError):
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "b" * 40,
+                profiles=profiles,
+            )
+
+        fork.unlink()
+        migration_0005.write_text("modified committed migration\n", encoding="utf-8")
+        migration_0005.chmod(0o644)
+        with self.assertRaises(fixture.FixtureError):
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                "b" * 40,
+                profiles=profiles,
+            )
 
 
 class MigrationDiagnosticTests(unittest.TestCase):
@@ -174,6 +359,18 @@ class MigrationDiagnosticTests(unittest.TestCase):
         diagnostic["document_conflict_proposals"] = "yes"
         return diagnostic
 
+    @classmethod
+    def valid_imp013_candidate_diagnostic(cls) -> dict[str, object]:
+        diagnostic = cls.valid_candidate_diagnostic()
+        diagnostic["image_files"] = {
+            **diagnostic["image_files"],
+            "revision_0005": "present",
+        }
+        diagnostic["discovered_revisions"] = list(fixture.IMP013_CANDIDATE_APP_REVISIONS)
+        diagnostic["heads"] = [fixture.IMP013_CANDIDATE_APP_MIGRATION]
+        diagnostic["project_document_pair_approvals"] = "yes"
+        return diagnostic
+
     def test_runtime_diagnostic_code_compiles_without_reading_database_settings(self) -> None:
         compile(fixture.MIGRATION_DIAGNOSTIC_PYTHON, "<migration-diagnostic>", "exec")
 
@@ -211,16 +408,84 @@ class MigrationDiagnosticTests(unittest.TestCase):
             "default committed-HEAD parsing must reject candidate-only evidence",
         )
 
+    def test_imp013_diagnostic_requires_fresh_0005_and_approval_table(self) -> None:
+        compile(
+            fixture.IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+            "<imp013-migration-diagnostic>",
+            "exec",
+        )
+        self.assertIn(
+            "20260929_0005_document_pair_approvals.py",
+            fixture.IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+        )
+        self.assertIn(
+            'current_revisions == ["20260929_0005"]',
+            fixture.IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+        )
+        self.assertIn(
+            '"project_document_pair_approvals" in tables',
+            fixture.IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+        )
+
+        diagnostic = self.valid_imp013_candidate_diagnostic()
+        parsed = fixture.parse_migration_diagnostic(
+            json.dumps(diagnostic, separators=(",", ":")),
+            imp013_candidate=True,
+        )
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertTrue(fixture.migration_diagnostic_is_complete(parsed, imp013_candidate=True))
+        self.assertIn(
+            "0005:present",
+            fixture.format_migration_diagnostic(parsed, imp013_candidate=True),
+        )
+        self.assertIn(
+            "project_document_pair_approvals=yes",
+            fixture.format_migration_diagnostic(parsed, imp013_candidate=True),
+        )
+        self.assertIsNone(
+            fixture.parse_migration_diagnostic(
+                json.dumps(diagnostic),
+                candidate=True,
+            ),
+            "the prior IMP-004 profile must not accept IMP-013 schema evidence",
+        )
+
+        missing_table = self.valid_imp013_candidate_diagnostic()
+        missing_table["project_document_pair_approvals"] = "no"
+        parsed_missing = fixture.parse_migration_diagnostic(
+            json.dumps(missing_table),
+            imp013_candidate=True,
+        )
+        self.assertIsNotNone(parsed_missing)
+        assert parsed_missing is not None
+        self.assertFalse(
+            fixture.migration_diagnostic_is_complete(parsed_missing, imp013_candidate=True)
+        )
+
+        wrong_head = self.valid_imp013_candidate_diagnostic()
+        wrong_head["heads"] = [fixture.CANDIDATE_APP_MIGRATION]
+        parsed_wrong_head = fixture.parse_migration_diagnostic(
+            json.dumps(wrong_head),
+            imp013_candidate=True,
+        )
+        self.assertIsNotNone(parsed_wrong_head)
+        assert parsed_wrong_head is not None
+        self.assertFalse(
+            fixture.migration_diagnostic_is_complete(parsed_wrong_head, imp013_candidate=True)
+        )
+
     def test_only_allowlisted_image_revision_and_database_evidence_is_formatted(self) -> None:
         diagnostic = fixture.parse_migration_diagnostic(
-            json.dumps(self.valid_diagnostic(), separators=(",", ":"))
+            json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":")),
+            candidate=True,
         )
 
         self.assertIsNotNone(diagnostic)
         assert diagnostic is not None
-        self.assertTrue(fixture.migration_diagnostic_is_complete(diagnostic))
+        self.assertTrue(fixture.migration_diagnostic_is_complete(diagnostic, candidate=True))
         self.assertEqual(
-            fixture.format_migration_diagnostic(diagnostic),
+            fixture.format_migration_diagnostic(diagnostic, candidate=True),
             "probe_stage=complete discovery_status=ok database_probe_status=ok "
             "image_files_status=ok "
             "script_location=/app/migrations script_directory=present "
@@ -228,32 +493,44 @@ class MigrationDiagnosticTests(unittest.TestCase):
             "migration_directory_owner=root runtime_migration_access=yes "
             "versions_directory_mode=0755 versions_directory_owner=root "
             "runtime_versions_access=yes "
-            "image_files=alembic.ini:present,env.py:present,0001:present,0002:present "
-            "revisions=20260925_0001,20260925_0002 heads=20260925_0002 "
-            "database_config=expected database=expected schema=public "
-            "alembic_version_table=yes catalog_current=expected users=yes",
+            "image_files=alembic.ini:present,env.py:present,0001:present,0002:present,"
+            "0003:present,0004:present "
+            "revisions=20260925_0001,20260925_0002,20260925_0003,20260925_0004 "
+            "heads=20260925_0004 database_config=expected database=expected schema=public "
+            "alembic_version_table=yes catalog_current=expected users=yes "
+            "candidate_schema=projects_name_key:yes,project_documents:yes,"
+            "project_document_revisions:yes,document_conflict_proposals:yes",
         )
 
     def test_unreadable_image_revisions_fail_closed_with_modes_not_raw_errors(self) -> None:
-        diagnostic_data = self.valid_diagnostic()
+        diagnostic_data = self.valid_candidate_diagnostic()
         diagnostic_data["versions_directory_mode"] = "0700"
         diagnostic_data["runtime_versions_access"] = "no"
         diagnostic_data["image_files_status"] = "permission-denied"
         diagnostic_data["image_files"]["revision_0001"] = "permission-denied"
         diagnostic_data["image_files"]["revision_0002"] = "permission-denied"
+        diagnostic_data["image_files"]["revision_0003"] = "permission-denied"
+        diagnostic_data["image_files"]["revision_0004"] = "permission-denied"
         diagnostic_data["discovered_revisions"] = []
         diagnostic_data["heads"] = []
         diagnostic_data["current"] = "empty"
         diagnostic_data["users"] = "no"
-        diagnostic = fixture.parse_migration_diagnostic(json.dumps(diagnostic_data))
+        diagnostic = fixture.parse_migration_diagnostic(
+            json.dumps(diagnostic_data),
+            candidate=True,
+        )
 
         self.assertIsNotNone(diagnostic)
         assert diagnostic is not None
-        rendered = fixture.format_migration_diagnostic(diagnostic)
+        rendered = fixture.format_migration_diagnostic(diagnostic, candidate=True)
         self.assertIn("versions_directory_mode=0700", rendered)
         self.assertIn("runtime_versions_access=no", rendered)
-        self.assertIn("0001:permission-denied,0002:permission-denied", rendered)
-        self.assertFalse(fixture.migration_diagnostic_is_complete(diagnostic))
+        self.assertIn(
+            "0001:permission-denied,0002:permission-denied,"
+            "0003:permission-denied,0004:permission-denied",
+            rendered,
+        )
+        self.assertFalse(fixture.migration_diagnostic_is_complete(diagnostic, candidate=True))
 
     def test_unknown_values_extra_output_and_oversized_diagnostics_fail_closed(self) -> None:
         secret = secrets.token_urlsafe(24)
@@ -319,15 +596,16 @@ class MigrationDiagnosticTests(unittest.TestCase):
         self.assertFalse(fixture.migration_diagnostic_is_complete(diagnostic))
 
     def test_migrate_keeps_the_committed_upgrade_and_current_commands(self) -> None:
-        diagnostic = json.dumps(self.valid_diagnostic(), separators=(",", ":"))
+        diagnostic = json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":"))
         compose = fixture.ComposeController(
             docker=object(),
             source_dir=Path("/tmp/fixture-source"),
             env_file=Path("/tmp/fixture-env"),
             project_name="impostr-review-0123456789abcdef0123",
+            committed_migration_profile="imp004",
         )
         with (
-            patch.object(compose, "invoke", side_effect=["", "20260925_0002 (head)\n"]) as invoke,
+            patch.object(compose, "invoke", side_effect=["", "20260925_0004 (head)\n"]) as invoke,
             patch.object(
                 compose,
                 "run_migration_diagnostic",
@@ -345,7 +623,98 @@ class MigrationDiagnosticTests(unittest.TestCase):
             invoke.call_args_list[1].args[0],
             ["run", "--rm", "api", "alembic", "current"],
         )
-        diagnose.assert_called_once_with()
+        diagnose.assert_called_once_with(candidate=True)
+
+    def test_committed_imp013_profile_accepts_only_the_0005_diagnostic(self) -> None:
+        diagnostic = json.dumps(
+            self.valid_imp013_candidate_diagnostic(),
+            separators=(",", ":"),
+        )
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/committed-imp013-source"),
+            env_file=Path("/tmp/committed-imp013-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            committed_migration_profile="imp013",
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260929_0005 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260929_0005", evidence)
+        self.assertIn("0005:present", evidence)
+        self.assertIn("project_document_pair_approvals=yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(imp013_candidate=True)
+
+    def test_committed_migration_without_a_selected_profile_fails_before_upgrade(self) -> None:
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/unprofiled-committed-source"),
+            env_file=Path("/tmp/unprofiled-committed-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+        )
+        with patch.object(compose, "invoke") as invoke:
+            with self.assertRaisesRegex(fixture.FixtureError, "profile was not verified"):
+                compose.migrate()
+        invoke.assert_not_called()
+
+    def test_imp013_migrate_requires_0005_and_the_approval_schema(self) -> None:
+        diagnostic = json.dumps(
+            self.valid_imp013_candidate_diagnostic(),
+            separators=(",", ":"),
+        )
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/imp013-candidate-source"),
+            env_file=Path("/tmp/imp013-candidate-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            candidate=True,
+            approval_candidate=True,
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260929_0005 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260929_0005", evidence)
+        self.assertIn("0005:present", evidence)
+        self.assertIn("project_document_pair_approvals=yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(imp013_candidate=True)
 
     def test_candidate_migrate_requires_single_head_and_candidate_diagnostics(self) -> None:
         diagnostic = json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":"))
@@ -385,7 +754,7 @@ class MigrationDiagnosticTests(unittest.TestCase):
         diagnose.assert_called_once_with(candidate=True)
 
     def test_empty_revision_and_missing_users_are_reported_in_safe_summary(self) -> None:
-        diagnostic_data = self.valid_diagnostic()
+        diagnostic_data = self.valid_candidate_diagnostic()
         diagnostic_data["discovered_revisions"] = []
         diagnostic_data["heads"] = []
         diagnostic_data["alembic_version_table"] = "no"
@@ -396,6 +765,8 @@ class MigrationDiagnosticTests(unittest.TestCase):
             "env_py": "present",
             "revision_0001": "present",
             "revision_0002": "present",
+            "revision_0003": "present",
+            "revision_0004": "present",
         }
         diagnostic = json.dumps(diagnostic_data)
         compose = fixture.ComposeController(
@@ -403,6 +774,7 @@ class MigrationDiagnosticTests(unittest.TestCase):
             source_dir=Path("/tmp/fixture-source"),
             env_file=Path("/tmp/fixture-env"),
             project_name="impostr-review-0123456789abcdef0123",
+            committed_migration_profile="imp004",
         )
         with (
             patch.object(compose, "invoke", side_effect=["", ""]),
@@ -597,6 +969,8 @@ class GitArchiveTests(unittest.TestCase):
             {
                 "20260925_0001_initial_baseline.py",
                 "20260925_0002_identity_and_project_metadata.py",
+                "20260925_0003_project_document_revisions.py",
+                "20260925_0004_bounded_project_name_keys.py",
             },
         )
         self.assertEqual(stat.S_IMODE(snapshot.stat().st_mode), 0o700)
@@ -671,20 +1045,49 @@ class CandidateSnapshotTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout.strip()
 
-    def initialize_checkout(self) -> str:
+    def initialize_checkout(self, *, include_dockerignore: bool = True) -> str:
         files = (
+            (
+                ".dockerignore",
+                "\n".join(fixture.CANDIDATE_DOCKERIGNORE_RULES) + "\n",
+            ),
             ("compose.yaml", "services:\n  api: {}\n"),
             ("api/app/bootstrap_admin.py", "committed bootstrap\n"),
             ("api/app/admin.py", "committed admin API\n"),
             ("api/app/auth.py", "committed auth API\n"),
             ("api/app/main.py", "committed main\n"),
+            ("api/app/models.py", "committed database models\n"),
+            (
+                "api/migrations/versions/20260925_0001_initial_baseline.py",
+                "committed migration 0001\n",
+            ),
+            (
+                "api/migrations/versions/20260925_0002_identity_and_project_metadata.py",
+                "committed migration 0002\n",
+            ),
+            (
+                "api/migrations/versions/20260925_0003_project_document_revisions.py",
+                "committed migration 0003\n",
+            ),
+            (
+                "api/migrations/versions/20260925_0004_bounded_project_name_keys.py",
+                "committed migration 0004\n",
+            ),
+            ("api/tests/test_migrations.py", "committed migration tests\n"),
+            ("api/tests/test_postgres_integration.py", "committed integration tests\n"),
             ("web/src/App.tsx", "committed real app shell\n"),
+            ("web/src/ProjectWorkspace.tsx", "committed workspace UI\n"),
+            ("web/src/ProjectWorkspace.test.tsx", "committed workspace tests\n"),
+            ("scripts/local_browser_fixture.py", "committed host fixture\n"),
+            ("scripts/test_local_browser_fixture.py", "committed host fixture tests\n"),
             ("db/Dockerfile", "committed database image\n"),
             ("PROJECT.md.example", "committed project template\n"),
             ("AGENTS.md.example", "committed instructions template\n"),
             ("BACKLOG.md.example", "committed backlog template\n"),
             (".opencode/private-provider.json", "synthetic-private-fixture-marker"),
         )
+        if not include_dockerignore:
+            files = tuple((path, content) for path, content in files if path != ".dockerignore")
         for relative, content in files:
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -709,6 +1112,31 @@ class CandidateSnapshotTests(unittest.TestCase):
             reviewed_inputs=tuple(inputs),
             nonruntime_test_changes=(),
         )
+
+    def imp013_policy(self, base_commit: str) -> fixture.CandidatePreviewPolicy:
+        return replace(
+            fixture.IMP013_CANDIDATE_PREVIEW_POLICY,
+            base_commit=base_commit,
+        )
+
+    def write_imp013_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
+        base = self.initialize_checkout()
+        policy = self.imp013_policy(base)
+        for path, status in (
+            *policy.reviewed_inputs,
+            *policy.nonruntime_test_changes,
+            *policy.harness_changes,
+        ):
+            candidate_file = self.root / path
+            candidate_file.parent.mkdir(parents=True, exist_ok=True)
+            if status == "added":
+                self.assertFalse(
+                    candidate_file.exists(),
+                    f"{path} must be absent from the pinned base",
+                )
+            candidate_file.write_text(f"candidate source for {path}\n", encoding="utf-8")
+            candidate_file.chmod(0o644)
+        return base, policy
 
     def test_fixed_allowlist_is_runtime_only_and_rejects_planning_paths(self) -> None:
         reviewed = {path for path, _status in fixture.CANDIDATE_REVIEWED_RUNTIME_INPUTS}
@@ -760,6 +1188,55 @@ class CandidateSnapshotTests(unittest.TestCase):
                     ("api/app/main.py", "modified"),
                 ),
             )
+
+    def test_imp013_policy_is_pinned_to_the_committed_head_and_exact_app_files(self) -> None:
+        policy = fixture.IMP013_CANDIDATE_PREVIEW_POLICY
+        self.assertEqual(policy.base_commit, "60e9480de5ac7a377f4eff79f28814f0c488aeb4")
+        self.assertEqual(
+            set(policy.reviewed_inputs),
+            {
+                ("api/app/document_pair_approvals.py", "added"),
+                ("api/app/main.py", "modified"),
+                ("api/app/models.py", "modified"),
+                (
+                    "api/migrations/versions/20260929_0005_document_pair_approvals.py",
+                    "added",
+                ),
+                ("web/src/ProjectWorkspace.tsx", "modified"),
+            },
+        )
+        self.assertEqual(
+            set(policy.nonruntime_test_changes),
+            {
+                ("api/tests/test_document_pair_approval_postgres.py", "added"),
+                ("api/tests/test_document_pair_approvals.py", "added"),
+                ("api/tests/test_migrations.py", "modified"),
+                ("api/tests/test_postgres_integration.py", "modified"),
+                ("web/src/ProjectWorkspace.test.tsx", "modified"),
+            },
+        )
+        self.assertTrue(policy.fingerprint_test_changes)
+        self.assertTrue(policy.fingerprint_harness_changes)
+        self.assertTrue(policy.strict_scope)
+        self.assertEqual(policy.committed_support_paths, (".dockerignore",))
+        self.assertEqual(policy.committed_support_paths, (".dockerignore",))
+        self.assertEqual(
+            policy.status_paths,
+            (*fixture.CANDIDATE_STATUS_PATHS, "scripts"),
+        )
+        self.assertNotIn("PROJECT.md", policy.status_paths or ())
+        self.assertEqual(policy.allowed_input_modes, frozenset({0o644, 0o664}))
+        self.assertEqual(
+            set(policy.harness_changes),
+            {
+                ("scripts/local_browser_fixture.py", "modified"),
+                ("scripts/test_local_browser_fixture.py", "modified"),
+            },
+        )
+        self.assertEqual(
+            policy.allowed_test_literal_digests,
+            fixture.IMP013_CANDIDATE_TEST_LITERAL_DIGESTS,
+        )
 
     def test_candidate_fingerprint_binds_commit_path_status_mode_and_content_digest(self) -> None:
         content = b"candidate bytes that do not appear in a fingerprint"
@@ -991,6 +1468,371 @@ class CandidateSnapshotTests(unittest.TestCase):
         ignore.chmod(0o644)
         with self.assertRaisesRegex(fixture.FixtureError, "not safely allowlisted"):
             fixture.validate_candidate_dockerignore(self.root)
+
+    def test_imp013_snapshot_pins_test_content_but_does_not_copy_tests_into_runtime(self) -> None:
+        base, policy = self.write_imp013_candidate()
+        synthetic_test_password = "synthetic-test-fixture-password"
+        synthetic_test_assignment = f'password = "{synthetic_test_password}"\n'
+        changed_test = self.root / "api/tests/test_migrations.py"
+        changed_test.write_text(synthetic_test_assignment, encoding="utf-8")
+        changed_test.chmod(0o644)
+        policy = replace(
+            policy,
+            allowed_test_literal_digests=(
+                *policy.allowed_test_literal_digests,
+                (
+                    "api/tests/test_migrations.py",
+                    "password",
+                    hashlib.sha256(synthetic_test_password.encode("utf-8")).hexdigest(),
+                ),
+            ),
+        )
+        snapshot = Path(self.temporary.name) / "imp013-candidate-snapshot"
+
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        expected_paths = (
+            {path for path, _status in policy.reviewed_inputs}
+            | {path for path, _status in policy.nonruntime_test_changes}
+            | {path for path, _status in policy.harness_changes}
+        )
+        self.assertEqual(candidate.base_commit, base)
+        self.assertEqual({record.path for record in candidate.records}, expected_paths)
+        self.assertEqual(
+            set(candidate.runtime_paths),
+            {path for path, _ in policy.reviewed_inputs},
+        )
+        self.assertRegex(candidate.fingerprint, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            (snapshot / "api/app/document_pair_approvals.py").read_text(encoding="utf-8"),
+            "candidate source for api/app/document_pair_approvals.py\n",
+        )
+        self.assertEqual(
+            (snapshot / "api/tests/test_migrations.py").read_text(encoding="utf-8"),
+            "committed migration tests\n",
+            "candidate tests are fingerprinted but are not overlaid into the app snapshot",
+        )
+        dockerignore = snapshot / ".dockerignore"
+        dockerignore_bytes = dockerignore.read_bytes()
+        self.assertEqual(
+            candidate.support_file_digests,
+            ((".dockerignore", hashlib.sha256(dockerignore_bytes).hexdigest()),),
+        )
+        fixture.validate_candidate_dockerignore(snapshot)
+        dockerignore.write_bytes(dockerignore_bytes + b"\n# changed after archiving\n")
+        dockerignore.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "support file changed"):
+            fixture.validate_candidate_snapshot_tree(snapshot, candidate)
+        dockerignore.write_bytes(dockerignore_bytes)
+        dockerignore.chmod(0o644)
+        test_record = next(
+            record
+            for record in candidate.records
+            if record.path == changed_test.relative_to(self.root).as_posix()
+        )
+        self.assertEqual(
+            test_record.sha256,
+            hashlib.sha256(synthetic_test_assignment.encode()).hexdigest(),
+        )
+        self.assertFalse(
+            (snapshot / "api/tests/test_document_pair_approvals.py").exists(),
+            "new test-only files must not enter the runtime snapshot",
+        )
+        self.assertFalse(
+            (snapshot / "scripts/local_browser_fixture.py").exists(),
+            "the fingerprinted host harness must not enter the app snapshot",
+        )
+        fixture.validate_candidate_snapshot_tree(snapshot, candidate)
+        fixture.validate_candidate_worktree_snapshot(
+            self.root,
+            candidate,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        changed_test.write_text("changed test code after preflight\n", encoding="utf-8")
+        changed_test.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "changed during preview"):
+            fixture.validate_candidate_worktree_snapshot(
+                self.root,
+                candidate,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        pinned_destination = Path(self.temporary.name) / "imp013-stale-fingerprint"
+        with self.assertRaisesRegex(fixture.FixtureError, "fingerprint changed"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                pinned_destination,
+                private_home=self.private_home,
+                expected_fingerprint=candidate.fingerprint,
+                policy=policy,
+            )
+        self.assertFalse(pinned_destination.exists())
+
+    def test_imp013_archive_requires_the_committed_dockerignore_support_file(self) -> None:
+        base = self.initialize_checkout(include_dockerignore=False)
+        snapshot = Path(self.temporary.name) / "imp013-missing-dockerignore"
+
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_head_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                expected_commit=base,
+                additional_paths=(".dockerignore",),
+            )
+
+        self.assertFalse(snapshot.exists())
+
+    def test_imp013_harness_drift_after_preflight_rejects_pinned_launch(self) -> None:
+        _base, policy = self.write_imp013_candidate()
+        snapshot = Path(self.temporary.name) / "imp013-harness-bound-snapshot"
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+        self.assertEqual(
+            {record.path for record in candidate.records if record.path.startswith("scripts/")},
+            {path for path, _status in policy.harness_changes},
+        )
+        harness_paths = {path for path, _status in policy.harness_changes}
+        self.assertEqual(
+            {record.path for record in candidate.records if record.path.startswith("scripts/")},
+            harness_paths,
+        )
+        for index, harness_path in enumerate(sorted(harness_paths)):
+            harness = self.root / harness_path
+            harness_record = next(
+                record for record in candidate.records if record.path == harness_path
+            )
+            original_harness_content = f"candidate source for {harness_path}\n".encode("utf-8")
+            self.assertEqual(harness_record.status, "modified")
+            self.assertEqual(harness_record.mode, 0o644)
+            self.assertEqual(harness_record.size, len(original_harness_content))
+            self.assertEqual(
+                harness_record.sha256,
+                hashlib.sha256(original_harness_content).hexdigest(),
+            )
+            self.assertFalse((snapshot / harness_path).exists())
+
+            harness.write_text("changed host fixture after preflight\n", encoding="utf-8")
+            harness.chmod(0o644)
+            with self.assertRaisesRegex(fixture.FixtureError, "changed during preview"):
+                fixture.validate_candidate_worktree_snapshot(
+                    self.root,
+                    candidate,
+                    private_home=self.private_home,
+                    policy=policy,
+                )
+
+            launch_snapshot = Path(self.temporary.name) / f"imp013-stale-harness-launch-{index}"
+            with self.assertRaisesRegex(fixture.FixtureError, "fingerprint changed"):
+                fixture.archive_candidate_snapshot(
+                    self.root,
+                    launch_snapshot,
+                    private_home=self.private_home,
+                    expected_fingerprint=candidate.fingerprint,
+                    policy=policy,
+                )
+            self.assertFalse(launch_snapshot.exists())
+            harness.write_bytes(original_harness_content)
+            harness.chmod(0o644)
+
+    def test_imp013_snapshot_ignores_unrelated_dirty_planning_and_logs(self) -> None:
+        _base, policy = self.write_imp013_candidate()
+        snapshot = Path(self.temporary.name) / "imp013-snapshot-with-dirty-planning"
+        for name in ("PROJECT.md", "AGENTS.md", "BACKLOG.md", "DONE.md"):
+            (self.root / name).write_text(
+                f"unrelated dirty planning in {name}\n",
+                encoding="utf-8",
+            )
+        (self.root / ".opencode" / "progress.md").write_text(
+            "unrelated local runner log\n",
+            encoding="utf-8",
+        )
+        (self.root / ".playwright-mcp").mkdir()
+        (self.root / ".playwright-mcp" / "state.json").write_text(
+            "unrelated local browser state\n",
+            encoding="utf-8",
+        )
+
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        self.assertRegex(candidate.fingerprint, r"^[0-9a-f]{64}$")
+        for name in ("PROJECT.md", "AGENTS.md", "BACKLOG.md", "DONE.md"):
+            self.assertFalse((snapshot / name).exists())
+        self.assertFalse((snapshot / ".opencode").exists())
+        self.assertFalse((snapshot / ".playwright-mcp").exists())
+
+    def test_imp013_snapshot_rejects_missing_unexpected_runtime_template_and_harness_paths(
+        self,
+    ) -> None:
+        base, policy = self.write_imp013_candidate()
+        snapshot = Path(self.temporary.name) / "imp013-blocked-snapshot"
+
+        missing_test = self.root / "api/tests/test_document_pair_approvals.py"
+        missing_test.unlink()
+        with self.assertRaisesRegex(fixture.FixtureError, "test input is missing"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+        missing_test.write_text("candidate test restored\n", encoding="utf-8")
+        missing_test.chmod(0o644)
+
+        unexpected_inputs = (
+            ("api/app/unreviewed_approval.py", "unreviewed candidate code\n"),
+            ("PROJECT.md.example", "unexpected template change\n"),
+            ("scripts/unreviewed_fixture.py", "unexpected harness change\n"),
+        )
+        for relative, content in unexpected_inputs:
+            unexpected = self.root / relative
+            unexpected.parent.mkdir(parents=True, exist_ok=True)
+            original = unexpected.read_bytes() if unexpected.exists() else None
+            unexpected.write_text(content, encoding="utf-8")
+            unexpected.chmod(0o644)
+            with self.subTest(path=relative), self.assertRaisesRegex(
+                fixture.FixtureError,
+                "unexpected scoped input",
+            ):
+                fixture.archive_candidate_snapshot(
+                    self.root,
+                    snapshot,
+                    private_home=self.private_home,
+                    policy=policy,
+                )
+            self.assertFalse(snapshot.exists())
+            if original is None:
+                unexpected.unlink()
+            else:
+                unexpected.write_bytes(original)
+                unexpected.chmod(0o644)
+
+        self.assertEqual(
+            fixture._resolve_head_commit(self.root, private_home=self.private_home),
+            base,
+        )
+
+    def test_imp013_snapshot_rejects_symlinks_literal_secrets_and_unreviewed_modes(self) -> None:
+        _base, policy = self.write_imp013_candidate()
+        snapshot = Path(self.temporary.name) / "imp013-unsafe-snapshot"
+        runtime_file = self.root / "api/app/main.py"
+        external = Path(self.temporary.name) / "outside.py"
+        external.write_text("outside candidate bytes\n", encoding="utf-8")
+        runtime_file.unlink()
+        runtime_file.symlink_to(external)
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+
+        runtime_file.unlink()
+        runtime_file.write_text("candidate runtime source\n", encoding="utf-8")
+        runtime_file.chmod(0o600)
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        runtime_file.chmod(0o644)
+
+        secret = "synthetic-approval-candidate-secret"
+        runtime_file.write_text(f'DB_PASSWORD = "{secret}"\n', encoding="utf-8")
+        runtime_file.chmod(0o644)
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertFalse(snapshot.exists())
+
+    def test_imp013_snapshot_rejects_test_assignments_and_token_values(self) -> None:
+        _base, policy = self.write_imp013_candidate()
+        snapshot = Path(self.temporary.name) / "imp013-test-token-snapshot"
+        test_file = self.root / "api/tests/test_document_pair_approvals.py"
+        unapproved_password = "ordinary-unapproved-test-password"
+        test_file.write_text(f'password = "{unapproved_password}"\n', encoding="utf-8")
+        test_file.chmod(0o644)
+
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+
+        self.assertNotIn(unapproved_password, str(caught.exception))
+        self.assertFalse(snapshot.exists())
+
+        literal_secret = "synthetic-test-database-secret"
+        test_file.write_text(f'DB_PASSWORD = "{literal_secret}"\n', encoding="utf-8")
+        test_file.chmod(0o644)
+
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+
+        self.assertNotIn(literal_secret, str(caught.exception))
+        self.assertFalse(snapshot.exists())
+
+        secret_token = "ghp_" + "A" * 30
+        test_file.write_text(f'password = "{secret_token}"\n', encoding="utf-8")
+        test_file.chmod(0o644)
+
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+
+        self.assertNotIn(secret_token, str(caught.exception))
+        self.assertFalse(snapshot.exists())
+
+    def test_imp013_total_size_limit_counts_fingerprinted_test_changes(self) -> None:
+        _base, policy = self.write_imp013_candidate()
+        bounded_policy = replace(policy, max_total_bytes=100)
+        snapshot = Path(self.temporary.name) / "imp013-oversized-total"
+
+        with self.assertRaisesRegex(fixture.FixtureError, "total size limit"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=bounded_policy,
+            )
+        self.assertFalse(snapshot.exists())
 
 
 class ComposeSafetyTests(unittest.TestCase):
@@ -1307,6 +2149,41 @@ class ComposeSafetyTests(unittest.TestCase):
         api_check = rewritten.split("  api-check:\n", 1)[1]
         self.assertNotIn("image:", api_check)
         self.assertNotIn(f"{fixture.REVIEW_IMAGE_PROJECT_LABEL}:", api_check)
+
+    def test_committed_head_image_tags_preserve_the_imp004_root_api_build_context(self) -> None:
+        source = self.root / "committed-root-context"
+        source.mkdir()
+        compose_file = source / "compose.yaml"
+        compose_file.write_text(
+            "services:\n"
+            "  db:\n"
+            "    build:\n"
+            "      context: ./db\n"
+            "  api:\n"
+            "    build:\n"
+            "      context: .\n"
+            "      dockerfile: api/Dockerfile\n"
+            "      target: runtime\n"
+            "  frontdoor:\n"
+            "    build:\n"
+            "      context: ./web\n"
+            "      target: runtime\n",
+            encoding="utf-8",
+        )
+        compose_file.chmod(0o644)
+
+        fixture.set_snapshot_review_images(source, self.identity.project_name)
+
+        rewritten = compose_file.read_text(encoding="utf-8")
+        api_block = rewritten.split("  api:\n", 1)[1].split("  frontdoor:\n", 1)[0]
+        self.assertIn("context: .\n", api_block)
+        self.assertIn("dockerfile: api/Dockerfile\n", api_block)
+        self.assertIn("target: runtime\n", api_block)
+        self.assertIn(
+            f"image: {fixture.review_image_reference(self.identity.project_name, 'api')}",
+            api_block,
+        )
+        self.assertEqual(rewritten.count(f"{fixture.REVIEW_IMAGE_PROJECT_LABEL}:"), 3)
 
     def test_compose_env_is_mode_0600_and_secrets_stay_out_of_command_arguments(self) -> None:
         env_file = self.state / "compose.env"
@@ -1951,6 +2828,8 @@ class RecoveryOwnershipTests(unittest.TestCase):
         # Drive the real _prepare sequence with inert Compose/Docker stand-ins.
         # The SIGKILL guardian test below injects a record; this verifies that
         # production setup actually writes that record before Docker can build.
+        # Migration-profile selection is covered separately; keep this assertion
+        # scoped to ownership registration ordering.
         with tempfile.TemporaryDirectory(prefix="impostr-browser-review-") as temporary:
             state = Path(temporary)
             self_control = self.control / "production-registration"
@@ -1994,7 +2873,11 @@ class RecoveryOwnershipTests(unittest.TestCase):
                 patch("local_browser_fixture.choose_loopback_host", return_value="127.4.5.6"),
                 patch("local_browser_fixture.choose_loopback_port", return_value=18473),
                 patch("local_browser_fixture.DockerClient", return_value=docker),
-                patch("local_browser_fixture.archive_head_snapshot", return_value="2222dd2"),
+                patch("local_browser_fixture.archive_head_snapshot", return_value="2" * 40),
+                patch(
+                    "local_browser_fixture.select_committed_app_migration_profile",
+                    return_value="imp004",
+                ),
                 patch("local_browser_fixture.set_snapshot_loopback_host"),
                 patch("local_browser_fixture.set_snapshot_review_images"),
                 patch("local_browser_fixture.ComposeController", InertCompose),
@@ -2454,6 +3337,11 @@ class SupervisorPidfdVerificationTests(unittest.TestCase):
                 self._supervisor_arguments()
                 + ["--candidate-fingerprint", "b" * 64],
             ),
+            (
+                "imp013 candidate",
+                self._supervisor_arguments()
+                + ["--imp013-candidate-fingerprint", "c" * 64],
+            ),
         )
         for name, arguments in cases:
             with self.subTest(name=name):
@@ -2843,10 +3731,16 @@ class CandidateCliTests(unittest.TestCase):
             fixture._parse_args(["candidate-preflight"]).command,
             "candidate-preflight",
         )
+        self.assertEqual(
+            fixture._parse_args(["imp013-candidate-preflight"]).command,
+            "imp013-candidate-preflight",
+        )
         committed_start = fixture._parse_args(["start"])
         self.assertIsNone(committed_start.candidate_fingerprint)
+        self.assertIsNone(committed_start.imp013_candidate_fingerprint)
         committed_launch = fixture._parse_args(["launch"])
         self.assertIsNone(committed_launch.candidate_fingerprint)
+        self.assertIsNone(committed_launch.imp013_candidate_fingerprint)
 
         candidate_start = fixture._parse_args(
             ["start", "--candidate-fingerprint", fingerprint]
@@ -2856,6 +3750,28 @@ class CandidateCliTests(unittest.TestCase):
         )
         self.assertEqual(candidate_start.candidate_fingerprint, fingerprint)
         self.assertEqual(candidate_launch.candidate_fingerprint, fingerprint)
+        imp013_start = fixture._parse_args(
+            ["start", "--imp013-candidate-fingerprint", fingerprint]
+        )
+        imp013_launch = fixture._parse_args(
+            ["launch", "--imp013-candidate-fingerprint", fingerprint]
+        )
+        self.assertEqual(imp013_start.imp013_candidate_fingerprint, fingerprint)
+        self.assertEqual(imp013_launch.imp013_candidate_fingerprint, fingerprint)
+        self.assertEqual(
+            fixture._candidate_selection(imp013_launch),
+            (fingerprint, "imp013"),
+        )
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture._parse_args(
+                [
+                    "launch",
+                    "--candidate-fingerprint",
+                    fingerprint,
+                    "--imp013-candidate-fingerprint",
+                    fingerprint,
+                ]
+            )
 
     def test_candidate_fingerprint_rejects_malformed_values(self) -> None:
         for value in ("A" * 64, "0" * 63, "0" * 65, "../" + "0" * 61):
@@ -2977,6 +3893,13 @@ class ApiClientTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(response_body)
 
+            def do_PUT(self) -> None:
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                received["put_origin"] = self.headers.get("Origin", "")
+                received["put_csrf_header"] = self.headers.get("X-CSRF-Token", "")
+                received["put_body"] = body.decode("utf-8")
+                self.send_json(200, {"saved": True})
+
         host = fixture.choose_loopback_host()
         server = ThreadingHTTPServer((host, 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -3013,6 +3936,16 @@ class ApiClientTests(unittest.TestCase):
 
         self.assertEqual(user["id"], user_id)
         self.assertEqual(client.admin_users_status(), 403)
+        put_response = client.request(
+            "PUT",
+            "/api/synthetic-document",
+            body={"content": "synthetic"},
+            csrf_token=client.csrf_token,
+        )
+        self.assertEqual(put_response.status, 200)
+        self.assertEqual(received["put_origin"], origin)
+        self.assertEqual(received["put_csrf_header"], session_csrf)
+        self.assertEqual(received["put_body"], '{"content":"synthetic"}')
         self.assertEqual(received["origin"], origin)
         self.assertTrue(received["csrf_header"] == prelogin_csrf, "login CSRF token was not sent")
         self.assertTrue(

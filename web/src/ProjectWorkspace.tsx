@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -67,6 +68,33 @@ type DocumentHistory = {
 type DocumentRevision = RevisionSummary & { content: string };
 type ConflictProposal = ConflictProposalSummary & { content: string };
 type CompareContent = { label: string; content: string };
+type ProjectDocuments = Record<DocumentKind, ProjectDocument>;
+type PairKind = "project" | "agents";
+type RevisionReference = { id: string; revision_number: number; content_sha256: string };
+type PairApprovalRecord = {
+  id: string;
+  project_revision_id: string;
+  project_revision_number: number;
+  agents_revision_id: string;
+  agents_revision_number: number;
+  actor_user_id: string | null;
+  created_at: string;
+};
+type PairApprovalStatus = {
+  current_project_revision: RevisionReference;
+  current_agents_revision: RevisionReference;
+  approved: boolean;
+  latest_approval: PairApprovalRecord | null;
+  approvals: PairApprovalRecord[];
+  approval_offset: number;
+  approval_has_more: boolean;
+  approval_next_cursor: string | null;
+};
+type PairDocuments = { project: ProjectDocument; agents: ProjectDocument };
+type PairConflict = { previous: PairDocuments; latest: PairDocuments };
+type DiffRowKind = "context" | "added" | "removed" | "note";
+type DiffRow = { kind: DiffRowKind; text: string; key: string };
+type DiffResult = { rows: DiffRow[]; added: number; removed: number; truncated: boolean };
 
 const MAX_DOCUMENT_BYTES = 128 * 1024;
 const documentOptions: { kind: DocumentKind; label: string; filename: string }[] = [
@@ -74,13 +102,404 @@ const documentOptions: { kind: DocumentKind; label: string; filename: string }[]
   { kind: "agents", label: "Agent rules", filename: "AGENTS.md" },
   { kind: "backlog", label: "Backlog", filename: "BACKLOG.md" },
 ];
+const pairDocumentOptions: { kind: PairKind; filename: string }[] = [
+  { kind: "project", filename: "PROJECT.md" },
+  { kind: "agents", filename: "AGENTS.md" },
+];
+
+const MAX_DIFF_MATRIX_CELLS = 1_000_000;
+const MAX_DIFF_MATRIX_LINES = 2_000;
+const MAX_RENDERED_DIFF_ROWS = 3_000;
+
+function diffLines(content: string): string[] {
+  if (content.length === 0) return [];
+  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return lines;
+}
+
+function lineEndingStyle(content: string): string {
+  if (content.includes("\r\n")) return "CRLF";
+  if (content.includes("\n")) return "LF";
+  if (content.includes("\r")) return "CR";
+  return "no line breaks";
+}
+
+function trimDiffRows(rows: DiffRow[]): { rows: DiffRow[]; truncated: boolean } {
+  if (rows.length <= MAX_RENDERED_DIFF_ROWS) return { rows, truncated: false };
+  const sideCount = Math.floor((MAX_RENDERED_DIFF_ROWS - 1) / 2);
+  const omittedCount = rows.length - sideCount * 2;
+  return {
+    rows: [
+      ...rows.slice(0, sideCount),
+      {
+        kind: "note",
+        text: `… ${omittedCount.toLocaleString()} changed/context lines omitted …`,
+        key: "omitted",
+      },
+      ...rows.slice(-sideCount),
+    ],
+    truncated: true,
+  };
+}
+
+function buildDiff(before: string, after: string): DiffResult {
+  const oldLines = diffLines(before);
+  const newLines = diffLines(after);
+  const rawRows: DiffRow[] = [];
+  let added = 0;
+  let removed = 0;
+  const addRow = (kind: DiffRowKind, text: string): void => {
+    rawRows.push({ kind, text, key: `${kind}-${rawRows.length}` });
+  };
+
+  if (
+    oldLines.length * newLines.length <= MAX_DIFF_MATRIX_CELLS &&
+    Math.max(oldLines.length, newLines.length) <= MAX_DIFF_MATRIX_LINES
+  ) {
+    const rows = oldLines.length + 1;
+    const columns = newLines.length + 1;
+    const lcs = Array.from({ length: rows }, () => new Uint32Array(columns));
+    for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex -= 1) {
+      for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex -= 1) {
+        const row = lcs[oldIndex];
+        const nextRow = lcs[oldIndex + 1];
+        if (row && nextRow) {
+          row[newIndex] =
+            oldLines[oldIndex] === newLines[newIndex]
+              ? (nextRow[newIndex + 1] ?? 0) + 1
+              : Math.max(nextRow[newIndex] ?? 0, row[newIndex + 1] ?? 0);
+        }
+      }
+    }
+
+    let oldIndex = 0;
+    let newIndex = 0;
+    while (oldIndex < oldLines.length || newIndex < newLines.length) {
+      const oldLine = oldLines[oldIndex];
+      const newLine = newLines[newIndex];
+      if (oldLine !== undefined && newLine !== undefined && oldLine === newLine) {
+        addRow("context", oldLine);
+        oldIndex += 1;
+        newIndex += 1;
+        continue;
+      }
+      const row = lcs[oldIndex];
+      const nextRow = lcs[oldIndex + 1];
+      if (
+        newLine !== undefined &&
+        (oldLine === undefined || (row?.[newIndex + 1] ?? 0) > (nextRow?.[newIndex] ?? 0))
+      ) {
+        addRow("added", newLine);
+        added += 1;
+        newIndex += 1;
+      } else if (oldLine !== undefined) {
+        addRow("removed", oldLine);
+        removed += 1;
+        oldIndex += 1;
+      }
+    }
+  } else {
+    let prefix = 0;
+    while (
+      prefix < oldLines.length &&
+      prefix < newLines.length &&
+      oldLines[prefix] === newLines[prefix]
+    ) {
+      prefix += 1;
+    }
+    let suffix = 0;
+    while (
+      suffix < oldLines.length - prefix &&
+      suffix < newLines.length - prefix &&
+      oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+    ) {
+      suffix += 1;
+    }
+
+    const contextLines = 3;
+    if (prefix <= contextLines * 2) {
+      for (let index = 0; index < prefix; index += 1) {
+        addRow("context", oldLines[index] ?? "");
+      }
+    } else {
+      for (let index = 0; index < contextLines; index += 1) {
+        addRow("context", oldLines[index] ?? "");
+      }
+      addRow("note", `… ${prefix - contextLines * 2} unchanged lines omitted …`);
+      for (let index = prefix - contextLines; index < prefix; index += 1) {
+        addRow("context", oldLines[index] ?? "");
+      }
+    }
+
+    const oldEnd = oldLines.length - suffix;
+    const newEnd = newLines.length - suffix;
+    for (let index = prefix; index < oldEnd; index += 1) {
+      addRow("removed", oldLines[index] ?? "");
+      removed += 1;
+    }
+    for (let index = prefix; index < newEnd; index += 1) {
+      addRow("added", newLines[index] ?? "");
+      added += 1;
+    }
+
+    if (suffix <= contextLines * 2) {
+      for (let index = 0; index < suffix; index += 1) {
+        addRow("context", newLines[newEnd + index] ?? "");
+      }
+    } else {
+      for (let index = 0; index < contextLines; index += 1) {
+        addRow("context", newLines[newEnd + index] ?? "");
+      }
+      addRow("note", `… ${suffix - contextLines * 2} unchanged lines omitted …`);
+      for (let index = suffix - contextLines; index < suffix; index += 1) {
+        addRow("context", newLines[newEnd + index] ?? "");
+      }
+    }
+  }
+
+  const beforeHasFinalNewline = before.endsWith("\n");
+  const afterHasFinalNewline = after.endsWith("\n");
+  if (beforeHasFinalNewline !== afterHasFinalNewline) {
+    addRow("note", `Final newline ${beforeHasFinalNewline ? "removed" : "added"} at end of file.`);
+  }
+  const beforeLineEnding = lineEndingStyle(before);
+  const afterLineEnding = lineEndingStyle(after);
+  if (beforeLineEnding !== afterLineEnding) {
+    addRow("note", `Line ending style changed from ${beforeLineEnding} to ${afterLineEnding}.`);
+  }
+  const trimmed = trimDiffRows(rawRows);
+  return { rows: trimmed.rows, added, removed, truncated: trimmed.truncated };
+}
+
+function DiffViewer({
+  beforeLabel,
+  before,
+  afterLabel,
+  after,
+}: {
+  beforeLabel: string;
+  before: string;
+  afterLabel: string;
+  after: string;
+}) {
+  const diff = useMemo(() => buildDiff(before, after), [before, after]);
+  const sameContent = before === after;
+  const diffName = `${beforeLabel} compared with ${afterLabel}`;
+
+  return (
+    <div className="grid min-w-0 gap-3">
+      <div aria-live="polite" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <span className="text-copy-muted">{diffName}</span>
+        {sameContent ? (
+          <span className="font-medium text-copy-muted">No saved text differences.</span>
+        ) : (
+          <span className="font-mono text-xs">
+            <span className="text-green-200">+{diff.added} added</span>
+            <span aria-hidden="true" className="px-2 text-copy-muted">
+              ·
+            </span>
+            <span className="text-red-200">−{diff.removed} removed</span>
+          </span>
+        )}
+      </div>
+      {!sameContent ? (
+        <ol
+          aria-label={`Line-by-line diff: ${diffName}`}
+          className="max-h-[32rem] min-w-0 list-none overflow-auto rounded-lg border border-line bg-canvas p-2 font-mono text-sm leading-6"
+        >
+          {diff.rows.map((row) => (
+            <li
+              className={`grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-2 rounded px-2 py-0.5 ${
+                row.kind === "added"
+                  ? "bg-green-300/10 text-green-100"
+                  : row.kind === "removed"
+                    ? "bg-red-300/10 text-red-100"
+                    : row.kind === "note"
+                      ? "text-copy-muted"
+                      : "text-foreground"
+              }`}
+              key={row.key}
+            >
+              <span aria-hidden="true" className="select-none text-right">
+                {row.kind === "added"
+                  ? "+"
+                  : row.kind === "removed"
+                    ? "−"
+                    : row.kind === "note"
+                      ? "…"
+                      : " "}
+              </span>
+              <span className="min-w-0 break-words whitespace-pre-wrap">
+                <span className="sr-only">
+                  {row.kind === "added"
+                    ? "Added line: "
+                    : row.kind === "removed"
+                      ? "Removed line: "
+                      : row.kind === "note"
+                        ? "Diff note: "
+                        : "Unchanged line: "}
+                </span>
+                {row.text || " "}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {diff.truncated ? (
+        <p className="text-xs leading-5 text-copy-muted">
+          The inline diff is capped for readability. The saved revisions remain available in full
+          through document history.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The request could not be completed.";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function pairConflictFrom(error: ApiError): PairDocuments | null {
+  if (!isRecord(error.payload) || !isRecord(error.payload.latest)) return null;
+  const { project, agents } = error.payload.latest;
+  if (
+    !isRecord(project) ||
+    project.kind !== "project" ||
+    typeof project.id !== "string" ||
+    typeof project.content !== "string" ||
+    typeof project.content_sha256 !== "string" ||
+    typeof project.revision_number !== "number" ||
+    !Number.isSafeInteger(project.revision_number) ||
+    (project.revision_number as number) < 1 ||
+    project.filename !== "PROJECT.md" ||
+    !isRecord(agents) ||
+    agents.kind !== "agents" ||
+    typeof agents.id !== "string" ||
+    typeof agents.content !== "string" ||
+    typeof agents.content_sha256 !== "string" ||
+    typeof agents.revision_number !== "number" ||
+    !Number.isSafeInteger(agents.revision_number) ||
+    (agents.revision_number as number) < 1 ||
+    agents.filename !== "AGENTS.md"
+  ) {
+    return null;
+  }
+  return { project: project as ProjectDocument, agents: agents as ProjectDocument };
+}
+
+function sameSavedPair(a: PairDocuments, b: PairDocuments): boolean {
+  return pairDocumentOptions.every(
+    ({ kind }) =>
+      a[kind].id === b[kind].id &&
+      a[kind].revision_number === b[kind].revision_number &&
+      a[kind].content_sha256 === b[kind].content_sha256,
+  );
+}
+
+function sameRevisionReference(a: RevisionReference, b: RevisionReference): boolean {
+  return (
+    a.id === b.id &&
+    a.revision_number === b.revision_number &&
+    a.content_sha256 === b.content_sha256
+  );
+}
+
+function approvalHeadsMatchDocuments(
+  status: PairApprovalStatus | null,
+  documents: ProjectDocuments | null,
+): boolean {
+  return Boolean(
+    status &&
+    documents &&
+    status.current_project_revision.revision_number === documents.project.revision_number &&
+    status.current_project_revision.content_sha256 === documents.project.content_sha256 &&
+    status.current_agents_revision.revision_number === documents.agents.revision_number &&
+    status.current_agents_revision.content_sha256 === documents.agents.content_sha256,
+  );
+}
+
+function reconcileRevisionReference(
+  current: RevisionReference,
+  incoming: RevisionReference,
+): RevisionReference {
+  return incoming.revision_number > current.revision_number ? incoming : current;
+}
+
+function reconcilePairApprovalStatus(
+  current: PairApprovalStatus | null,
+  incoming: PairApprovalStatus,
+): PairApprovalStatus {
+  if (!current) return incoming;
+  const currentProject = reconcileRevisionReference(
+    current.current_project_revision,
+    incoming.current_project_revision,
+  );
+  const currentAgents = reconcileRevisionReference(
+    current.current_agents_revision,
+    incoming.current_agents_revision,
+  );
+  const incomingMatchesCurrentHeads =
+    sameRevisionReference(currentProject, incoming.current_project_revision) &&
+    sameRevisionReference(currentAgents, incoming.current_agents_revision);
+  return {
+    ...incoming,
+    current_project_revision: currentProject,
+    current_agents_revision: currentAgents,
+    approved: incomingMatchesCurrentHeads && incoming.approved,
+    latest_approval: incomingMatchesCurrentHeads
+      ? incoming.latest_approval
+      : current.latest_approval,
+  };
+}
+
+function reconcileDocumentHead(
+  current: ProjectDocument,
+  incoming: ProjectDocument,
+): ProjectDocument {
+  if (current.id !== incoming.id || current.kind !== incoming.kind) return current;
+  return incoming.revision_number > current.revision_number ? incoming : current;
+}
+
+function reconcileDocumentHeads(
+  current: ProjectDocuments,
+  incoming: ProjectDocuments,
+): ProjectDocuments {
+  return {
+    project: reconcileDocumentHead(current.project, incoming.project),
+    agents: reconcileDocumentHead(current.agents, incoming.agents),
+    backlog: reconcileDocumentHead(current.backlog, incoming.backlog),
+  };
+}
+
+function parseApprovalValidationErrors(error: ApiError): Record<string, string[]> | null {
+  if (!isRecord(error.payload) || !isRecord(error.payload.detail)) return null;
+  const files = error.payload.detail.files;
+  if (!isRecord(files)) return null;
+  const messages = Object.fromEntries(
+    Object.entries(files).flatMap(([filename, value]) => {
+      if (!Array.isArray(value)) return [];
+      const fileMessages = value.filter(
+        (message): message is string => typeof message === "string",
+      );
+      return fileMessages.length ? [[filename, fileMessages]] : [];
+    }),
+  );
+  return Object.keys(messages).length ? messages : null;
+}
+
 function documentPath(projectId: string, kind: DocumentKind): string {
   return `/api/projects/${encodeURIComponent(projectId)}/documents/${kind}`;
+}
+
+function pairApprovalPath(projectId: string, cursor: string | null = null): string {
+  const query = new URLSearchParams({ limit: "20" });
+  if (cursor) query.set("cursor", cursor);
+  return `/api/projects/${encodeURIComponent(projectId)}/document-pair-approval?${query.toString()}`;
 }
 
 function historyPath(
@@ -142,7 +561,9 @@ export default function ProjectWorkspace({
     projectId: null,
     kind: "project",
   });
-  const [documents, setDocuments] = useState<Record<DocumentKind, ProjectDocument> | null>(null);
+  const [documents, setDocumentsState] = useState<ProjectDocuments | null>(null);
+  const documentsRef = useRef<ProjectDocuments | null>(null);
+  const documentsProjectIdRef = useRef<string | null>(null);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState("");
   const [editorContent, setEditorContent] = useState("");
@@ -153,19 +574,49 @@ export default function ProjectWorkspace({
   const [saveNotice, setSaveNotice] = useState("");
   const [conflictNotice, setConflictNotice] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const historyOpenRef = useRef(false);
   const [history, setHistory] = useState<DocumentHistory | null>(null);
+  const historyRevisionRef = useRef<number | null>(null);
+  const reloadCurrentHistoryRef = useRef<((knownHead: ProjectDocument) => Promise<void>) | null>(
+    null,
+  );
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [compareContent, setCompareContent] = useState<CompareContent | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<PairApprovalStatus | null>(null);
+  const [approvalStatusLoading, setApprovalStatusLoading] = useState(false);
+  const [approvalHistoryLoading, setApprovalHistoryLoading] = useState(false);
+  const [pairRefreshBusy, setPairRefreshBusy] = useState(false);
+  const [approvalCheckedAt, setApprovalCheckedAt] = useState("");
+  const [approvalStatusError, setApprovalStatusError] = useState("");
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+  const [approvalNotice, setApprovalNotice] = useState("");
+  const [approvalValidationErrors, setApprovalValidationErrors] = useState<
+    Record<string, string[]>
+  >({});
+  const [pairConflict, setPairConflict] = useState<PairConflict | null>(null);
+  const pairConflictRef = useRef<PairConflict | null>(null);
+  const [pairConflictKind, setPairConflictKind] = useState<PairKind>("project");
+  const [reviewedPairKinds, setReviewedPairKinds] = useState<Set<PairKind>>(() => new Set());
+  const reviewedPairKindsRef = useRef<Set<PairKind>>(new Set());
+  const [pairReviewConfirmed, setPairReviewConfirmed] = useState(false);
+  const pairReviewConfirmedRef = useRef(false);
   const comparisonHeadingRef = useRef<HTMLHeadingElement>(null);
   const comparisonTriggerRef = useRef<HTMLButtonElement | null>(null);
   const historyToggleRef = useRef<HTMLButtonElement>(null);
   const restoreComparisonFocus = useRef(false);
   const documentRequestNumber = useRef(0);
   const documentController = useRef<AbortController | null>(null);
+  const [staleEditorRevision, setStaleEditorRevision] = useState<number | null>(null);
   const historyRequestNumber = useRef(0);
   const detailRequestNumber = useRef(0);
   const detailController = useRef<AbortController | null>(null);
+  const approvalStatusRef = useRef<PairApprovalStatus | null>(null);
+  const approvalStatusRequestNumber = useRef(0);
+  const approvalStatusController = useRef<AbortController | null>(null);
+  const approvalButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreApprovalButtonFocus = useRef(false);
   const createRequestNumber = useRef(0);
   const createController = useRef<AbortController | null>(null);
   const mounted = useRef(false);
@@ -183,6 +634,32 @@ export default function ProjectWorkspace({
   const editorBytes = contentBytes(editorContent);
   const editorIsOversize = editorBytes > MAX_DOCUMENT_BYTES;
   const editorIsDirty = currentDocument !== null && editorContent !== currentDocument.content;
+  const pairHeadsMatchVisibleDocuments = approvalHeadsMatchDocuments(approvalStatus, documents);
+  const pairReviewMatchesVisibleDocuments = Boolean(
+    !pairConflict ||
+    (documents &&
+      sameSavedPair(pairConflict.latest, { project: documents.project, agents: documents.agents })),
+  );
+  const pairCanBeApproved = Boolean(
+    selectedProject &&
+    documents &&
+    approvalStatus &&
+    pairHeadsMatchVisibleDocuments &&
+    pairReviewMatchesVisibleDocuments &&
+    !approvalStatus.approved &&
+    !approvalStatusLoading &&
+    !approvalStatusError &&
+    !approvalBusy &&
+    !saveBusy &&
+    !pairRefreshBusy &&
+    !documentsLoading &&
+    !editorIsDirty &&
+    Boolean(csrfToken) &&
+    (pairConflict === null ||
+      (reviewedPairKinds.size === pairDocumentOptions.length && pairReviewConfirmed)),
+  );
+  const currentPairConflictDocument = pairConflict?.latest[pairConflictKind] ?? null;
+  const previousPairConflictDocument = pairConflict?.previous[pairConflictKind] ?? null;
 
   useLayoutEffect(() => {
     if (compareContent) {
@@ -209,24 +686,150 @@ export default function ProjectWorkspace({
     comparisonTriggerRef.current = null;
   }, [compareContent]);
 
+  useLayoutEffect(() => {
+    if (approvalBusy || !restoreApprovalButtonFocus.current) return;
+    restoreApprovalButtonFocus.current = false;
+    if (document.activeElement === document.body) {
+      approvalButtonRef.current?.focus();
+    }
+  }, [approvalBusy]);
+
   useEffect(() => {
     onPendingChange(editorIsDirty || saveBusy);
   }, [editorIsDirty, saveBusy, onPendingChange]);
 
   useEffect(() => {
-    if (!editorIsDirty && !saveBusy) return;
+    if (!editorIsDirty && !saveBusy && !approvalBusy) return;
     const warnOnExit = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warnOnExit);
     return () => window.removeEventListener("beforeunload", warnOnExit);
-  }, [editorIsDirty, saveBusy]);
+  }, [approvalBusy, editorIsDirty, saveBusy]);
 
   function updateEditorContent(content: string): void {
     editorContentRef.current = content;
     editorChangeNumber.current += 1;
     setEditorContent(content);
+  }
+
+  function updatePairConflict(next: PairConflict | null): void {
+    pairConflictRef.current = next;
+    setPairConflict(next);
+  }
+
+  function updatePairReviewState(kinds: Set<PairKind>, confirmed: boolean): void {
+    const nextKinds = new Set(kinds);
+    reviewedPairKindsRef.current = nextKinds;
+    pairReviewConfirmedRef.current = confirmed;
+    setReviewedPairKinds(nextKinds);
+    setPairReviewConfirmed(confirmed);
+  }
+
+  function updatePairConflictTarget(latest: PairDocuments): void {
+    const existing = pairConflictRef.current;
+    if (!existing) return;
+    const reconciledLatest = {
+      project: reconcileDocumentHead(existing.latest.project, latest.project),
+      agents: reconcileDocumentHead(existing.latest.agents, latest.agents),
+    };
+    if (sameSavedPair(existing.latest, reconciledLatest)) return;
+    // `previous` is the immutable pair that was submitted for approval. Only
+    // the compare target advances as newer saved heads arrive.
+    updatePairConflict({ previous: existing.previous, latest: reconciledLatest });
+    updatePairReviewState(new Set(), false);
+  }
+
+  function updateDocuments(
+    next:
+      ProjectDocuments | null | ((previous: ProjectDocuments | null) => ProjectDocuments | null),
+  ): ProjectDocuments | null {
+    const current = documentsRef.current;
+    const candidate = typeof next === "function" ? next(current) : next;
+    const updated =
+      current !== null && candidate !== null
+        ? reconcileDocumentHeads(current, candidate)
+        : candidate;
+    documentsRef.current = updated;
+    setDocumentsState(updated);
+    if (updated) {
+      updatePairConflictTarget({ project: updated.project, agents: updated.agents });
+    }
+    return updated;
+  }
+
+  async function loadPairApprovalStatus(
+    projectId: string,
+    cursor: string | null = null,
+  ): Promise<void> {
+    approvalStatusController.current?.abort();
+    const controller = new AbortController();
+    approvalStatusController.current = controller;
+    const requestNumber = ++approvalStatusRequestNumber.current;
+    // A head/status refresh can supersede a pending history page. Its aborted
+    // finally block will not run as the current request; clear both locks here.
+    setApprovalStatusLoading(false);
+    setApprovalHistoryLoading(false);
+    if (cursor === null) {
+      setApprovalStatusLoading(true);
+    } else {
+      setApprovalHistoryLoading(true);
+    }
+    setApprovalStatusError("");
+    try {
+      const next = await apiRequest<PairApprovalStatus>(pairApprovalPath(projectId, cursor), {
+        signal: controller.signal,
+      });
+      if (
+        requestNumber !== approvalStatusRequestNumber.current ||
+        selectionRef.current.projectId !== projectId
+      ) {
+        return;
+      }
+      const previousStatus = approvalStatusRef.current;
+      const reconciled = reconcilePairApprovalStatus(previousStatus, next);
+      let result = reconciled;
+      if (cursor !== null && previousStatus) {
+        const seen = new Set(previousStatus.approvals.map((item) => item.id));
+        result = {
+          ...reconciled,
+          approvals: [
+            ...previousStatus.approvals,
+            ...next.approvals.filter((item) => !seen.has(item.id)),
+          ],
+          approval_offset: 0,
+        };
+      }
+      approvalStatusRef.current = result;
+      setApprovalStatus(result);
+      if (cursor === null) {
+        setApprovalCheckedAt(new Date().toLocaleTimeString());
+      }
+    } catch (approvalLoadFailure) {
+      if (
+        requestNumber !== approvalStatusRequestNumber.current ||
+        controller.signal.aborted ||
+        selectionRef.current.projectId !== projectId
+      ) {
+        return;
+      }
+      if (approvalLoadFailure instanceof ApiError && approvalLoadFailure.status === 401) {
+        onSessionExpired();
+      } else {
+        setApprovalStatusError(errorMessage(approvalLoadFailure));
+      }
+    } finally {
+      if (requestNumber === approvalStatusRequestNumber.current) {
+        if (cursor === null) {
+          setApprovalStatusLoading(false);
+        } else {
+          setApprovalHistoryLoading(false);
+        }
+        if (approvalStatusController.current === controller)
+          approvalStatusController.current = null;
+      }
+    }
   }
 
   function invalidateDetailRequest(): void {
@@ -237,6 +840,7 @@ export default function ProjectWorkspace({
 
   function invalidateHistory(): void {
     historyRequestNumber.current += 1;
+    historyRevisionRef.current = null;
     setHistory(null);
     setHistoryLoading(false);
     setHistoryError("");
@@ -244,18 +848,41 @@ export default function ProjectWorkspace({
 
   async function loadProjectDocuments(projectId: string, kind: DocumentKind): Promise<void> {
     invalidateDetailRequest();
+    approvalStatusRequestNumber.current += 1;
+    approvalStatusController.current?.abort();
+    approvalStatusController.current = null;
+    setPairRefreshBusy(false);
     const requestNumber = ++documentRequestNumber.current;
     documentController.current?.abort();
     const controller = new AbortController();
     documentController.current = controller;
-    setDocuments(null);
+    const changingProject = documentsProjectIdRef.current !== projectId;
+    const headsAtRequest = changingProject ? null : documentsRef.current;
+    documentsProjectIdRef.current = projectId;
+    if (changingProject) {
+      updateDocuments(null);
+      setStaleEditorRevision(null);
+      updatePairConflict(null);
+      approvalStatusRef.current = null;
+      updatePairReviewState(new Set(), false);
+    }
     setDocumentsError("");
     setDocumentsLoading(true);
+    historyRevisionRef.current = null;
     setHistory(null);
     setHistoryOpen(false);
+    historyOpenRef.current = false;
     setHistoryLoading(false);
     historyRequestNumber.current += 1;
     setCompareContent(null);
+    setApprovalStatus(null);
+    setApprovalStatusLoading(false);
+    setApprovalHistoryLoading(false);
+    setApprovalStatusError("");
+    setApprovalError("");
+    setApprovalNotice("");
+    setApprovalValidationErrors({});
+    updatePairReviewState(new Set(), false);
     setSaveError("");
     setSaveNotice("");
     setConflictNotice("");
@@ -272,9 +899,21 @@ export default function ProjectWorkspace({
       if (!byKind.project || !byKind.agents || !byKind.backlog) {
         throw new Error("This project does not have all three draft documents yet.");
       }
-      const complete = byKind as Record<DocumentKind, ProjectDocument>;
-      setDocuments(complete);
-      updateEditorContent(complete[kind].content);
+      const complete = byKind as ProjectDocuments;
+      const latest = updateDocuments(complete);
+      if (latest) {
+        const activeKind = selectionRef.current.kind;
+        const previousHead = headsAtRequest?.[activeKind] ?? null;
+        if (!previousHead || editorContentRef.current === previousHead.content) {
+          updateEditorContent(latest[activeKind].content);
+          setStaleEditorRevision(null);
+        } else if (latest[activeKind].revision_number > previousHead.revision_number) {
+          setStaleEditorRevision((previous) => previous ?? previousHead.revision_number);
+        }
+      } else {
+        updateEditorContent(complete[kind].content);
+      }
+      void loadPairApprovalStatus(projectId);
     } catch (loadFailure) {
       if (controller.signal.aborted || requestNumber !== documentRequestNumber.current) return;
       if (loadFailure instanceof ApiError && loadFailure.status === 401) {
@@ -286,6 +925,133 @@ export default function ProjectWorkspace({
       if (requestNumber === documentRequestNumber.current) setDocumentsLoading(false);
     }
   }
+
+  async function refreshCurrentDraftPair(): Promise<void> {
+    if (!selectedProjectId || !documents || saveBusy || approvalBusy || pairRefreshBusy) return;
+    const projectId = selectedProjectId;
+    const kindAtRefreshStart = selectionRef.current.kind;
+    const historyRevisionAtRefreshStart = historyRevisionRef.current;
+    const documentsAtRefreshStart = documentsRef.current;
+    // History may still be resolving against the old head. Stop it *before*
+    // the pair request, so it cannot install an old editor base mid-refresh.
+    invalidateHistory();
+    const historyRequestNumberAtStart = historyRequestNumber.current;
+    // A detail response started on the old head cannot reapply after this
+    // refresh advances the editor. Requests begun during the fetch are also
+    // invalidated when its new heads arrive below.
+    invalidateDetailRequest();
+    const requestNumber = ++documentRequestNumber.current;
+    documentController.current?.abort();
+    const controller = new AbortController();
+    documentController.current = controller;
+    setPairRefreshBusy(true);
+    setApprovalStatus(null);
+    setApprovalStatusError("");
+    setApprovalCheckedAt("");
+    approvalStatusRequestNumber.current += 1;
+    approvalStatusController.current?.abort();
+    approvalStatusController.current = null;
+    setApprovalStatusLoading(false);
+    setApprovalHistoryLoading(false);
+    try {
+      const response = await apiRequest<ProjectDocument[]>(
+        `/api/projects/${encodeURIComponent(projectId)}/documents`,
+        { signal: controller.signal },
+      );
+      if (
+        controller.signal.aborted ||
+        requestNumber !== documentRequestNumber.current ||
+        selectionRef.current.projectId !== projectId
+      )
+        return;
+      const byKind = Object.fromEntries(response.map((item) => [item.kind, item])) as Partial<
+        Record<DocumentKind, ProjectDocument>
+      >;
+      if (!byKind.project || !byKind.agents || !byKind.backlog) {
+        throw new Error("This project does not have all three draft documents yet.");
+      }
+      const next = byKind as ProjectDocuments;
+      const currentDocuments = documentsRef.current;
+      if (!currentDocuments) return;
+      // The editor may have switched tabs while the pair was loading. Compare
+      // its live kind against the latest known head, not the tab or head that
+      // happened to be selected when the request began.
+      const activeKind = selectionRef.current.kind;
+      const previousHead = currentDocuments[activeKind];
+      const latest = reconcileDocumentHeads(currentDocuments, next);
+      invalidateDetailRequest();
+      // Reconcile again at the ref boundary: another source may have advanced a
+      // head since the response snapshot was first compared.
+      const reconciled = updateDocuments(latest) ?? latest;
+      // A refresh must never erase unsaved text, including typing begun while
+      // the request was in flight. A clean editor follows the new saved head.
+      if (editorContentRef.current === previousHead.content) {
+        updateEditorContent(reconciled[activeKind].content);
+        setStaleEditorRevision(null);
+      } else if (reconciled[activeKind].revision_number !== previousHead.revision_number) {
+        setStaleEditorRevision((previous) => previous ?? previousHead.revision_number);
+      }
+      setApprovalNotice("");
+      void loadPairApprovalStatus(projectId);
+      const visibleHistoryRevision = historyRevisionRef.current;
+      const noHistoryRequestSinceRefreshStarted =
+        historyRequestNumber.current === historyRequestNumberAtStart;
+      const historyHeadAtRefreshStart =
+        activeKind === kindAtRefreshStart && historyRevisionAtRefreshStart !== null
+          ? historyRevisionAtRefreshStart
+          : (documentsAtRefreshStart?.[activeKind].revision_number ?? previousHead.revision_number);
+      const currentHeadRevision = reconciled[activeKind].revision_number;
+      const visibleHistoryIsStale =
+        visibleHistoryRevision !== null && visibleHistoryRevision !== currentHeadRevision;
+      const invalidatedHistoryHeadChanged =
+        visibleHistoryRevision === null &&
+        noHistoryRequestSinceRefreshStarted &&
+        historyHeadAtRefreshStart !== currentHeadRevision;
+      if (historyOpenRef.current && (visibleHistoryIsStale || invalidatedHistoryHeadChanged)) {
+        if (visibleHistoryRevision !== null) invalidateHistory();
+        setHistoryError("Saved drafts changed. Reload history to review the current head.");
+      } else if (
+        historyOpenRef.current &&
+        visibleHistoryRevision === null &&
+        noHistoryRequestSinceRefreshStarted
+      ) {
+        // The pair refresh cleared cached history. If the active saved head did
+        // not move, refill the still-open panel instead of claiming it changed.
+        void reloadCurrentHistoryRef.current?.(reconciled[activeKind]);
+      }
+    } catch (failure) {
+      if (controller.signal.aborted || requestNumber !== documentRequestNumber.current) return;
+      if (failure instanceof ApiError && failure.status === 401) {
+        onSessionExpired();
+      } else {
+        setApprovalStatusError(`Saved drafts could not be refreshed: ${errorMessage(failure)}`);
+        if (historyOpenRef.current) {
+          setHistoryError(
+            "Saved drafts could not be refreshed. Retry history to review this head.",
+          );
+        }
+      }
+    } finally {
+      if (requestNumber === documentRequestNumber.current) setPairRefreshBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    function refreshOnReturn(): void {
+      if (
+        document.visibilityState === "visible" &&
+        selectedProjectId &&
+        documents &&
+        !saveBusy &&
+        !approvalBusy &&
+        !pairRefreshBusy
+      ) {
+        void refreshCurrentDraftPair();
+      }
+    }
+    document.addEventListener("visibilitychange", refreshOnReturn);
+    return () => document.removeEventListener("visibilitychange", refreshOnReturn);
+  });
 
   useEffect(() => {
     mounted.current = true;
@@ -299,12 +1065,14 @@ export default function ProjectWorkspace({
       historyRequestNumber.current += 1;
       detailRequestNumber.current += 1;
       detailController.current?.abort();
+      approvalStatusRequestNumber.current += 1;
+      approvalStatusController.current?.abort();
     };
   }, []);
 
   async function createProject(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (saveBusy || editorIsDirty || createBusy) return;
+    if (saveBusy || approvalBusy || editorIsDirty || createBusy) return;
     const selectionAtRequest = selectionRef.current;
     const editorAtRequest = editorChangeNumber.current;
     const requestNumber = ++createRequestNumber.current;
@@ -338,7 +1106,8 @@ export default function ProjectWorkspace({
         selectionRef.current !== selectionAtRequest ||
         editorChangeNumber.current !== editorAtRequest ||
         editorContentRef.current !== (documents?.[selectedKind]?.content ?? "") ||
-        saveBusy
+        saveBusy ||
+        approvalBusy
       ) {
         setCreateNotice(
           `${created.name} was created. Finish your current draft before opening it.`,
@@ -381,14 +1150,16 @@ export default function ProjectWorkspace({
   }
 
   function selectProject(project: ProjectSummary): void {
-    if (saveBusy || documentsLoading || editorIsDirty) return;
+    if (saveBusy || approvalBusy || documentsLoading || editorIsDirty) return;
     if (project.id === selectedProjectId && documents) return;
     setSelectedProjectId(project.id);
     setSelectedProjectSnapshot(project);
     setSelectedKind("project");
     selectionRef.current = { projectId: project.id, kind: "project" };
+    historyRevisionRef.current = null;
     setHistory(null);
     setHistoryOpen(false);
+    historyOpenRef.current = false;
     setHistoryLoading(false);
     historyRequestNumber.current += 1;
     setCompareContent(null);
@@ -396,7 +1167,7 @@ export default function ProjectWorkspace({
   }
 
   function changeProjectPage(offset: number): void {
-    if (saveBusy || createBusy || documentsLoading || editorIsDirty) return;
+    if (saveBusy || approvalBusy || createBusy || documentsLoading || editorIsDirty) return;
     // A page change is navigation, not a background refresh. Forget the old selection
     // before the parent swaps lists, so returning to that page cannot resurrect it.
     documentRequestNumber.current += 1;
@@ -408,11 +1179,23 @@ export default function ProjectWorkspace({
     setLocallyCreatedProjects([]);
     selectionRef.current = { projectId: null, kind: "project" };
     setSelectedKind("project");
-    setDocuments(null);
+    updateDocuments(null);
+    documentsProjectIdRef.current = null;
     setDocumentsError("");
+    setApprovalStatus(null);
+    approvalStatusRef.current = null;
+    setApprovalStatusError("");
+    setApprovalStatusLoading(false);
+    setApprovalHistoryLoading(false);
+    approvalStatusRequestNumber.current += 1;
+    approvalStatusController.current?.abort();
+    approvalStatusController.current = null;
+    updatePairConflict(null);
+    updatePairReviewState(new Set(), false);
     setDocumentsLoading(false);
     updateEditorContent("");
     setHistoryOpen(false);
+    historyOpenRef.current = false;
     setCompareContent(null);
     setSaveError("");
     setSaveNotice("");
@@ -421,16 +1204,19 @@ export default function ProjectWorkspace({
   }
 
   function selectDocument(kind: DocumentKind): void {
-    if (saveBusy || editorIsDirty || !documents) return;
+    if (saveBusy || approvalBusy || editorIsDirty || !documents) return;
     invalidateDetailRequest();
     setSelectedKind(kind);
     selectionRef.current = { projectId: selectedProjectId, kind };
+    setStaleEditorRevision(null);
     updateEditorContent(documents[kind].content);
     setSaveError("");
     setSaveNotice("");
     setConflictNotice("");
+    historyRevisionRef.current = null;
     setHistory(null);
     setHistoryOpen(false);
+    historyOpenRef.current = false;
     setHistoryLoading(false);
     setHistoryError("");
     setCompareContent(null);
@@ -486,7 +1272,10 @@ export default function ProjectWorkspace({
       return;
     }
     const requestNumber = ++historyRequestNumber.current;
-    if (force) setHistory(null);
+    if (force) {
+      historyRevisionRef.current = null;
+      setHistory(null);
+    }
     setHistoryLoading(true);
     setHistoryError("");
     try {
@@ -501,6 +1290,10 @@ export default function ProjectWorkspace({
         next = await fetchHistory(projectId, kind, 0, null);
       }
       if (requestNumber !== historyRequestNumber.current) return;
+      const currentSavedHead = documentsRef.current?.[kind] ?? knownHead;
+      if (currentSavedHead && next.current_revision_number < currentSavedHead.revision_number) {
+        throw new Error("Saved drafts changed. Reload history to review the current head.");
+      }
       if (knownHead && next.current_revision_number > knownHead.revision_number) {
         const refreshedHead = await apiRequest<ProjectDocument>(documentPath(projectId, kind));
         if (requestNumber !== historyRequestNumber.current) return;
@@ -511,23 +1304,40 @@ export default function ProjectWorkspace({
         ) {
           throw new Error("History moved ahead of the saved draft. Reload history to try again.");
         }
-        setDocuments((previous) =>
-          previous?.[kind].id === refreshedHead.id &&
-          previous[kind].revision_number < refreshedHead.revision_number
-            ? { ...previous, [kind]: refreshedHead }
-            : previous,
+        const latestKnownHead = documentsRef.current?.[kind] ?? knownHead;
+        if (latestKnownHead.revision_number > next.current_revision_number) {
+          throw new Error("Saved drafts changed. Reload history to review the current head.");
+        }
+        const latestHead = reconcileDocumentHead(latestKnownHead, refreshedHead);
+        invalidateDetailRequest();
+        const refreshedDocuments = updateDocuments((previous) =>
+          previous ? { ...previous, [kind]: latestHead } : previous,
         );
+        const visibleHead = refreshedDocuments?.[kind] ?? latestHead;
+        void loadPairApprovalStatus(projectId);
         // A clean editor follows the newly discovered saved head. Text entered
         // while the request was in flight must remain untouched for review.
-        if (
+        if (editorContentRef.current === visibleHead.content) {
+          setStaleEditorRevision(null);
+        } else if (
           editorAtRequest === editorChangeNumber.current &&
           editorContentRef.current === knownHead.content
         ) {
-          updateEditorContent(refreshedHead.content);
+          updateEditorContent(visibleHead.content);
+          setStaleEditorRevision(null);
+        } else {
+          setStaleEditorRevision((previous) => previous ?? knownHead.revision_number);
+        }
+        // The history snapshot was r2, but this detail request may already
+        // have observed r3. Keep r3 and the editor's original dirty base; never
+        // publish the incompatible r2 history beside it.
+        if (visibleHead.revision_number !== next.current_revision_number) {
+          throw new Error("Saved drafts changed. Reload history to review the current head.");
         }
       }
       if (selectionRef.current.projectId !== projectId || selectionRef.current.kind !== kind)
         return;
+      historyRevisionRef.current = next.current_revision_number;
       setHistory((previous) => {
         if (
           append === "revisions" &&
@@ -564,6 +1374,9 @@ export default function ProjectWorkspace({
       if (historyFailure instanceof ApiError && historyFailure.status === 401) {
         onSessionExpired();
       } else {
+        historyRevisionRef.current = null;
+        setHistory(null);
+        setCompareContent(null);
         setHistoryError(errorMessage(historyFailure));
       }
     } finally {
@@ -571,13 +1384,19 @@ export default function ProjectWorkspace({
     }
   }
 
+  useEffect(() => {
+    reloadCurrentHistoryRef.current = (knownHead) => loadHistory("none", true, knownHead);
+  });
+
   async function toggleHistory(): Promise<void> {
-    if (saveBusy) return;
+    if (saveBusy || approvalBusy) return;
     if (historyOpen) {
       setHistoryOpen(false);
+      historyOpenRef.current = false;
       return;
     }
     setHistoryOpen(true);
+    historyOpenRef.current = true;
     if (!history) await loadHistory();
   }
 
@@ -717,6 +1536,7 @@ export default function ProjectWorkspace({
         return;
       }
       updateEditorContent(detail.content);
+      setStaleEditorRevision(null);
       setConflictNotice("Revision loaded into the editor. Save draft to create a new revision.");
       setSaveNotice("");
       setSaveError("");
@@ -760,6 +1580,7 @@ export default function ProjectWorkspace({
         return;
       }
       updateEditorContent(detail.content);
+      setStaleEditorRevision(null);
       setConflictNotice(
         "Conflict text loaded into the editor. Save draft to create a new revision; nothing was approved.",
       );
@@ -783,11 +1604,23 @@ export default function ProjectWorkspace({
   }
 
   async function saveDraft(): Promise<void> {
-    if (!selectedProject || !currentDocument || saveBusy || editorIsOversize) return;
+    if (
+      !selectedProject ||
+      !currentDocument ||
+      saveBusy ||
+      approvalBusy ||
+      pairRefreshBusy ||
+      editorIsOversize
+    )
+      return;
     const projectId = selectedProject.id;
     const kind = selectedKind;
     const submittedContent = editorContent;
-    const expectedRevision = currentDocument.revision_number;
+    // A dirty editor may have been based on an older head when a background
+    // reload discovered another tab's save. Do not silently promote its write
+    // to the new head: the server must record a conflict proposal instead.
+    const expectedRevision = staleEditorRevision ?? currentDocument.revision_number;
+    invalidateDetailRequest();
     // Any earlier history request may complete after the write. Its result cannot
     // describe the saved head, even when the panel happened to be loading already.
     historyRequestNumber.current += 1;
@@ -796,6 +1629,8 @@ export default function ProjectWorkspace({
     setSaveError("");
     setSaveNotice("");
     setConflictNotice("");
+    setApprovalError("");
+    setApprovalValidationErrors({});
     try {
       const saved = await apiRequest<ProjectDocument>(documentPath(projectId, kind), {
         method: "PUT",
@@ -811,16 +1646,28 @@ export default function ProjectWorkspace({
         selectionRef.current.kind !== kind
       )
         return;
-      setDocuments((previous) =>
+      const savedDocuments = updateDocuments((previous) =>
         previous?.[kind].id === saved.id ? { ...previous, [kind]: saved } : previous,
       );
-      if (editorContentRef.current === submittedContent) updateEditorContent(saved.content);
+      const visibleHead = savedDocuments?.[kind] ?? saved;
+      if (editorContentRef.current === submittedContent) {
+        updateEditorContent(visibleHead.content);
+        setStaleEditorRevision(null);
+      } else if (visibleHead.revision_number > saved.revision_number) {
+        // This save succeeded, but another source already observed a later head.
+        // Text entered after submission is based on this save, not that later head.
+        setStaleEditorRevision((previous) => previous ?? saved.revision_number);
+      } else {
+        setStaleEditorRevision(null);
+      }
       setSaveNotice(`Saved ${saved.filename} as revision ${saved.revision_number}.`);
+      setApprovalNotice("");
+      void loadPairApprovalStatus(projectId);
       // A save makes the cached history stale even if its panel is hidden. Drop
       // it now so reopening the panel cannot reuse a snapshot from the old head.
       invalidateHistory();
       if (historyOpen) {
-        void loadHistory("none", true, saved);
+        void loadHistory("none", true, visibleHead);
       }
     } catch (saveFailure) {
       if (!mounted.current) return;
@@ -834,19 +1681,33 @@ export default function ProjectWorkspace({
         );
         try {
           const conflict = saveFailure.payload as { latest?: ProjectDocument } | undefined;
+          const knownHead = documentsRef.current?.[kind] ?? currentDocument;
           const latest =
-            conflict?.latest?.id === currentDocument.id && conflict.latest.kind === kind
+            conflict?.latest?.id === knownHead.id && conflict.latest.kind === kind
               ? conflict.latest
               : await apiRequest<ProjectDocument>(documentPath(projectId, kind));
           if (selectionRef.current.projectId !== projectId || selectionRef.current.kind !== kind)
             return;
-          setDocuments((previous) =>
+          invalidateDetailRequest();
+          const latestDocuments = updateDocuments((previous) =>
             previous?.[kind].id === latest.id ? { ...previous, [kind]: latest } : previous,
           );
+          const visibleHead = latestDocuments?.[kind] ?? latest;
+          // Merely observing the newer head is not a reapply decision. Repeated
+          // Save clicks must still use the editor's old base until the human
+          // explicitly discards or reapplies the preserved proposal/revision.
+          if (editorContentRef.current === visibleHead.content) {
+            setStaleEditorRevision(null);
+          } else {
+            setStaleEditorRevision((previous) => previous ?? expectedRevision);
+          }
+          setApprovalStatusError("");
+          void loadPairApprovalStatus(projectId);
           setHistoryOpen(true);
+          historyOpenRef.current = true;
           // History may be slow. Release the save lock once the conflict head is
           // known so the user can discard or continue editing while it loads.
-          void loadHistory("none", true, latest);
+          void loadHistory("none", true, visibleHead);
         } catch {
           // Keep the attempted text in the editor; the saved proposal is available in History.
           setSaveError("The conflict was recorded, but the latest document view could not reload.");
@@ -857,6 +1718,178 @@ export default function ProjectWorkspace({
     } finally {
       if (mounted.current) setSaveBusy(false);
     }
+  }
+
+  async function approveSavedPair(): Promise<void> {
+    const currentDocuments = documentsRef.current;
+    const currentStatus = approvalStatusRef.current;
+    const currentConflict = pairConflictRef.current;
+    if (
+      !pairCanBeApproved ||
+      !selectedProject ||
+      selectedProject.id !== selectionRef.current.projectId ||
+      !currentDocuments ||
+      !currentStatus ||
+      currentStatus.approved ||
+      !approvalHeadsMatchDocuments(currentStatus, currentDocuments) ||
+      approvalStatusLoading ||
+      Boolean(approvalStatusError) ||
+      approvalBusy ||
+      saveBusy ||
+      pairRefreshBusy ||
+      documentsLoading ||
+      editorContentRef.current !== currentDocuments[selectionRef.current.kind].content ||
+      (currentConflict !== null &&
+        (!sameSavedPair(currentConflict.latest, {
+          project: currentDocuments.project,
+          agents: currentDocuments.agents,
+        }) ||
+          reviewedPairKindsRef.current.size !== pairDocumentOptions.length ||
+          !pairReviewConfirmedRef.current))
+    ) {
+      return;
+    }
+    const projectId = selectedProject.id;
+    const beforeApproval: PairDocuments = {
+      project: currentDocuments.project,
+      agents: currentDocuments.agents,
+    };
+    const kindAtRequest = selectionRef.current.kind;
+    restoreApprovalButtonFocus.current = document.activeElement === approvalButtonRef.current;
+    setApprovalBusy(true);
+    setApprovalError("");
+    setApprovalNotice("");
+    setApprovalValidationErrors({});
+    try {
+      const approval = await apiRequest<PairApprovalRecord>(
+        `/api/projects/${encodeURIComponent(projectId)}/document-pair-approval`,
+        {
+          method: "POST",
+          csrfToken,
+          body: {
+            expected_project_revision: beforeApproval.project.revision_number,
+            expected_agents_revision: beforeApproval.agents.revision_number,
+          },
+        },
+      );
+      if (!mounted.current || selectionRef.current.projectId !== projectId) return;
+      if (
+        approval.project_revision_number !== beforeApproval.project.revision_number ||
+        approval.agents_revision_number !== beforeApproval.agents.revision_number
+      ) {
+        setApprovalError(
+          "The server response did not match the submitted saved pair. Refresh the drafts and status before continuing.",
+        );
+        void loadPairApprovalStatus(projectId);
+        return;
+      }
+      const latestDocuments = documentsRef.current;
+      if (!latestDocuments) return;
+      const latestPair = { project: latestDocuments.project, agents: latestDocuments.agents };
+      if (sameSavedPair(beforeApproval, latestPair)) {
+        updatePairConflict(null);
+        updatePairReviewState(new Set(), false);
+        setApprovalNotice(
+          `Approved PROJECT.md revision ${approval.project_revision_number} and AGENTS.md revision ${approval.agents_revision_number} as one saved pair.`,
+        );
+      } else {
+        // The server approved the submitted tuple, but an asynchronous source
+        // already found a later current pair. Keep the submitted baseline and
+        // require review of that exact new target instead of showing a stale
+        // approval as current.
+        updatePairConflict({ previous: beforeApproval, latest: latestPair });
+        setPairConflictKind(kindAtRequest === "agents" ? "agents" : "project");
+        updatePairReviewState(new Set(), false);
+        setApprovalNotice(
+          `Approved PROJECT.md revision ${approval.project_revision_number} and AGENTS.md revision ${approval.agents_revision_number}; a later saved pair now needs review.`,
+        );
+        setConflictNotice(
+          "Saved heads advanced after the approval request. Review the current pair before approving it.",
+        );
+      }
+      void loadPairApprovalStatus(projectId);
+    } catch (approvalFailure) {
+      if (!mounted.current) return;
+      if (approvalFailure instanceof ApiError && approvalFailure.status === 401) {
+        onSessionExpired();
+      } else if (approvalFailure instanceof ApiError && approvalFailure.status === 409) {
+        if (selectionRef.current.projectId !== projectId) return;
+        const latest = pairConflictFrom(approvalFailure);
+        if (!latest) {
+          setApprovalError(
+            "The saved pair changed, but the latest revisions could not be read. Refresh the drafts before approving again.",
+          );
+          void loadPairApprovalStatus(projectId);
+          return;
+        }
+        const initialConflictKind: PairKind = kindAtRequest === "agents" ? "agents" : "project";
+        approvalStatusRequestNumber.current += 1;
+        approvalStatusController.current?.abort();
+        approvalStatusController.current = null;
+        invalidateDetailRequest();
+        const documentsAtConflict = documentsRef.current;
+        const mergedDocuments = documentsAtConflict
+          ? updateDocuments({
+              ...documentsAtConflict,
+              project: reconcileDocumentHead(documentsAtConflict.project, latest.project),
+              agents: reconcileDocumentHead(documentsAtConflict.agents, latest.agents),
+            })
+          : null;
+        // A concurrent history response may already know a head newer than this
+        // 409 snapshot. The pair submitted in `beforeApproval` remains the
+        // immutable comparison baseline while this target advances.
+        const latestPair = mergedDocuments
+          ? { project: mergedDocuments.project, agents: mergedDocuments.agents }
+          : latest;
+        if (
+          (kindAtRequest === "project" || kindAtRequest === "agents") &&
+          selectionRef.current.kind === kindAtRequest
+        ) {
+          if (editorContentRef.current === latestPair[kindAtRequest].content) {
+            setStaleEditorRevision(null);
+          } else if (editorContentRef.current === beforeApproval[kindAtRequest].content) {
+            updateEditorContent(latestPair[kindAtRequest].content);
+            setStaleEditorRevision(null);
+          } else if (
+            latestPair[kindAtRequest].revision_number !==
+            beforeApproval[kindAtRequest].revision_number
+          ) {
+            setStaleEditorRevision(
+              (previous) => previous ?? beforeApproval[kindAtRequest].revision_number,
+            );
+          }
+        }
+        updatePairConflict({ previous: beforeApproval, latest: latestPair });
+        setPairConflictKind(initialConflictKind);
+        updatePairReviewState(new Set(), false);
+        setApprovalNotice("");
+        setApprovalStatusError("");
+        setConflictNotice(
+          "A newer saved revision arrived before approval. Review both latest documents before approving the pair.",
+        );
+        void loadPairApprovalStatus(projectId);
+      } else if (approvalFailure instanceof ApiError && approvalFailure.status === 422) {
+        const fileErrors = parseApprovalValidationErrors(approvalFailure);
+        if (fileErrors) {
+          setApprovalValidationErrors(fileErrors);
+          setApprovalError(
+            "No approval was recorded. Resolve the document-specific starter issues and save new revisions.",
+          );
+        } else {
+          setApprovalError(errorMessage(approvalFailure));
+        }
+      } else {
+        setApprovalError(errorMessage(approvalFailure));
+      }
+    } finally {
+      if (mounted.current) setApprovalBusy(false);
+    }
+  }
+
+  function loadOlderApprovals(): void {
+    if (!selectedProject || !approvalStatus || approvalHistoryLoading) return;
+    if (!approvalStatus.approval_has_more || !approvalStatus.approval_next_cursor) return;
+    void loadPairApprovalStatus(selectedProject.id, approvalStatus.approval_next_cursor);
   }
 
   return (
@@ -912,7 +1945,13 @@ export default function ProjectWorkspace({
           <button
             className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
             disabled={
-              createBusy || saveBusy || loading || Boolean(loadError) || !csrfToken || editorIsDirty
+              createBusy ||
+              saveBusy ||
+              approvalBusy ||
+              loading ||
+              Boolean(loadError) ||
+              !csrfToken ||
+              editorIsDirty
             }
             type="submit"
           >
@@ -949,7 +1988,9 @@ export default function ProjectWorkspace({
                     aria-label={`Open project ${project.name}`}
                     aria-pressed={selectedProjectId === project.id}
                     className={projectBaseClass(selectedProjectId === project.id)}
-                    disabled={saveBusy || documentsLoading || createBusy || editorIsDirty}
+                    disabled={
+                      saveBusy || approvalBusy || documentsLoading || createBusy || editorIsDirty
+                    }
                     onClick={() => selectProject(project)}
                     type="button"
                   >
@@ -972,7 +2013,12 @@ export default function ProjectWorkspace({
               <button
                 className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
                 disabled={
-                  projectOffset === 0 || editorIsDirty || saveBusy || createBusy || documentsLoading
+                  projectOffset === 0 ||
+                  editorIsDirty ||
+                  saveBusy ||
+                  approvalBusy ||
+                  createBusy ||
+                  documentsLoading
                 }
                 onClick={() => changeProjectPage(Math.max(0, projectOffset - 100))}
                 type="button"
@@ -985,6 +2031,7 @@ export default function ProjectWorkspace({
                   projects.length < 100 ||
                   editorIsDirty ||
                   saveBusy ||
+                  approvalBusy ||
                   createBusy ||
                   documentsLoading ||
                   projectOffset >= 999900
@@ -1007,7 +2054,7 @@ export default function ProjectWorkspace({
             </p>
             <button
               className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
-              disabled={editorIsDirty || saveBusy || documentsLoading}
+              disabled={editorIsDirty || saveBusy || approvalBusy || documentsLoading}
               onClick={() => {
                 setSelectedProjectId(null);
                 setSelectedProjectSnapshot(null);
@@ -1016,7 +2063,18 @@ export default function ProjectWorkspace({
                 documentController.current?.abort();
                 invalidateDetailRequest();
                 invalidateHistory();
-                setDocuments(null);
+                updateDocuments(null);
+                documentsProjectIdRef.current = null;
+                setApprovalStatus(null);
+                approvalStatusRef.current = null;
+                setApprovalStatusError("");
+                setApprovalStatusLoading(false);
+                setApprovalHistoryLoading(false);
+                approvalStatusRequestNumber.current += 1;
+                approvalStatusController.current?.abort();
+                approvalStatusController.current = null;
+                updatePairConflict(null);
+                updatePairReviewState(new Set(), false);
               }}
               type="button"
             >
@@ -1066,12 +2124,391 @@ export default function ProjectWorkspace({
                   drafts
                 </p>
               </div>
-              <span className="rounded-full border border-accent/35 bg-accent/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-accent">
-                Draft only
+              <span className="rounded-full border border-line bg-canvas px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-copy-muted">
+                Human review · no chat
               </span>
             </div>
 
-            <div aria-label="Draft documents" className="mt-5 flex flex-wrap gap-2" role="tablist">
+            <section
+              aria-labelledby={`${instanceId}-pair-approval-title`}
+              className="mt-5 grid min-w-0 gap-4 rounded-xl border border-line bg-canvas p-4 sm:p-5"
+            >
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
+                    First-stage review
+                  </p>
+                  <h4
+                    className="mt-1 text-lg font-semibold"
+                    id={`${instanceId}-pair-approval-title`}
+                  >
+                    Approve the saved document pair
+                  </h4>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-copy-muted">
+                    One human action approves exactly the current PROJECT.md and AGENTS.md saved
+                    revisions. Any later save needs a new review. This does not approve the backlog
+                    or include chat, model proposals, or exports.
+                  </p>
+                </div>
+                <span
+                  aria-live="polite"
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                    approvalStatus?.approved
+                      ? "border-accent/35 bg-accent/10 text-accent"
+                      : "border-line bg-surface-raised text-copy-muted"
+                  }`}
+                >
+                  {approvalStatusLoading || pairRefreshBusy
+                    ? "Refreshing approval status…"
+                    : approvalStatusError
+                      ? "Approval status unavailable"
+                      : approvalStatus?.approved
+                        ? "Approved at last check"
+                        : approvalStatus?.latest_approval
+                          ? "Re-review required"
+                          : approvalStatus
+                            ? "Not yet approved"
+                            : "Approval status unavailable"}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={saveBusy || approvalBusy || pairRefreshBusy || documentsLoading}
+                  onClick={() => void refreshCurrentDraftPair()}
+                  type="button"
+                >
+                  {pairRefreshBusy ? "Reloading saved pair…" : "Reload saved pair and status"}
+                </button>
+                <p className="text-xs leading-5 text-copy-muted">
+                  {approvalCheckedAt ? `Last checked ${approvalCheckedAt}. ` : ""}
+                  Another tab may have saved since then. Reload checks both heads and approval;
+                  unsaved editor text is kept.
+                </p>
+              </div>
+
+              {approvalStatusLoading && !approvalStatus ? (
+                <p aria-live="polite" className="text-sm text-copy-muted" role="status">
+                  Loading current pair and approval history…
+                </p>
+              ) : null}
+              {approvalStatusError ? (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300/30 bg-red-300/5 p-3">
+                  <p aria-live="polite" className="min-w-0 text-sm leading-6 text-red-100">
+                    Approval status could not be loaded: {approvalStatusError}
+                  </p>
+                  <button
+                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={approvalStatusLoading || approvalBusy}
+                    onClick={() => void loadPairApprovalStatus(selectedProject.id)}
+                    type="button"
+                  >
+                    {approvalStatusLoading ? "Refreshing…" : "Retry approval status"}
+                  </button>
+                </div>
+              ) : null}
+
+              {approvalStatus ? (
+                <>
+                  <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    {pairDocumentOptions.map((option) => {
+                      const revision =
+                        option.kind === "project"
+                          ? approvalStatus.current_project_revision
+                          : approvalStatus.current_agents_revision;
+                      return (
+                        <div
+                          className="min-w-0 rounded-lg border border-line bg-surface-raised p-3"
+                          key={option.kind}
+                        >
+                          <dt className="font-mono text-xs uppercase tracking-wide text-copy-muted">
+                            {option.filename}
+                          </dt>
+                          <dd className="mt-2 font-medium text-foreground">
+                            Saved revision {revision.revision_number}
+                          </dd>
+                          <dd className="mt-1 break-all font-mono text-[11px] leading-5 text-copy-muted">
+                            Revision ID {revision.id}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+
+                  {approvalStatus.latest_approval ? (
+                    <div className="min-w-0 rounded-lg border border-line px-3 py-3">
+                      <p className="text-sm font-medium text-foreground">
+                        Latest approval · {isoDate(approvalStatus.latest_approval.created_at)}
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-copy-muted">
+                        PROJECT.md revision {approvalStatus.latest_approval.project_revision_number}
+                        {" · "}AGENTS.md revision{" "}
+                        {approvalStatus.latest_approval.agents_revision_number}
+                        {approvalStatus.approved ? " · current pair" : " · older pair"}
+                      </p>
+                      <div className="mt-2 grid min-w-0 gap-1 text-xs text-copy-muted sm:grid-cols-2">
+                        <code className="min-w-0 break-all">
+                          PROJECT.md ID {approvalStatus.latest_approval.project_revision_id}
+                        </code>
+                        <code className="min-w-0 break-all">
+                          AGENTS.md ID {approvalStatus.latest_approval.agents_revision_id}
+                        </code>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-6 text-copy-muted">
+                      No pair approval is recorded yet. Saving or viewing a draft does not approve
+                      it.
+                    </p>
+                  )}
+                </>
+              ) : null}
+
+              {approvalStatus && !pairHeadsMatchVisibleDocuments ? (
+                <div className="grid min-w-0 gap-3 rounded-lg border border-amber-200/30 bg-amber-100/5 p-3">
+                  <p aria-live="polite" className="text-sm leading-6 text-amber-100" role="status">
+                    The visible drafts and approval status came from different saved snapshots.
+                    Reload both drafts and status before reviewing or approving.
+                  </p>
+                  <button
+                    className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+                    disabled={saveBusy || approvalBusy || pairRefreshBusy || documentsLoading}
+                    onClick={() => void refreshCurrentDraftPair()}
+                    type="button"
+                  >
+                    {pairRefreshBusy ? "Reloading drafts…" : "Retry saved pair refresh"}
+                  </button>
+                </div>
+              ) : null}
+
+              {editorIsDirty ? (
+                <p className="text-sm leading-6 text-copy-muted" role="status">
+                  Unsaved editor text is not part of the displayed approval tuple. Save or discard
+                  it before approving the saved pair.
+                </p>
+              ) : null}
+
+              {approvalError ? (
+                <div
+                  aria-labelledby={`${instanceId}-approval-error-title`}
+                  className="grid min-w-0 gap-2 rounded-lg border border-red-300/35 bg-red-300/5 p-3"
+                  role="alert"
+                >
+                  <h5
+                    className="font-medium text-red-100"
+                    id={`${instanceId}-approval-error-title`}
+                  >
+                    Pair approval was not recorded
+                  </h5>
+                  <p className="text-sm leading-6 text-red-100">{approvalError}</p>
+                  {Object.entries(approvalValidationErrors).length ? (
+                    <ul className="grid min-w-0 gap-2 text-sm leading-6 text-red-100">
+                      {Object.entries(approvalValidationErrors).map(([filename, messages]) => (
+                        <li className="min-w-0" key={filename}>
+                          <strong className="font-mono">{filename}</strong>
+                          <ul className="ml-5 list-disc">
+                            {messages.map((message) => (
+                              <li className="break-words" key={message}>
+                                {message}
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {approvalNotice ? (
+                <p aria-live="polite" className="text-sm leading-6 text-accent" role="status">
+                  {approvalNotice}
+                </p>
+              ) : null}
+
+              {pairConflict && currentPairConflictDocument && previousPairConflictDocument ? (
+                <section
+                  aria-labelledby={`${instanceId}-approval-conflict-title`}
+                  className="grid min-w-0 gap-3 rounded-lg border border-amber-200/35 bg-amber-100/5 p-3 sm:p-4"
+                >
+                  <div>
+                    <h5
+                      className="text-base font-semibold text-amber-100"
+                      id={`${instanceId}-approval-conflict-title`}
+                    >
+                      Saved pair changed before approval
+                    </h5>
+                    <p
+                      aria-live="polite"
+                      className="mt-1 text-sm leading-6 text-copy-muted"
+                      role="status"
+                    >
+                      {pairReviewMatchesVisibleDocuments
+                        ? "Compare both latest documents. Approval stays disabled until you confirm that you reviewed the exact current pair."
+                        : "A saved head changed since this comparison. Reload both drafts before reviewing the current pair."}
+                    </p>
+                  </div>
+                  <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                    {pairDocumentOptions.map((option) => (
+                      <p className="min-w-0 break-words text-sm leading-6" key={option.kind}>
+                        <span className="font-mono text-copy-muted">{option.filename}: </span>
+                        revision {pairConflict.previous[option.kind].revision_number}
+                        {" → "}
+                        revision {pairConflict.latest[option.kind].revision_number}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="grid min-w-0 gap-2">
+                    <label
+                      className="text-sm font-medium text-foreground"
+                      htmlFor={`${instanceId}-approval-conflict-document`}
+                    >
+                      Compare saved document
+                    </label>
+                    <select
+                      className="min-h-11 w-full min-w-0 rounded-lg border border-input-border bg-surface-raised px-3 py-2 text-sm text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      id={`${instanceId}-approval-conflict-document`}
+                      onChange={(event) => {
+                        const kind = event.target.value as PairKind;
+                        setPairConflictKind(kind);
+                        const current = documentsRef.current;
+                        const conflict = pairConflictRef.current;
+                        if (
+                          current &&
+                          conflict &&
+                          sameSavedPair(conflict.latest, {
+                            project: current.project,
+                            agents: current.agents,
+                          })
+                        ) {
+                          const viewed = new Set(reviewedPairKindsRef.current);
+                          viewed.add(kind);
+                          updatePairReviewState(viewed, false);
+                        } else {
+                          updatePairReviewState(new Set(), false);
+                        }
+                      }}
+                      value={pairConflictKind}
+                    >
+                      <option value="project">PROJECT.md saved-version diff</option>
+                      <option value="agents">AGENTS.md saved-version diff</option>
+                    </select>
+                  </div>
+                  <DiffViewer
+                    after={currentPairConflictDocument.content}
+                    afterLabel={`Latest ${currentPairConflictDocument.filename} revision ${currentPairConflictDocument.revision_number}`}
+                    before={previousPairConflictDocument.content}
+                    beforeLabel={`Previously reviewed ${previousPairConflictDocument.filename} revision ${previousPairConflictDocument.revision_number}`}
+                  />
+                  {editorIsDirty ? (
+                    <p className="text-sm leading-6 text-copy-muted">
+                      Your unsaved editor text is preserved and is not shown in this saved-revision
+                      diff.
+                    </p>
+                  ) : null}
+                  <div className="flex min-w-0 flex-wrap items-center gap-3">
+                    <button
+                      className="min-h-11 rounded-lg border border-amber-100/40 px-4 py-2 text-sm font-medium text-amber-50 hover:bg-amber-100/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={
+                        !pairReviewMatchesVisibleDocuments ||
+                        approvalBusy ||
+                        reviewedPairKinds.size < pairDocumentOptions.length ||
+                        pairReviewConfirmed
+                      }
+                      onClick={() => {
+                        const current = documentsRef.current;
+                        const conflict = pairConflictRef.current;
+                        if (
+                          current &&
+                          conflict &&
+                          sameSavedPair(conflict.latest, {
+                            project: current.project,
+                            agents: current.agents,
+                          }) &&
+                          reviewedPairKindsRef.current.size === pairDocumentOptions.length
+                        ) {
+                          updatePairReviewState(reviewedPairKindsRef.current, true);
+                        }
+                      }}
+                      type="button"
+                    >
+                      I reviewed both latest documents
+                    </button>
+                    {pairReviewConfirmed ? (
+                      <span aria-live="polite" className="text-sm text-accent" role="status">
+                        Current pair reviewed. Approve only if this exact revision tuple is correct.
+                      </span>
+                    ) : (
+                      <span className="text-sm text-copy-muted">
+                        Viewed {reviewedPairKinds.size} of {pairDocumentOptions.length} saved
+                        documents.
+                      </span>
+                    )}
+                  </div>
+                </section>
+              ) : null}
+
+              <div className="grid min-w-0 gap-3 border-t border-line pt-4 lg:flex lg:flex-wrap lg:items-center">
+                <button
+                  className="min-h-11 w-full min-w-0 whitespace-normal rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                  disabled={!pairCanBeApproved}
+                  onClick={() => void approveSavedPair()}
+                  ref={approvalButtonRef}
+                  type="button"
+                >
+                  {approvalBusy
+                    ? "Approving saved pair…"
+                    : approvalStatus?.approved
+                      ? "Approved at last check"
+                      : "Approve saved PROJECT.md + AGENTS.md pair"}
+                </button>
+                {approvalStatus && approvalStatus.approval_has_more ? (
+                  <button
+                    className="min-h-11 w-full min-w-0 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                    disabled={approvalHistoryLoading || approvalBusy}
+                    onClick={loadOlderApprovals}
+                    type="button"
+                  >
+                    {approvalHistoryLoading ? "Loading history…" : "Load earlier approvals"}
+                  </button>
+                ) : null}
+                {approvalStatus && approvalStatus.approvals.length ? (
+                  <details className="w-full min-w-0 rounded-lg border border-line px-3 py-2 lg:min-w-56 lg:flex-1">
+                    <summary className="min-h-8 cursor-pointer break-words py-1 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                      Immutable pair approval history ({approvalStatus.approvals.length} shown)
+                    </summary>
+                    <ol className="mt-3 grid min-w-0 gap-2">
+                      {approvalStatus.approvals.map((approval) => (
+                        <li className="min-w-0 rounded-md bg-surface-raised p-3" key={approval.id}>
+                          <p className="text-sm leading-6 text-foreground">
+                            PROJECT.md r{approval.project_revision_number} + AGENTS.md r
+                            {approval.agents_revision_number}
+                          </p>
+                          <p className="mt-1 text-xs text-copy-muted">
+                            Approved {isoDate(approval.created_at)}
+                          </p>
+                          <div className="mt-2 grid min-w-0 gap-1 text-[11px] text-copy-muted sm:grid-cols-2">
+                            <code className="min-w-0 break-all">
+                              PROJECT.md revision ID {approval.project_revision_id}
+                            </code>
+                            <code className="min-w-0 break-all">
+                              AGENTS.md revision ID {approval.agents_revision_id}
+                            </code>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                ) : null}
+              </div>
+            </section>
+
+            <div
+              aria-label="Draft document switcher"
+              className="mt-5 flex flex-wrap gap-2"
+              role="tablist"
+            >
               {documentOptions.map((option) => (
                 <button
                   aria-controls={`${instanceId}-document-panel`}
@@ -1088,7 +2525,7 @@ export default function ProjectWorkspace({
                   role="tab"
                   tabIndex={selectedKind === option.kind ? 0 : -1}
                   type="button"
-                  disabled={saveBusy || editorIsDirty || !documents}
+                  disabled={saveBusy || approvalBusy || editorIsDirty || !documents}
                 >
                   {option.label}
                 </button>
@@ -1127,6 +2564,8 @@ export default function ProjectWorkspace({
                   updateEditorContent(event.target.value);
                   setSaveError("");
                   setSaveNotice("");
+                  setApprovalError("");
+                  setApprovalValidationErrors({});
                 }}
                 spellCheck={false}
                 value={editorContent}
@@ -1135,6 +2574,12 @@ export default function ProjectWorkspace({
               {editorIsOversize ? (
                 <p className="text-sm text-red-200" role="alert">
                   This draft exceeds the 128 KiB limit. Shorten it before saving.
+                </p>
+              ) : null}
+              {staleEditorRevision !== null && editorIsDirty ? (
+                <p className="text-sm leading-5 text-amber-200" role="status">
+                  Another tab saved this draft after your editor text was started. Saving now will
+                  preserve your text as a conflict proposal, not overwrite the newer revision.
                 </p>
               ) : null}
               {saveError ? (
@@ -1156,7 +2601,14 @@ export default function ProjectWorkspace({
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   className="min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!editorIsDirty || editorIsOversize || saveBusy || !csrfToken}
+                  disabled={
+                    !editorIsDirty ||
+                    editorIsOversize ||
+                    saveBusy ||
+                    approvalBusy ||
+                    pairRefreshBusy ||
+                    !csrfToken
+                  }
                   onClick={() => void saveDraft()}
                   type="button"
                 >
@@ -1164,7 +2616,7 @@ export default function ProjectWorkspace({
                 </button>
                 <button
                   className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={!editorIsDirty || saveBusy}
+                  disabled={!editorIsDirty || saveBusy || approvalBusy}
                   onClick={() => {
                     if (
                       !currentDocument ||
@@ -1174,6 +2626,7 @@ export default function ProjectWorkspace({
                     )
                       return;
                     invalidateDetailRequest();
+                    setStaleEditorRevision(null);
                     updateEditorContent(currentDocument.content);
                     setSaveError("");
                     setSaveNotice("");
@@ -1187,7 +2640,7 @@ export default function ProjectWorkspace({
                   aria-controls={`${instanceId}-document-history`}
                   aria-expanded={historyOpen}
                   className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  disabled={saveBusy}
+                  disabled={saveBusy || approvalBusy}
                   onClick={() => void toggleHistory()}
                   ref={historyToggleRef}
                   type="button"
@@ -1227,22 +2680,12 @@ export default function ProjectWorkspace({
                       Close comparison
                     </button>
                   </div>
-                  <div className="grid min-w-0 gap-3 md:grid-cols-2">
-                    <article className="min-w-0 rounded-lg border border-line bg-canvas p-3">
-                      <h5 className="font-mono text-xs text-copy-muted">
-                        Saved revision {currentDocument.revision_number}
-                      </h5>
-                      <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground">
-                        {currentDocument.content}
-                      </pre>
-                    </article>
-                    <article className="min-w-0 rounded-lg border border-line bg-canvas p-3">
-                      <h5 className="font-mono text-xs text-copy-muted">{compareContent.label}</h5>
-                      <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground">
-                        {compareContent.content}
-                      </pre>
-                    </article>
-                  </div>
+                  <DiffViewer
+                    after={currentDocument.content}
+                    afterLabel={`Saved ${currentDocument.filename} revision ${currentDocument.revision_number}`}
+                    before={compareContent.content}
+                    beforeLabel={compareContent.label}
+                  />
                   {editorIsDirty ? (
                     <p className="text-xs text-copy-muted">
                       Unsaved editor text is not shown in this comparison.

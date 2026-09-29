@@ -139,6 +139,21 @@ the exported files have been installed in a Git repository.
   required decisions for the intended project, malformed backlog headings or
   dependencies, and unauthorized marker transitions. Do not claim any app-specific
   test/run command is verified unless it has actually been run for that project.
+- **Planned pair-approval evidence rule (owner decision, not delivered by
+  IMP-004):** Save bounded `PROJECT.md` and `AGENTS.md` drafts with their exact
+  bytes, including raw HTML, but never use raw HTML elements or their descendants
+  as evidence for a required decision, even when a tag has no style or class.
+  Server-side approval requires substantive, decided text in supported Markdown
+  headings, prose, list items or table data cells; ordinary Markdown emphasis,
+  inline-code values and link labels may contribute. HTML comments, element
+  attributes, link destinations, image alt text, reference definitions, fenced
+  or indented examples and markup alone do not. An undecided required value is
+  not rescued by a completed value alongside it. If the evidence boundary cannot
+  be established, block approval rather than guessing at CSS/rendered visibility;
+  do not reject saving the draft merely for containing HTML. Keep starter and
+  unresolved-placeholder checks, project authorization, immutable revision
+  binding and current approval-status checks server-side. This is a bounded
+  evidence grammar, not a claim that arbitrary rendered HTML or CSS is visible.
 - Backlog format is `## [state] ID — Title`, where unique permanent IDs start
   with letters and end in `-` plus digits, as parsed by `scripts/backlog.py`.
   `**Depends on:** None` or comma-separated task IDs is the canonical dependency

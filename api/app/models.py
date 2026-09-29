@@ -22,7 +22,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 from app.db import Base
@@ -184,6 +184,51 @@ class ProjectDocumentRevision(Base):
     template_sha256: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProjectDocumentPairApproval(Base):
+    __tablename__ = "project_document_pair_approvals"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "project_revision_id",
+            "agents_revision_id",
+            name="uq_project_pair_approval_revisions",
+        ),
+        Index(
+            "ix_project_pair_approvals_project_created",
+            "project_id",
+            "created_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    project_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("project_document_revisions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    agents_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("project_document_revisions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    project_revision: Mapped[ProjectDocumentRevision] = relationship(
+        foreign_keys=[project_revision_id]
+    )
+    agents_revision: Mapped[ProjectDocumentRevision] = relationship(
+        foreign_keys=[agents_revision_id]
     )
 
 

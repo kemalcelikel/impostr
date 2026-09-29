@@ -29,6 +29,25 @@ type TestDocument = {
   template_source: string | null;
   template_sha256: string | null;
 };
+type TestPairApproval = {
+  id: string;
+  project_revision_id: string;
+  project_revision_number: number;
+  agents_revision_id: string;
+  agents_revision_number: number;
+  actor_user_id: string | null;
+  created_at: string;
+};
+type TestApprovalStatus = {
+  current_project_revision: { id: string; revision_number: number; content_sha256: string };
+  current_agents_revision: { id: string; revision_number: number; content_sha256: string };
+  approved: boolean;
+  latest_approval: TestPairApproval | null;
+  approvals: TestPairApproval[];
+  approval_offset: number;
+  approval_has_more: boolean;
+  approval_next_cursor: string | null;
+};
 
 const documentIds: Record<DocumentKind, string> = {
   project: "00000000-0000-4000-8000-000000000031",
@@ -60,6 +79,31 @@ const initialDocuments: Record<DocumentKind, TestDocument> = {
   backlog: makeDocument("backlog", "# Starter backlog\n"),
 };
 
+function makeApprovalStatus(
+  projectDocument: TestDocument = initialDocuments.project,
+  agentsDocument: TestDocument = initialDocuments.agents,
+  approved = false,
+): TestApprovalStatus {
+  return {
+    current_project_revision: {
+      id: `revision-project-${projectDocument.revision_number}`,
+      revision_number: projectDocument.revision_number,
+      content_sha256: projectDocument.content_sha256,
+    },
+    current_agents_revision: {
+      id: `revision-agents-${agentsDocument.revision_number}`,
+      revision_number: agentsDocument.revision_number,
+      content_sha256: agentsDocument.content_sha256,
+    },
+    approved,
+    latest_approval: null,
+    approvals: [],
+    approval_offset: 0,
+    approval_has_more: false,
+    approval_next_cursor: null,
+  };
+}
+
 function jsonResponse(payload: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -89,6 +133,31 @@ function renderWorkspace(
     projectOffset?: number;
   } = {},
 ) {
+  const originalImplementation = fetchMock.getMockImplementation() as
+    ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | undefined;
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = pathOf(input);
+    const isApprovalStatusRequest =
+      path.includes("/document-pair-approval") && (init?.method ?? "GET") === "GET";
+    if (originalImplementation) {
+      try {
+        const response = originalImplementation(input, init);
+        if (isApprovalStatusRequest && response === undefined) {
+          return Promise.resolve(jsonResponse(makeApprovalStatus()));
+        }
+        return response;
+      } catch (error) {
+        if (isApprovalStatusRequest) {
+          return Promise.resolve(jsonResponse(makeApprovalStatus()));
+        }
+        throw error;
+      }
+    }
+    if (isApprovalStatusRequest) {
+      return Promise.resolve(jsonResponse(makeApprovalStatus()));
+    }
+    return Promise.reject(new Error(`Unexpected request ${path}`));
+  });
   vi.stubGlobal("fetch", fetchMock);
   return render(
     <ProjectWorkspace
@@ -355,6 +424,241 @@ describe("private project drafts", () => {
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(0);
   });
 
+  it.each(["detail-first", "pair-first"] as const)(
+    "does not show history r2 beside a detail/pair head r3 when %s resolves first",
+    async (responseOrder) => {
+      const delayedDetail = deferred<Response>();
+      const newer = makeDocument("project", "# Third saved head\n", 3);
+      const unsavedText = "# My unsaved revision-one edit\n";
+      let pairHead = initialDocuments.project;
+      let historyRequests = 0;
+      const expectedRevisions: number[] = [];
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        const method = init?.method ?? "GET";
+        if (path.endsWith("/documents") && method === "GET") {
+          return Promise.resolve(
+            jsonResponse([pairHead, initialDocuments.agents, initialDocuments.backlog]),
+          );
+        }
+        if (path.includes("/document-pair-approval") && method === "GET") {
+          return Promise.resolve(jsonResponse(makeApprovalStatus(pairHead)));
+        }
+        if (path.includes("/documents/project/history?")) {
+          historyRequests += 1;
+          return Promise.resolve(
+            jsonResponse({
+              kind: "project",
+              current_revision_number: historyRequests === 1 ? 2 : 3,
+              revisions: [],
+              proposals: [],
+              revision_has_more: false,
+              proposal_has_more: false,
+            }),
+          );
+        }
+        if (path.endsWith("/documents/project") && method === "GET") {
+          return delayedDetail.promise;
+        }
+        if (path.endsWith("/documents/project") && method === "PUT") {
+          const payload = JSON.parse(String(init?.body)) as { expected_revision: number };
+          expectedRevisions.push(payload.expected_revision);
+          return Promise.resolve(jsonResponse({ detail: "Conflict recorded", latest: newer }, 409));
+        }
+        throw new Error(`Unexpected request ${path} ${method}`);
+      });
+      renderWorkspace(fetchMock);
+      fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+      const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      fireEvent.click(screen.getByRole("button", { name: "View history" }));
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.some(([input]) => pathOf(input).endsWith("/documents/project")),
+        ).toBe(true),
+      );
+      fireEvent.change(editor, { target: { value: unsavedText } });
+      if (responseOrder === "pair-first") {
+        pairHead = newer;
+        fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+        expect(await screen.findByText("PROJECT.md · revision 3")).toBeInTheDocument();
+      }
+      delayedDetail.resolve(jsonResponse(newer));
+      expect(await screen.findByText("PROJECT.md · revision 3")).toBeInTheDocument();
+      expect(editor).toHaveValue(unsavedText);
+      expect(screen.queryByText("Current revision 2")).not.toBeInTheDocument();
+      expect(await screen.findByRole("alert")).toHaveTextContent("Reload history");
+      fireEvent.click(screen.getByRole("button", { name: "Retry history" }));
+      expect(await screen.findByText("Current revision 3")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(
+        await screen.findByText(/attempted text was preserved as a conflict proposal/),
+      ).toBeInTheDocument();
+      expect(expectedRevisions).toEqual([1]);
+      expect(editor).toHaveValue(unsavedText);
+    },
+  );
+
+  it("does not let an older in-flight history request stale a clean editor after pair refresh", async () => {
+    const pendingHistory = deferred<Response>();
+    const newer = makeDocument("project", "# Pair refresh head\n", 2);
+    let projectHead = initialDocuments.project;
+    let historyCalls = 0;
+    const expectedRevisions: number[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET")
+        return Promise.resolve(
+          jsonResponse([projectHead, initialDocuments.agents, initialDocuments.backlog]),
+        );
+      if (path.includes("/document-pair-approval") && method === "GET")
+        return Promise.resolve(jsonResponse(makeApprovalStatus(projectHead)));
+      if (path.includes("/documents/project/history?")) {
+        historyCalls += 1;
+        return historyCalls === 1
+          ? pendingHistory.promise
+          : Promise.resolve(
+              jsonResponse({
+                kind: "project",
+                current_revision_number: 2,
+                revisions: [],
+                proposals: [],
+                revision_has_more: false,
+                proposal_has_more: false,
+              }),
+            );
+      }
+      if (path.endsWith("/documents/project") && method === "GET")
+        return Promise.resolve(jsonResponse(newer));
+      if (path.endsWith("/documents/project") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as {
+          expected_revision: number;
+          content: string;
+        };
+        expectedRevisions.push(payload.expected_revision);
+        return Promise.resolve(
+          payload.expected_revision === 2
+            ? jsonResponse(makeDocument("project", payload.content, 3))
+            : jsonResponse({ detail: "Conflict recorded", latest: newer }, 409),
+        );
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    await waitFor(() => expect(historyCalls).toBe(1));
+
+    projectHead = newer;
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+    expect(editor).toHaveValue(newer.content);
+    pendingHistory.resolve(
+      jsonResponse({
+        kind: "project",
+        current_revision_number: 2,
+        revisions: [],
+        proposals: [],
+        revision_has_more: false,
+        proposal_has_more: false,
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reload history");
+    fireEvent.click(screen.getByRole("button", { name: "Retry history" }));
+    await waitFor(() => expect(screen.getByText("Current revision 2")).toBeInTheDocument());
+    fireEvent.change(editor, { target: { value: "# My next change\n" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Saved PROJECT.md as revision 3.")).toBeInTheDocument();
+    expect(expectedRevisions).toEqual([2]);
+  });
+
+  it.each(["history-first", "pair-first"] as const)(
+    "keeps a history-discovered saved head when the older pair response resolves %s",
+    async (responseOrder) => {
+      const pendingPair = deferred<Response>();
+      const pendingHistory = deferred<Response>();
+      const newer = makeDocument("project", "# History-discovered saved head\n", 2);
+      const historyPayload = {
+        kind: "project",
+        current_revision_number: 2,
+        revisions: [],
+        proposals: [],
+        revision_has_more: false,
+        proposal_has_more: false,
+      };
+      let documentRequests = 0;
+      let historyRequests = 0;
+      let savedProject = initialDocuments.project;
+      const expectedRevisions: number[] = [];
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        const method = init?.method ?? "GET";
+        if (path.endsWith("/documents") && method === "GET") {
+          documentRequests += 1;
+          return documentRequests === 1
+            ? Promise.resolve(jsonResponse(Object.values(initialDocuments)))
+            : pendingPair.promise;
+        }
+        if (path.includes("/document-pair-approval") && method === "GET") {
+          return Promise.resolve(
+            jsonResponse(makeApprovalStatus(savedProject, initialDocuments.agents)),
+          );
+        }
+        if (path.includes("/documents/project/history?")) {
+          historyRequests += 1;
+          return historyRequests === 1
+            ? pendingHistory.promise
+            : Promise.resolve(jsonResponse(historyPayload));
+        }
+        if (path.endsWith("/documents/project") && method === "GET")
+          return Promise.resolve(jsonResponse(newer));
+        if (path.endsWith("/documents/project") && method === "PUT") {
+          const payload = JSON.parse(String(init?.body)) as { expected_revision: number };
+          expectedRevisions.push(payload.expected_revision);
+          return Promise.resolve(jsonResponse({ detail: "Conflict recorded", latest: newer }, 409));
+        }
+        throw new Error(`Unexpected request ${path} ${method}`);
+      });
+      renderWorkspace(fetchMock);
+      fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+      const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+      await waitFor(() => expect(documentRequests).toBe(2));
+      fireEvent.click(screen.getByRole("button", { name: "View history" }));
+      await waitFor(() => expect(historyRequests).toBe(1));
+      fireEvent.change(editor, { target: { value: "# My unsaved decision\n" } });
+      savedProject = newer;
+
+      if (responseOrder === "history-first") {
+        pendingHistory.resolve(jsonResponse(historyPayload));
+        expect(await screen.findByText("Current revision 2")).toBeInTheDocument();
+        expect(editor).toHaveValue("# My unsaved decision\n");
+        pendingPair.resolve(jsonResponse(Object.values(initialDocuments)));
+      } else {
+        pendingPair.resolve(jsonResponse(Object.values(initialDocuments)));
+        expect(
+          await screen.findByRole("button", { name: "Reload saved pair and status" }),
+        ).toBeEnabled();
+        pendingHistory.resolve(jsonResponse(historyPayload));
+        expect(await screen.findByText("Current revision 2")).toBeInTheDocument();
+      }
+
+      expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+      expect(editor).toHaveValue("# My unsaved decision\n");
+      expect(
+        screen.getByText(/Saving now will preserve your text as a conflict proposal/),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(
+        await screen.findByText(/attempted text was preserved as a conflict proposal/),
+      ).toBeInTheDocument();
+      expect(expectedRevisions).toEqual([1]);
+      expect(editor).toHaveValue("# My unsaved decision\n");
+      expect(screen.getByText("PROJECT.md · revision 2")).toBeInTheDocument();
+    },
+  );
+
   it("keeps typing made during an external-head refresh as unsaved editor text", async () => {
     const pendingHead = deferred<Response>();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -472,9 +776,7 @@ describe("private project drafts", () => {
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
     fireEvent.change(editor, { target: { value: "# My rejected text\n" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "History moved ahead of the saved draft",
-    );
+    expect(await screen.findByText(/History moved ahead of the saved draft/)).toBeInTheDocument();
     expect(screen.queryByText("Current revision 3")).not.toBeInTheDocument();
     expect(editor).toHaveValue("# My rejected text\n");
     fireEvent.click(screen.getByRole("button", { name: "Retry history" }));
@@ -821,7 +1123,7 @@ describe("private project drafts", () => {
     fireEvent.change(editor, { target: { value: "# Human edit\n" } });
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Saved PROJECT.md as revision 2");
+    expect(await screen.findByText("Saved PROJECT.md as revision 2.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "View history" }));
     expect(await screen.findByRole("heading", { name: "PROJECT.md history" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Compare revision 1" }));
@@ -831,13 +1133,17 @@ describe("private project drafts", () => {
     const comparison = screen.getByRole("heading", {
       name: /Compare Revision 1 with saved revision 2/,
     }).parentElement?.parentElement;
-    const comparedText = comparison?.querySelectorAll("pre");
-    expect(comparedText).toHaveLength(2);
-    expect(comparedText?.[1]).toHaveTextContent("# Starter project Initial body.");
+    const savedDiff = within(comparison as HTMLElement).getByRole("list", {
+      name: /Line-by-line diff: Revision 1 compared with Saved PROJECT.md revision 2/,
+    });
+    expect(savedDiff).toHaveTextContent("Removed line: # Starter project");
+    expect(savedDiff).toHaveTextContent("Added line: # Human edit");
 
     fireEvent.click(screen.getByRole("button", { name: "Reapply revision 1 in editor" }));
     await waitFor(() => expect(editor).toHaveValue(initialDocuments.project.content));
-    expect(screen.getByRole("status")).toHaveTextContent("Save draft to create a new revision");
+    expect(
+      screen.getByText("Revision loaded into the editor. Save draft to create a new revision."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Unsaved editor text is not shown in this comparison."),
     ).toBeInTheDocument();
@@ -996,9 +1302,9 @@ describe("private project drafts", () => {
     const attemptedText = "# Attempted text from tab two\n";
     fireEvent.change(secondEditor, { target: { value: attemptedText } });
     fireEvent.click(within(second).getByRole("button", { name: "Save draft" }));
-    expect(await within(second).findByRole("status")).toHaveTextContent(
-      "Your attempted text was preserved as a conflict proposal.",
-    );
+    expect(
+      await within(second).findByText(/attempted text was preserved as a conflict proposal/),
+    ).toBeInTheDocument();
     expect(
       await within(second).findByText(/Conflict proposal · expected revision 1/),
     ).toBeInTheDocument();
@@ -1164,10 +1470,11 @@ describe("private project drafts", () => {
       const comparison = screen.getByRole("region", {
         name: "Compare Conflict proposal with saved revision 2",
       });
-      const comparisonPanes = comparison.querySelectorAll("pre");
-      expect(comparisonPanes).toHaveLength(2);
-      expect(comparisonPanes[0]?.textContent).toBe(currentDocument.content);
-      expect(comparisonPanes[1]?.textContent).toBe(proposalContent);
+      const comparisonDiff = within(comparison).getByRole("list", {
+        name: /Line-by-line diff: Conflict proposal compared with Saved PROJECT.md revision 2/,
+      });
+      expect(comparisonDiff).toHaveTextContent("Removed line: # Rejected draft idea");
+      expect(comparisonDiff).toHaveTextContent("Added line: # Current saved draft");
 
       fireEvent.click(within(comparison).getByRole("button", { name: "Close comparison" }));
       expect(
@@ -1337,6 +1644,94 @@ describe("private project drafts", () => {
     },
   );
 
+  it.each(["revision", "proposal"])(
+    "keeps a delayed %s reapply bound to the old head when pair reload advances it",
+    async (variant) => {
+      const pendingDetail = deferred<Response>();
+      const newer = makeDocument("project", "# Externally saved head\n", 2);
+      const proposalId = "00000000-0000-4000-8000-000000000041";
+      let currentHead = initialDocuments.project;
+      const expectedRevisions: number[] = [];
+      vi.stubGlobal(
+        "confirm",
+        vi.fn(() => true),
+      );
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        if (path.endsWith("/documents"))
+          return Promise.resolve(
+            jsonResponse([currentHead, initialDocuments.agents, initialDocuments.backlog]),
+          );
+        if (path.includes("/document-pair-approval"))
+          return Promise.resolve(jsonResponse(makeApprovalStatus(currentHead)));
+        if (path.includes("/history?"))
+          return Promise.resolve(
+            jsonResponse({
+              kind: "project",
+              current_revision_number: 1,
+              revisions: [
+                { revision_number: 1, origin: "template", created_at: project.created_at },
+              ],
+              proposals: [
+                {
+                  id: proposalId,
+                  expected_revision_number: 1,
+                  observed_revision_number: 1,
+                  created_at: project.created_at,
+                },
+              ],
+              revision_has_more: false,
+              proposal_has_more: false,
+            }),
+          );
+        if (path.endsWith("/revisions/1") || path.endsWith(`/proposals/${proposalId}`))
+          return pendingDetail.promise;
+        if (path.endsWith("/documents/project") && init?.method === "PUT") {
+          const payload = JSON.parse(String(init.body)) as {
+            expected_revision: number;
+            content: string;
+          };
+          expectedRevisions.push(payload.expected_revision);
+          if (payload.expected_revision === 1)
+            return Promise.resolve(
+              jsonResponse({ detail: "Conflict recorded", latest: newer }, 409),
+            );
+          currentHead = makeDocument("project", payload.content, 3);
+          return Promise.resolve(jsonResponse(currentHead));
+        }
+        throw new Error(`Unexpected request ${path}`);
+      });
+      renderWorkspace(fetchMock);
+      fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+      const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      fireEvent.change(editor, { target: { value: "# My original unsaved draft\n" } });
+      fireEvent.click(screen.getByRole("button", { name: "View history" }));
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name:
+            variant === "revision"
+              ? "Reapply revision 1 in editor"
+              : "Reapply conflict proposal in editor",
+        }),
+      );
+      currentHead = newer;
+      fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+      expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+      pendingDetail.resolve(
+        jsonResponse({ content: "# Old historical text\n", revision_number: 1 }),
+      );
+      expect(editor).toHaveValue("# My original unsaved draft\n");
+      expect(screen.queryByText(/loaded into the editor/)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+      expect(
+        await screen.findByText(/attempted text was preserved as a conflict proposal/),
+      ).toBeInTheDocument();
+      expect(expectedRevisions).toEqual([1]);
+      expect(currentHead).toEqual(newer);
+      expect(editor).toHaveValue("# My original unsaved draft\n");
+    },
+  );
+
   it.each([
     {
       label: "revision",
@@ -1438,4 +1833,1294 @@ describe("private project drafts", () => {
       ).toHaveAttribute("aria-pressed", "true");
     },
   );
+
+  it("approves the exact current saved pair once and disables repeated/dirty approval", async () => {
+    const pendingApproval = deferred<Response>();
+    const currentDocuments: Record<DocumentKind, TestDocument> = { ...initialDocuments };
+    let status = makeApprovalStatus(currentDocuments.project, currentDocuments.agents);
+    const approval = {
+      id: "approval-1",
+      project_revision_id: "project-revision-2",
+      project_revision_number: 2,
+      agents_revision_id: "agents-revision-1",
+      agents_revision_number: 1,
+      actor_user_id: project.owner_user_id,
+      created_at: "2026-09-25T12:00:00Z",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET") {
+        return Promise.resolve(jsonResponse(Object.values(currentDocuments)));
+      }
+      if (path.endsWith("/documents/project") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as { content: string };
+        currentDocuments.project = makeDocument("project", payload.content, 2);
+        status = makeApprovalStatus(currentDocuments.project, currentDocuments.agents);
+        return Promise.resolve(jsonResponse(currentDocuments.project));
+      }
+      if (path.includes("/document-pair-approval")) {
+        if (method === "POST") return pendingApproval.promise;
+        return Promise.resolve(jsonResponse(status));
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const approveButton = await screen.findByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    expect(approveButton).toBeEnabled();
+    fireEvent.change(editor, { target: { value: "# Saved project revision\n" } });
+    expect(approveButton).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Saved PROJECT.md as revision 2.")).toBeInTheDocument();
+    await waitFor(() => expect(approveButton).toBeEnabled());
+
+    const approveRequestButton = screen.getByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    approveRequestButton.focus();
+    fireEvent.click(approveRequestButton);
+    await waitFor(() => expect(approveRequestButton).toBeDisabled());
+    fireEvent.click(approveRequestButton);
+    const postCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        pathOf(input).includes("/document-pair-approval") && init?.method === "POST",
+    );
+    expect(postCalls).toHaveLength(1);
+    expect(JSON.parse(String(postCalls[0]?.[1]?.body))).toEqual({
+      expected_project_revision: 2,
+      expected_agents_revision: 1,
+    });
+    expect(new Headers(postCalls[0]?.[1]?.headers).get("X-CSRF-Token")).toBe("csrf-test-token");
+
+    status = {
+      ...makeApprovalStatus(currentDocuments.project, currentDocuments.agents, true),
+      latest_approval: approval,
+      approvals: [approval],
+    };
+    pendingApproval.resolve(jsonResponse(approval));
+    expect(
+      await screen.findByText(
+        "Approved PROJECT.md revision 2 and AGENTS.md revision 1 as one saved pair.",
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Approved at last check" })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Approved at last check" })).toBeDisabled(),
+    );
+  });
+
+  it("stacks approved-pair actions on narrow screens and restores the desktop row", async () => {
+    const approval: TestPairApproval = {
+      id: "approved-pair",
+      project_revision_id: "revision-project-1",
+      project_revision_number: 1,
+      agents_revision_id: "revision-agents-1",
+      agents_revision_number: 1,
+      actor_user_id: project.owner_user_id,
+      created_at: project.created_at,
+    };
+    const approvedStatus: TestApprovalStatus = {
+      ...makeApprovalStatus(initialDocuments.project, initialDocuments.agents, true),
+      latest_approval: approval,
+      approvals: [approval],
+      approval_has_more: true,
+      approval_next_cursor: "older-approvals",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (path.includes("/document-pair-approval"))
+        return Promise.resolve(jsonResponse(approvedStatus));
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const approvalSection = await screen.findByRole("region", {
+      name: "Approve the saved document pair",
+    });
+    const approvedButton = within(approvalSection).getByRole("button", {
+      name: "Approved at last check",
+    });
+    const olderApprovalsButton = within(approvalSection).getByRole("button", {
+      name: "Load earlier approvals",
+    });
+    const historySummary = within(approvalSection).getByText(
+      "Immutable pair approval history (1 shown)",
+    );
+    const historyControl = historySummary.closest("details");
+    const actions = approvedButton.parentElement;
+
+    expect(approvedButton).toBeDisabled();
+    expect(actions).toHaveClass("grid", "min-w-0", "gap-3", "lg:flex", "lg:flex-wrap");
+    expect(approvedButton).toHaveClass(
+      "w-full",
+      "lg:w-auto",
+      "whitespace-normal",
+      "focus-visible:outline-2",
+    );
+    expect(olderApprovalsButton).toHaveClass("w-full", "lg:w-auto");
+    expect(historyControl).not.toBeNull();
+    expect(historyControl).toHaveClass("w-full", "min-w-0", "lg:flex-1", "lg:min-w-56");
+    expect(historyControl).toContainElement(historySummary);
+    expect(historySummary.tagName).toBe("SUMMARY");
+    expect(historySummary).toHaveClass("break-words", "focus-visible:outline-2");
+  });
+
+  it("refreshes both saved heads and approval on tab return without erasing dirty typing", async () => {
+    const nextDocuments = {
+      ...initialDocuments,
+      agents: makeDocument("agents", "# Saved in another tab\n", 2),
+    };
+    let savedDocuments: Record<DocumentKind, TestDocument> = { ...initialDocuments };
+    const originalApproval: TestPairApproval = {
+      id: "approved-original-pair",
+      project_revision_id: "revision-project-1",
+      project_revision_number: 1,
+      agents_revision_id: "revision-agents-1",
+      agents_revision_number: 1,
+      actor_user_id: project.owner_user_id,
+      created_at: project.created_at,
+    };
+    const headRefresh = deferred<Response>();
+    let documentCalls = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents")) {
+        documentCalls += 1;
+        return documentCalls === 1
+          ? Promise.resolve(jsonResponse(Object.values(initialDocuments)))
+          : documentCalls === 2
+            ? headRefresh.promise
+            : Promise.resolve(jsonResponse(Object.values(savedDocuments)));
+      }
+      if (path.includes("/document-pair-approval")) {
+        return Promise.resolve(
+          jsonResponse({
+            ...makeApprovalStatus(
+              savedDocuments.project,
+              savedDocuments.agents,
+              documentCalls === 1,
+            ),
+            latest_approval: originalApproval,
+            approvals: [originalApproval],
+          }),
+        );
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    expect(await screen.findByRole("button", { name: "Approved at last check" })).toBeDisabled();
+    expect(screen.getByText(/Another tab may have saved since then/)).toBeInTheDocument();
+
+    savedDocuments = nextDocuments;
+    fireEvent(document, new Event("visibilitychange"));
+    await waitFor(() => expect(documentCalls).toBe(2));
+    expect(screen.queryByText("Approved at last check")).not.toBeInTheDocument();
+    fireEvent.change(editor, { target: { value: "# My unsaved idea\n" } });
+    headRefresh.resolve(jsonResponse(Object.values(savedDocuments)));
+    expect(await screen.findByText("Re-review required")).toBeInTheDocument();
+    expect(screen.getByText("Saved revision 2")).toBeInTheDocument();
+    expect(editor).toHaveValue("# My unsaved idea\n");
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() => expect(documentCalls).toBe(3));
+    expect(editor).toHaveValue("# My unsaved idea\n");
+    expect(screen.getByText("Re-review required")).toBeInTheDocument();
+  });
+
+  it("reloads unchanged open AGENTS history without a saved-head warning", async () => {
+    const historyPayload = {
+      kind: "agents",
+      current_revision_number: 1,
+      revisions: [
+        {
+          revision_number: 1,
+          content_sha256: initialDocuments.agents.content_sha256,
+          origin: "template",
+          author_user_id: null,
+          created_at: initialDocuments.agents.created_at,
+          template_source: "AGENTS.md.example",
+          template_sha256: initialDocuments.agents.template_sha256,
+        },
+      ],
+      proposals: [],
+      revision_offset: 0,
+      proposal_cursor: null,
+      proposal_next_cursor: null,
+      revision_has_more: false,
+      proposal_has_more: false,
+    };
+    const refreshedHistory = deferred<Response>();
+    let historyRequests = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (path.includes("/document-pair-approval"))
+        return Promise.resolve(
+          jsonResponse(makeApprovalStatus(initialDocuments.project, initialDocuments.agents)),
+        );
+      if (path.includes("/documents/agents/history?")) {
+        historyRequests += 1;
+        return historyRequests === 1
+          ? Promise.resolve(jsonResponse(historyPayload))
+          : refreshedHistory.promise;
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("tab", { name: "Agent rules" }));
+    await screen.findByRole("textbox", { name: "Edit AGENTS.md" });
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    expect(await screen.findByText("Current revision 1")).toBeInTheDocument();
+    expect(historyRequests).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() => expect(historyRequests).toBe(2));
+    expect(screen.getByRole("heading", { name: "AGENTS.md history" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide history" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByText("Loading revision history…")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    refreshedHistory.resolve(jsonResponse(historyPayload));
+    expect(await screen.findByText("Current revision 1")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("submits a dirty editor's original base revision after a new saved head is discovered", async () => {
+    const newer = makeDocument("project", "# Other tab saved\n", 2);
+    let savedProject = initialDocuments.project;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents") && (init?.method ?? "GET") === "GET") {
+        return Promise.resolve(
+          jsonResponse([savedProject, initialDocuments.agents, initialDocuments.backlog]),
+        );
+      }
+      if (path.includes("/document-pair-approval")) {
+        return Promise.resolve(jsonResponse(makeApprovalStatus(savedProject)));
+      }
+      if (path.endsWith("/documents/project") && init?.method === "PUT") {
+        const payload = JSON.parse(String(init.body)) as { expected_revision: number };
+        expect(payload.expected_revision).toBe(1);
+        return Promise.resolve(jsonResponse({ detail: "Conflict recorded", latest: newer }, 409));
+      }
+      if (path.includes("/history?")) {
+        return Promise.resolve(
+          jsonResponse({
+            kind: "project",
+            current_revision_number: 2,
+            revisions: [],
+            proposals: [],
+            revision_has_more: false,
+            proposal_has_more: false,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.change(editor, { target: { value: "# My unsaved specification\n" } });
+    savedProject = newer;
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+    expect(editor).toHaveValue("# My unsaved specification\n");
+    expect(
+      screen.getByText(/Saving now will preserve your text as a conflict proposal/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(
+      await screen.findByText(/attempted text was preserved as a conflict proposal/),
+    ).toBeInTheDocument();
+    expect(editor).toHaveValue("# My unsaved specification\n");
+  });
+
+  it("does not promote typing during a stale pair approval to the newer saved revision", async () => {
+    const pendingApproval = deferred<Response>();
+    const newer = makeDocument("project", "# Different tab's saved project\n", 2);
+    let projectHead = initialDocuments.project;
+    const writes: number[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse([projectHead, initialDocuments.agents, initialDocuments.backlog]),
+        );
+      }
+      if (path.includes("/document-pair-approval")) {
+        return method === "POST"
+          ? pendingApproval.promise
+          : Promise.resolve(jsonResponse(makeApprovalStatus(projectHead)));
+      }
+      if (path.endsWith("/documents/project") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as {
+          expected_revision: number;
+          content: string;
+        };
+        writes.push(payload.expected_revision);
+        return Promise.resolve(
+          payload.expected_revision === 1
+            ? jsonResponse({ detail: "Conflict recorded", latest: newer }, 409)
+            : jsonResponse(makeDocument("project", payload.content, 3)),
+        );
+      }
+      if (path.includes("/history?")) {
+        return Promise.resolve(
+          jsonResponse({
+            kind: "project",
+            current_revision_number: 2,
+            revisions: [],
+            proposals: [],
+            revision_has_more: false,
+            proposal_has_more: false,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const approvalButton = await screen.findByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    fireEvent.click(approvalButton);
+    fireEvent.change(editor, { target: { value: "# My text while approving\n" } });
+    projectHead = newer;
+    pendingApproval.resolve(
+      jsonResponse(
+        {
+          detail: "The saved pair changed",
+          latest: { project: newer, agents: initialDocuments.agents },
+        },
+        409,
+      ),
+    );
+    expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+    expect(editor).toHaveValue("# My text while approving\n");
+    expect(
+      screen.getByText(/Saving now will preserve your text as a conflict proposal/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(
+      await screen.findByText(/attempted text was preserved as a conflict proposal/),
+    ).toBeInTheDocument();
+    expect(editor).toHaveValue("# My text while approving\n");
+    expect(writes).toEqual([1]);
+    // A second click without an explicit reapply must not overwrite the head either.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes).toEqual([1, 1]);
+  });
+
+  it.each(["clean", "dirty"] as const)(
+    "keeps the history-discovered head when a stale approval response arrives last with a %s editor",
+    async (editorPath) => {
+      const pendingHistory = deferred<Response>();
+      const pendingApproval = deferred<Response>();
+      const historyHead = makeDocument(
+        "project",
+        "# History-discovered saved head\nNewest saved specification.\n",
+        3,
+      );
+      const approvalSnapshotProject = makeDocument(
+        "project",
+        "# Approval conflict snapshot\nAn older saved specification.\n",
+        2,
+      );
+      const latestAgents = makeDocument(
+        "agents",
+        "# Concurrently saved agent rules\nCurrent agent boundary.\n",
+        2,
+      );
+      let latestProject = initialDocuments.project;
+      let approvalStatus = makeApprovalStatus(initialDocuments.project, initialDocuments.agents);
+      let historyRequests = 0;
+      const writes: { expected_revision: number; content: string }[] = [];
+      const unsavedText = "# Keep this unsaved text\nDo not replace it with a saved head.\n";
+      const postApprovalEdit = "# Deliberate edit after reviewing the latest head\n";
+      const historyResponse = () => ({
+        kind: "project",
+        current_revision_number: latestProject.revision_number,
+        revisions: [],
+        proposals: [],
+        revision_offset: 0,
+        proposal_cursor: null,
+        proposal_next_cursor: null,
+        revision_has_more: false,
+        proposal_has_more: false,
+      });
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        const method = init?.method ?? "GET";
+        if (path.endsWith("/documents") && method === "GET") {
+          return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+        }
+        if (path.includes("/document-pair-approval")) {
+          return method === "POST"
+            ? pendingApproval.promise
+            : Promise.resolve(jsonResponse(approvalStatus));
+        }
+        if (path.includes("/documents/project/history?")) {
+          historyRequests += 1;
+          return historyRequests === 1
+            ? pendingHistory.promise
+            : Promise.resolve(jsonResponse(historyResponse()));
+        }
+        if (path.endsWith("/documents/project") && method === "GET") {
+          return Promise.resolve(jsonResponse(latestProject));
+        }
+        if (path.endsWith("/documents/project") && method === "PUT") {
+          const payload = JSON.parse(String(init?.body)) as {
+            expected_revision: number;
+            content: string;
+          };
+          writes.push(payload);
+          if (editorPath === "dirty") {
+            return Promise.resolve(
+              jsonResponse(
+                {
+                  detail: "Conflict recorded",
+                  latest: latestProject,
+                  proposal_id: "saved-as-proposal",
+                },
+                409,
+              ),
+            );
+          }
+          latestProject = makeDocument(
+            "project",
+            payload.content,
+            latestProject.revision_number + 1,
+          );
+          approvalStatus = makeApprovalStatus(latestProject, latestAgents);
+          return Promise.resolve(jsonResponse(latestProject));
+        }
+        throw new Error(`Unexpected request: ${path} ${method}`);
+      });
+      renderWorkspace(fetchMock);
+
+      fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+      const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      const approveButton = await screen.findByRole("button", {
+        name: "Approve saved PROJECT.md + AGENTS.md pair",
+      });
+      await waitFor(() => expect(approveButton).toBeEnabled());
+
+      fireEvent.click(screen.getByRole("button", { name: "View history" }));
+      await waitFor(() => expect(historyRequests).toBe(1));
+      fireEvent.click(approveButton);
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.filter(
+            ([input, request]) =>
+              pathOf(input).includes("/document-pair-approval") && request?.method === "POST",
+          ),
+        ).toHaveLength(1);
+      });
+      if (editorPath === "dirty") {
+        fireEvent.change(editor, { target: { value: unsavedText } });
+      }
+
+      latestProject = historyHead;
+      approvalStatus = makeApprovalStatus(historyHead, latestAgents);
+      pendingHistory.resolve(
+        jsonResponse({
+          kind: "project",
+          current_revision_number: historyHead.revision_number,
+          revisions: [],
+          proposals: [],
+          revision_offset: 0,
+          proposal_cursor: null,
+          proposal_next_cursor: null,
+          revision_has_more: false,
+          proposal_has_more: false,
+        }),
+      );
+      expect(await screen.findByText("Current revision 3")).toBeInTheDocument();
+      expect(await screen.findByText("PROJECT.md · revision 3")).toBeInTheDocument();
+      expect(editor).toHaveValue(editorPath === "clean" ? historyHead.content : unsavedText);
+
+      pendingApproval.resolve(
+        jsonResponse(
+          {
+            detail: "A saved document changed before approval.",
+            latest: { project: approvalSnapshotProject, agents: latestAgents },
+          },
+          409,
+        ),
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "Saved pair changed before approval" }),
+      ).toBeInTheDocument();
+      expect(await screen.findByText("PROJECT.md · revision 3")).toBeInTheDocument();
+      const pairConflict = screen.getByRole("region", {
+        name: "Saved pair changed before approval",
+      });
+      expect(pairConflict).toHaveTextContent("PROJECT.md: revision 1 → revision 3");
+      expect(pairConflict).toHaveTextContent("AGENTS.md: revision 1 → revision 2");
+      const savedPairDiff = within(pairConflict).getByRole("list", {
+        name: /Previously reviewed PROJECT\.md revision 1 compared with Latest PROJECT\.md revision 3/,
+      });
+      expect(savedPairDiff).toHaveTextContent("Removed line: # Starter project");
+      expect(savedPairDiff).toHaveTextContent("Added line: # History-discovered saved head");
+
+      if (editorPath === "dirty") {
+        expect(editor).toHaveValue(unsavedText);
+        expect(
+          screen.getByText(/Saving now will preserve your text as a conflict proposal/),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+        expect(
+          await screen.findByText(/attempted text was preserved as a conflict proposal/),
+        ).toBeInTheDocument();
+        expect(writes).toEqual([{ expected_revision: 1, content: unsavedText }]);
+        expect(editor).toHaveValue(unsavedText);
+        expect(screen.getByText("PROJECT.md · revision 3")).toBeInTheDocument();
+      } else {
+        expect(editor).toHaveValue(historyHead.content);
+        expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
+        fireEvent.change(editor, { target: { value: postApprovalEdit } });
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+        expect(await screen.findByText("Saved PROJECT.md as revision 4.")).toBeInTheDocument();
+        expect(writes).toEqual([{ expected_revision: 3, content: postApprovalEdit }]);
+      }
+    },
+  );
+
+  it("keeps the switched editor's original base when pair refresh completes mid-edit", async () => {
+    const pendingPair = deferred<Response>();
+    const newerAgents = makeDocument("agents", "# Another tab's agent rules\n", 2);
+    let documentCalls = 0;
+    const writes: number[] = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET") {
+        documentCalls += 1;
+        return documentCalls === 1
+          ? Promise.resolve(jsonResponse(Object.values(initialDocuments)))
+          : pendingPair.promise;
+      }
+      if (path.includes("/document-pair-approval")) {
+        return Promise.resolve(
+          jsonResponse(makeApprovalStatus(initialDocuments.project, newerAgents)),
+        );
+      }
+      if (path.endsWith("/documents/agents") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as {
+          expected_revision: number;
+          content: string;
+        };
+        writes.push(payload.expected_revision);
+        return Promise.resolve(
+          payload.expected_revision === 1
+            ? jsonResponse({ detail: "Conflict recorded", latest: newerAgents }, 409)
+            : jsonResponse(makeDocument("agents", payload.content, 3)),
+        );
+      }
+      if (path.includes("/history?")) {
+        return Promise.resolve(
+          jsonResponse({
+            kind: "agents",
+            current_revision_number: 2,
+            revisions: [],
+            proposals: [],
+            revision_has_more: false,
+            proposal_has_more: false,
+          }),
+        );
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() => expect(documentCalls).toBe(2));
+    fireEvent.click(screen.getByRole("tab", { name: "Agent rules" }));
+    const editor = screen.getByRole("textbox", { name: "Edit AGENTS.md" });
+    fireEvent.change(editor, { target: { value: "# My agent policy\n" } });
+    pendingPair.resolve(
+      jsonResponse([initialDocuments.project, newerAgents, initialDocuments.backlog]),
+    );
+    expect(await screen.findByText("AGENTS.md · revision 2")).toBeInTheDocument();
+    expect(editor).toHaveValue("# My agent policy\n");
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(
+      await screen.findByText(/attempted text was preserved as a conflict proposal/),
+    ).toBeInTheDocument();
+    expect(writes).toEqual([1]);
+    expect(editor).toHaveValue("# My agent policy\n");
+  });
+
+  it("unlocks cursor pagination when a newer head/status reload aborts the older page", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index): TestPairApproval => ({
+      id: `approval-${index}`,
+      project_revision_id: "revision-project-1",
+      project_revision_number: 1,
+      agents_revision_id: "revision-agents-1",
+      agents_revision_number: 1,
+      actor_user_id: project.owner_user_id,
+      created_at: project.created_at,
+    }));
+    const older = deferred<Response>();
+    const retried = deferred<Response>();
+    let olderRequests = 0;
+    const status = {
+      ...makeApprovalStatus(),
+      latest_approval: firstPage[0],
+      approvals: firstPage,
+      approval_has_more: true,
+      approval_next_cursor: "after-first-page",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (path.includes("/document-pair-approval")) {
+        if (path.includes("cursor=after-first-page"))
+          return ++olderRequests === 1 ? older.promise : retried.promise;
+        return Promise.resolve(jsonResponse(status));
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    const olderButton = await screen.findByRole("button", { name: "Load earlier approvals" });
+    fireEvent.click(olderButton);
+    expect(olderRequests).toBe(1);
+    expect(olderButton).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Load earlier approvals" })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier approvals" }));
+    expect(olderRequests).toBe(2);
+    older.resolve(jsonResponse({ ...status, approvals: [{ ...firstPage[0], id: "stale" }] }));
+    retried.resolve(
+      jsonResponse({
+        ...status,
+        approvals: [firstPage[19], { ...firstPage[0], id: "older" }],
+        approval_has_more: false,
+        approval_next_cursor: null,
+      }),
+    );
+    expect(
+      await screen.findByText("Immutable pair approval history (21 shown)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("stale")).not.toBeInTheDocument();
+  });
+
+  it("does not let an older approval-history snapshot regress either current head", async () => {
+    const projectHead = makeDocument("project", "# Current project head\n", 2);
+    const firstPage = Array.from({ length: 20 }, (_, index): TestPairApproval => ({
+      id: `current-approval-${index}`,
+      project_revision_id: "project-revision-2",
+      project_revision_number: 2,
+      agents_revision_id: "agents-revision-1",
+      agents_revision_number: 1,
+      actor_user_id: project.owner_user_id,
+      created_at: project.created_at,
+    }));
+    const stalePage = deferred<Response>();
+    const currentStatus = {
+      ...makeApprovalStatus(projectHead, initialDocuments.agents),
+      latest_approval: firstPage[0],
+      approvals: firstPage,
+      approval_has_more: true,
+      approval_next_cursor: "older-than-current-head",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents")) {
+        return Promise.resolve(
+          jsonResponse([projectHead, initialDocuments.agents, initialDocuments.backlog]),
+        );
+      }
+      if (path.includes("/document-pair-approval")) {
+        return path.includes("cursor=older-than-current-head")
+          ? stalePage.promise
+          : Promise.resolve(jsonResponse(currentStatus));
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const approvalSection = screen.getByRole("region", { name: "Approve the saved document pair" });
+    const olderButton = await within(approvalSection).findByRole("button", {
+      name: "Load earlier approvals",
+    });
+    fireEvent.click(olderButton);
+    stalePage.resolve(
+      jsonResponse({
+        ...makeApprovalStatus(initialDocuments.project, initialDocuments.agents),
+        latest_approval: firstPage[0],
+        approvals: [{ ...firstPage[0], id: "older-page-row" }],
+        approval_has_more: false,
+        approval_next_cursor: null,
+      }),
+    );
+
+    expect(
+      await within(approvalSection).findByText("Immutable pair approval history (21 shown)"),
+    ).toBeInTheDocument();
+    expect(within(approvalSection).getByText("Saved revision 2")).toBeInTheDocument();
+    expect(within(approvalSection).getByText("Saved revision 1")).toBeInTheDocument();
+  });
+
+  it.each(["refresh", "history"] as const)(
+    "keeps the submitted approval baseline immutable when a later %s advances the compare target",
+    async (advanceSource) => {
+      const projectTwo = makeDocument("project", "# First newer project head\n", 2);
+      const projectThree = makeDocument("project", "# Later project head\n", 3);
+      const agentsTwo = makeDocument("agents", "# First newer agent head\n", 2);
+      let latestPair = { project: initialDocuments.project, agents: initialDocuments.agents };
+      let approvalPosts = 0;
+      let approved = false;
+      const approval = {
+        id: "approved-after-re-review",
+        project_revision_id: "project-revision-3",
+        project_revision_number: 3,
+        agents_revision_id: "agents-revision-2",
+        agents_revision_number: 2,
+        actor_user_id: project.owner_user_id,
+        created_at: "2026-09-25T12:00:00Z",
+      };
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        const method = init?.method ?? "GET";
+        if (path.endsWith("/documents") && method === "GET") {
+          return Promise.resolve(
+            jsonResponse([latestPair.project, latestPair.agents, initialDocuments.backlog]),
+          );
+        }
+        if (path.endsWith("/documents/project") && method === "GET") {
+          return Promise.resolve(jsonResponse(latestPair.project));
+        }
+        if (path.includes("/history?") && method === "GET") {
+          return Promise.resolve(
+            jsonResponse({
+              kind: "project",
+              current_revision_number: latestPair.project.revision_number,
+              revisions: [],
+              proposals: [],
+              revision_offset: 0,
+              proposal_cursor: null,
+              proposal_next_cursor: null,
+              revision_has_more: false,
+              proposal_has_more: false,
+            }),
+          );
+        }
+        if (path.includes("/document-pair-approval")) {
+          if (method === "POST") {
+            approvalPosts += 1;
+            if (approvalPosts === 1) {
+              latestPair = { project: projectTwo, agents: agentsTwo };
+              return Promise.resolve(
+                jsonResponse(
+                  {
+                    detail: "A saved document changed.",
+                    latest: latestPair,
+                    approval_status: makeApprovalStatus(projectTwo, agentsTwo),
+                  },
+                  409,
+                ),
+              );
+            }
+            approved = true;
+            return Promise.resolve(jsonResponse(approval));
+          }
+          return Promise.resolve(
+            jsonResponse({
+              ...makeApprovalStatus(latestPair.project, latestPair.agents, approved),
+              latest_approval: approved ? approval : null,
+              approvals: approved ? [approval] : [],
+            }),
+          );
+        }
+        throw new Error(`Unexpected request: ${path} ${method}`);
+      });
+      renderWorkspace(fetchMock);
+
+      fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+      await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      const approveButton = await screen.findByRole("button", {
+        name: "Approve saved PROJECT.md + AGENTS.md pair",
+      });
+      await waitFor(() => expect(approveButton).toBeEnabled());
+
+      latestPair = { project: projectTwo, agents: agentsTwo };
+      fireEvent.click(approveButton);
+      const conflict = await screen.findByRole("region", {
+        name: "Saved pair changed before approval",
+      });
+      expect(conflict).toHaveTextContent("PROJECT.md: revision 1 → revision 2");
+      expect(
+        within(conflict).getByRole("list", {
+          name: /Previously reviewed PROJECT\.md revision 1 compared with Latest PROJECT\.md revision 2/,
+        }),
+      ).toBeInTheDocument();
+      expect(approveButton).toBeDisabled();
+
+      const switcher = screen.getByRole("combobox", { name: "Compare saved document" });
+      fireEvent.change(switcher, { target: { value: "agents" } });
+      fireEvent.change(switcher, { target: { value: "project" } });
+      const reviewButton = screen.getByRole("button", {
+        name: "I reviewed both latest documents",
+      });
+      await waitFor(() => expect(reviewButton).toBeEnabled());
+      fireEvent.click(reviewButton);
+      await waitFor(() => expect(approveButton).toBeEnabled());
+
+      latestPair = { project: projectThree, agents: agentsTwo };
+      if (advanceSource === "refresh") {
+        fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "View history" }));
+      }
+      expect(await screen.findByText("PROJECT.md · revision 3")).toBeInTheDocument();
+      expect(conflict).toHaveTextContent("PROJECT.md: revision 1 → revision 3");
+      expect(
+        within(conflict).getByRole("list", {
+          name: /Previously reviewed PROJECT\.md revision 1 compared with Latest PROJECT\.md revision 3/,
+        }),
+      ).toBeInTheDocument();
+      expect(reviewButton).toBeDisabled();
+      expect(approveButton).toBeDisabled();
+
+      fireEvent.change(switcher, { target: { value: "agents" } });
+      fireEvent.change(switcher, { target: { value: "project" } });
+      await waitFor(() => expect(reviewButton).toBeEnabled());
+      fireEvent.click(reviewButton);
+      await waitFor(() => expect(approveButton).toBeEnabled());
+      fireEvent.click(approveButton);
+      await waitFor(() => expect(approveButton).toBeDisabled());
+
+      const posts = fetchMock.mock.calls.filter(
+        ([request, options]) =>
+          pathOf(request).includes("/document-pair-approval") && options?.method === "POST",
+      );
+      expect(posts).toHaveLength(2);
+      expect(JSON.parse(String(posts[0]?.[1]?.body))).toEqual({
+        expected_project_revision: 1,
+        expected_agents_revision: 1,
+      });
+      expect(JSON.parse(String(posts[1]?.[1]?.body))).toEqual({
+        expected_project_revision: 3,
+        expected_agents_revision: 2,
+      });
+      expect(await screen.findByText(/Approved PROJECT\.md revision 3/)).toBeInTheDocument();
+    },
+  );
+
+  it("ignores a delayed pair refresh from the previous project after switching workspaces", async () => {
+    const pendingProjectARefresh = deferred<Response>();
+    const projectAHead = makeDocument("project", "# First private project sentinel\n", 2);
+    const projectBDocument = {
+      ...makeDocument("project", "# Second private project only\n", 1),
+      id: "00000000-0000-4000-8000-000000000099",
+    };
+    let projectADocumentRequests = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents")) {
+        if (path.includes(project.id)) {
+          projectADocumentRequests += 1;
+          return projectADocumentRequests === 1
+            ? Promise.resolve(jsonResponse(Object.values(initialDocuments)))
+            : pendingProjectARefresh.promise;
+        }
+        return Promise.resolve(
+          jsonResponse([projectBDocument, initialDocuments.agents, initialDocuments.backlog]),
+        );
+      }
+      if (path.includes("/document-pair-approval")) {
+        const isProjectA = path.includes(project.id);
+        return Promise.resolve(
+          jsonResponse(
+            makeApprovalStatus(
+              isProjectA ? initialDocuments.project : projectBDocument,
+              initialDocuments.agents,
+            ),
+          ),
+        );
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock, { projects: [project, secondProject] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() => expect(projectADocumentRequests).toBe(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Second private plan" }));
+    const secondEditor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    expect(secondEditor).toHaveValue(projectBDocument.content);
+    pendingProjectARefresh.resolve(
+      jsonResponse([projectAHead, initialDocuments.agents, initialDocuments.backlog]),
+    );
+
+    await waitFor(() => expect(secondEditor).toHaveValue(projectBDocument.content));
+    expect(screen.getByText("PROJECT.md · revision 1")).toBeInTheDocument();
+    expect(screen.queryByText("# First private project sentinel")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open project Second private plan" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("does not present a delayed successful approval as current after history advances a head", async () => {
+    const pendingApproval = deferred<Response>();
+    const pendingHistory = deferred<Response>();
+    const newerProject = makeDocument("project", "# Saved while approval was in flight\n", 2);
+    let currentProject = initialDocuments.project;
+    let approvalRecorded = false;
+    const savedApproval = {
+      id: "approved-original-tuple",
+      project_revision_id: "project-revision-1",
+      project_revision_number: 1,
+      agents_revision_id: "agents-revision-1",
+      agents_revision_number: 1,
+      actor_user_id: project.owner_user_id,
+      created_at: "2026-09-25T12:00:00Z",
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse([currentProject, initialDocuments.agents, initialDocuments.backlog]),
+        );
+      }
+      if (path.endsWith("/documents/project") && method === "GET") {
+        return Promise.resolve(jsonResponse(newerProject));
+      }
+      if (path.includes("/documents/project/history?") && method === "GET") {
+        return pendingHistory.promise;
+      }
+      if (path.includes("/document-pair-approval")) {
+        if (method === "POST") return pendingApproval.promise;
+        return Promise.resolve(
+          jsonResponse({
+            ...makeApprovalStatus(currentProject, initialDocuments.agents, false),
+            latest_approval: approvalRecorded ? savedApproval : null,
+            approvals: approvalRecorded ? [savedApproval] : [],
+          }),
+        );
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const approveButton = await screen.findByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    await waitFor(() => expect(approveButton).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          pathOf(input).includes("/documents/project/history?"),
+        ),
+      ).toBe(true),
+    );
+    fireEvent.click(approveButton);
+
+    currentProject = newerProject;
+    pendingHistory.resolve(
+      jsonResponse({
+        kind: "project",
+        current_revision_number: 2,
+        revisions: [],
+        proposals: [],
+        revision_offset: 0,
+        proposal_cursor: null,
+        proposal_next_cursor: null,
+        revision_has_more: false,
+        proposal_has_more: false,
+      }),
+    );
+    expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+    expect(editor).toHaveValue(newerProject.content);
+
+    approvalRecorded = true;
+    pendingApproval.resolve(jsonResponse(savedApproval));
+    const conflict = await screen.findByRole("region", {
+      name: "Saved pair changed before approval",
+    });
+    expect(conflict).toHaveTextContent("PROJECT.md: revision 1 → revision 2");
+    expect(
+      within(conflict).getByRole("list", {
+        name: /Previously reviewed PROJECT\.md revision 1 compared with Latest PROJECT\.md revision 2/,
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(approveButton).toBeDisabled());
+    expect(await screen.findByText("Re-review required")).toBeInTheDocument();
+    expect(editor).toHaveValue(newerProject.content);
+  });
+
+  it("preserves typing and focus on a stale approval and requires review of both latest files", async () => {
+    const pendingApproval = deferred<Response>();
+    let currentDocuments: Record<DocumentKind, TestDocument> = { ...initialDocuments };
+    let status = makeApprovalStatus(currentDocuments.project, currentDocuments.agents);
+    const latestPair = {
+      project: makeDocument("project", "# Latest saved specification\nNew project boundary.\n", 2),
+      agents: makeDocument("agents", "# Latest saved agent rules\nNew execution limits.\n", 2),
+    };
+    const stalePayload = {
+      detail: "A saved document changed. Review the latest pair.",
+      latest: latestPair,
+      approval_status: makeApprovalStatus(latestPair.project, latestPair.agents),
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET") {
+        return Promise.resolve(jsonResponse(Object.values(currentDocuments)));
+      }
+      if (path.includes("/document-pair-approval")) {
+        if (method === "POST") return pendingApproval.promise;
+        return Promise.resolve(jsonResponse(status));
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const approveButton = await screen.findByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    editor.focus();
+    fireEvent.click(approveButton);
+    await waitFor(() => expect(approveButton).toBeDisabled());
+    fireEvent.change(editor, { target: { value: "# My unsaved edit remains here\n" } });
+    expect(document.activeElement).toBe(editor);
+
+    currentDocuments = {
+      ...currentDocuments,
+      project: latestPair.project,
+      agents: latestPair.agents,
+    };
+    status = makeApprovalStatus(latestPair.project, latestPair.agents);
+    pendingApproval.resolve(jsonResponse(stalePayload, 409));
+
+    expect(
+      await screen.findByRole("heading", { name: "Saved pair changed before approval" }),
+    ).toBeInTheDocument();
+    expect(editor).toHaveValue("# My unsaved edit remains here\n");
+    expect(document.activeElement).toBe(editor);
+    expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+    const reviewButton = screen.getByRole("button", {
+      name: "I reviewed both latest documents",
+    });
+    expect(reviewButton).toBeDisabled();
+
+    const switcher = screen.getByRole("combobox", { name: "Compare saved document" });
+    fireEvent.change(switcher, { target: { value: "agents" } });
+    expect(reviewButton).toBeDisabled();
+    expect(
+      screen.getByRole("list", {
+        name: /Latest AGENTS.md revision 2/,
+      }),
+    ).toHaveTextContent("Added line: # Latest saved agent rules");
+    expect(reviewButton).toBeDisabled();
+    fireEvent.change(switcher, { target: { value: "project" } });
+    await waitFor(() => expect(reviewButton).toBeEnabled());
+    fireEvent.click(reviewButton);
+    expect(screen.getByText(/Current pair reviewed/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).toBeDisabled();
+    expect(editor).toHaveValue("# My unsaved edit remains here\n");
+  });
+
+  it("requires reviewing both current heads after saving PROJECT following a stale AGENTS change", async () => {
+    const projectHead = makeDocument("project", "# Current project\n", 2);
+    const agentsHead = makeDocument("agents", "# Current agent rules\n", 2);
+    const staleAgents = makeDocument("agents", "# New agent rules from another tab\n", 3);
+    let currentDocuments: Record<DocumentKind, TestDocument> = {
+      ...initialDocuments,
+      project: projectHead,
+      agents: agentsHead,
+    };
+    let latestPair = { project: projectHead, agents: agentsHead };
+    let status = makeApprovalStatus(projectHead, agentsHead);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents") && method === "GET") {
+        return Promise.resolve(jsonResponse(Object.values(currentDocuments)));
+      }
+      if (path.endsWith("/documents/project") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as { content: string };
+        const saved = makeDocument(
+          "project",
+          payload.content,
+          currentDocuments.project.revision_number + 1,
+        );
+        currentDocuments = { ...currentDocuments, project: saved };
+        latestPair = { project: saved, agents: currentDocuments.agents };
+        status = makeApprovalStatus(saved, currentDocuments.agents);
+        return Promise.resolve(jsonResponse(saved));
+      }
+      if (path.includes("/document-pair-approval")) {
+        if (method === "POST") {
+          currentDocuments = { ...currentDocuments, agents: staleAgents };
+          latestPair = { project: currentDocuments.project, agents: staleAgents };
+          status = makeApprovalStatus(latestPair.project, latestPair.agents);
+          return Promise.resolve(
+            jsonResponse({ detail: "A saved document changed.", latest: latestPair }, 409),
+          );
+        }
+        return Promise.resolve(jsonResponse(status));
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const approveButton = await screen.findByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    fireEvent.click(approveButton);
+    expect(
+      await screen.findByRole("heading", { name: "Saved pair changed before approval" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(editor, { target: { value: "# Project saved after agent change\n" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Saved PROJECT.md as revision 3.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("PROJECT.md · revision 3")).toBeInTheDocument());
+    expect(approveButton).toBeDisabled();
+    expect(screen.getByText(/Compare both latest documents/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "I reviewed both latest documents" })).toBeDisabled();
+
+    const reloadButton = screen.getByRole("button", { name: "Reload saved pair and status" });
+    await waitFor(() => expect(reloadButton).toBeEnabled());
+    fireEvent.click(reloadButton);
+    expect(
+      await screen.findByRole("list", { name: /Latest PROJECT\.md revision 3/ }),
+    ).toBeInTheDocument();
+    const reviewButton = screen.getByRole("button", {
+      name: "I reviewed both latest documents",
+    });
+    expect(reviewButton).toBeDisabled();
+
+    const switcher = screen.getByRole("combobox", { name: "Compare saved document" });
+    fireEvent.change(switcher, { target: { value: "agents" } });
+    fireEvent.change(switcher, { target: { value: "project" } });
+    await waitFor(() => expect(reviewButton).toBeEnabled());
+    fireEvent.click(reviewButton);
+    expect(screen.getByText(/Current pair reviewed/)).toBeInTheDocument();
+    await waitFor(() => expect(approveButton).toBeEnabled());
+  });
+
+  it("keeps pair-conflict review after BACKLOG save/reload and resets if the tuple moves", async () => {
+    const latestProject = makeDocument("project", "# Latest project\n", 2);
+    const latestAgents = makeDocument("agents", "# Latest rules\n", 2);
+    const newerAgents = makeDocument("agents", "# Newer rules\n", 3);
+    let currentPair = { project: latestProject, agents: latestAgents };
+    let documents = { ...initialDocuments };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(documents)));
+      if (path.endsWith("/documents/backlog") && init?.method === "PUT") {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        documents = { ...documents, backlog: makeDocument("backlog", payload.content, 2) };
+        return Promise.resolve(jsonResponse(documents.backlog));
+      }
+      if (path.includes("/document-pair-approval")) {
+        if (init?.method === "POST")
+          return Promise.resolve(jsonResponse({ detail: "Newer pair", latest: currentPair }, 409));
+        return Promise.resolve(
+          jsonResponse(makeApprovalStatus(documents.project, documents.agents)),
+        );
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Saved pair changed before approval" }),
+    ).toBeInTheDocument();
+    documents = { ...documents, ...currentPair };
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+      ).toBeDisabled(),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Saved pair changed before approval" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Backlog" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit BACKLOG.md" }), {
+      target: { value: "# Separate backlog update\n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Saved BACKLOG.md as revision 2.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Saved pair changed before approval" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "I reviewed both latest documents" })).toBeDisabled();
+    let reviewButton = screen.getByRole("button", { name: "I reviewed both latest documents" });
+    expect(reviewButton).toBeDisabled();
+    fireEvent.change(screen.getByRole("combobox", { name: "Compare saved document" }), {
+      target: { value: "agents" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Compare saved document" }), {
+      target: { value: "project" },
+    });
+    fireEvent.click(reviewButton);
+    expect(
+      screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).toBeEnabled();
+
+    currentPair = { project: latestProject, agents: newerAgents };
+    documents = { ...documents, ...currentPair };
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+    await waitFor(() => expect(screen.getByText("Saved revision 3")).toBeInTheDocument());
+    expect(
+      screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).toBeDisabled();
+    reviewButton = screen.getByRole("button", { name: "I reviewed both latest documents" });
+    expect(reviewButton).toBeDisabled();
+    expect(
+      screen.getByRole("region", { name: "Saved pair changed before approval" }),
+    ).toHaveTextContent("AGENTS.md: revision 1 → revision 3");
+  });
 });

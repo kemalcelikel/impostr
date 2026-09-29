@@ -48,8 +48,6 @@ from urllib.parse import urlsplit
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_BOOTSTRAP_DIAGNOSTIC_BYTES = 16 * 1024
 MAX_MIGRATION_DIAGNOSTIC_BYTES = 2 * 1024
-EXPECTED_APP_MIGRATION = "20260925_0002"
-EXPECTED_APP_REVISIONS = ("20260925_0001", EXPECTED_APP_MIGRATION)
 CANDIDATE_BASE_COMMIT = "2d71c1b64cb1398c9e29b29141a0891ddc7b90f6"
 CANDIDATE_APP_MIGRATION = "20260925_0004"
 CANDIDATE_APP_REVISIONS = (
@@ -57,6 +55,39 @@ CANDIDATE_APP_REVISIONS = (
     "20260925_0002",
     "20260925_0003",
     CANDIDATE_APP_MIGRATION,
+)
+EXPECTED_APP_MIGRATION = CANDIDATE_APP_MIGRATION
+EXPECTED_APP_REVISIONS = CANDIDATE_APP_REVISIONS
+IMP013_CANDIDATE_BASE_COMMIT = "60e9480de5ac7a377f4eff79f28814f0c488aeb4"
+IMP013_CANDIDATE_APP_MIGRATION = "20260929_0005"
+IMP013_CANDIDATE_APP_REVISIONS = (
+    *CANDIDATE_APP_REVISIONS,
+    IMP013_CANDIDATE_APP_MIGRATION,
+)
+COMMITTED_APP_MIGRATION_FILES_0004 = (
+    (
+        "20260925_0001_initial_baseline.py",
+        "a071d49811ea5f9bf2707555b9dd0ed3aa2d86c81c6026bcc6463651a467aa07",
+    ),
+    (
+        "20260925_0002_identity_and_project_metadata.py",
+        "6e5ee7333062c032fe963ee70d0543571f76c3ebbb8435db3883198f3913a747",
+    ),
+    (
+        "20260925_0003_project_document_revisions.py",
+        "91d51e82eccaaca1b03e2b3ea56b4374008a1f384f8ee92684f9ef35592037a8",
+    ),
+    (
+        "20260925_0004_bounded_project_name_keys.py",
+        "d8f4703ccff3d650a654a81c6bd36025fcf3063ae7e169837672e0b0504dcd2a",
+    ),
+)
+COMMITTED_APP_MIGRATION_FILES_0005 = (
+    *COMMITTED_APP_MIGRATION_FILES_0004,
+    (
+        "20260929_0005_document_pair_approvals.py",
+        "4d0e1cadf8a768f61fc8c1b3501ef640aa674d651a5a8395c0aa5fd92af2d358",
+    ),
 )
 CANDIDATE_PREVIEW_SCHEMA_VERSION = 1
 MAX_CANDIDATE_FILE_BYTES = 512 * 1024
@@ -69,6 +100,29 @@ LOCAL_DOCKER_SOCKET = "/var/run/docker.sock"
 ADMIN_PASSWORD_PROMPTS = (
     "New administrator password:",
     "Confirm new administrator password:",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CommittedMigrationProfile:
+    name: str
+    commit: str | None
+    revision_files: tuple[tuple[str, str], ...]
+
+
+COMMITTED_APP_MIGRATION_PROFILES = (
+    CommittedMigrationProfile(
+        name="imp004",
+        commit=IMP013_CANDIDATE_BASE_COMMIT,
+        revision_files=COMMITTED_APP_MIGRATION_FILES_0004,
+    ),
+    # The eventual commit hash is not known yet; exact hashes for the full
+    # 0001-0005 revision-file set are the committed-profile pin for that release.
+    CommittedMigrationProfile(
+        name="imp013",
+        commit=None,
+        revision_files=COMMITTED_APP_MIGRATION_FILES_0005,
+    ),
 )
 SAFE_BOOTSTRAP_CLI = """\
 import re
@@ -121,6 +175,10 @@ def _fixture_safe_bootstrap_admin(engine, username, password):
                     "rate_limit_buckets",
                     "audit_events",
                     "bootstrap_state",
+                    "project_documents",
+                    "project_document_revisions",
+                    "document_conflict_proposals",
+                    "project_document_pair_approvals",
                 )
                 with engine.connect() as connection:
                     present_tables = set(inspect(connection).get_table_names())
@@ -137,6 +195,9 @@ def _fixture_safe_bootstrap_admin(engine, username, password):
                 migration = {
                     "20260925_0001": "0001",
                     "20260925_0002": "0002",
+                    "20260925_0003": "0003",
+                    "20260925_0004": "0004",
+                    "20260929_0005": "0005",
                 }.get(version, "empty" if version is None else "other")
             except Exception:
                 schema = "unavailable"
@@ -160,6 +221,7 @@ APP_SNAPSHOT_PATHS = (
 )
 APP_SNAPSHOT_FILES = frozenset(
     {
+        ".dockerignore",
         "compose.yaml",
         "PROJECT.md.example",
         "AGENTS.md.example",
@@ -197,6 +259,114 @@ CANDIDATE_NONRUNTIME_TEST_CHANGES = (
     ("web/src/App.test.tsx", "modified"),
     ("web/src/ProjectWorkspace.test.tsx", "added"),
 )
+IMP013_CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
+    ("api/app/document_pair_approvals.py", "added"),
+    ("api/app/main.py", "modified"),
+    ("api/app/models.py", "modified"),
+    ("api/migrations/versions/20260929_0005_document_pair_approvals.py", "added"),
+    ("web/src/ProjectWorkspace.tsx", "modified"),
+)
+IMP013_CANDIDATE_NONRUNTIME_TEST_CHANGES = (
+    ("api/tests/test_document_pair_approval_postgres.py", "added"),
+    ("api/tests/test_document_pair_approvals.py", "added"),
+    ("api/tests/test_migrations.py", "modified"),
+    ("api/tests/test_postgres_integration.py", "modified"),
+    ("web/src/ProjectWorkspace.test.tsx", "modified"),
+)
+# These are the two host-side fixture files being adapted for this preview. They
+# are fingerprinted for preflight/launch integrity but never overlaid into the app.
+IMP013_CANDIDATE_HARNESS_CHANGES = (
+    ("scripts/local_browser_fixture.py", "modified"),
+    ("scripts/test_local_browser_fixture.py", "modified"),
+)
+IMP013_CANDIDATE_TEST_LITERAL_DIGESTS = (
+    # (path, variable name, SHA-256 of the one synthetic fixture literal)
+    (
+        "api/tests/test_document_pair_approval_postgres.py",
+        "password",
+        "a16db5b2f34a69607158403f2719d60a599ba843a793af79d21bb9ee313a1bbc",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "password",
+        "4f87006ce7b78efcba4a92b7c8cdee5ab925677decaba504e153b36d95731737",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "password",
+        "b89d4e1381270db7243914e277831796d8fa83d45933692bbef74d8faef4f07b",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "password",
+        "173599a078a40ce29fcc35bda5ead552b84090ddbc498661a1db1280755c3fcc",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "password",
+        "768de9721540ddb4e4df74c9546189420084529cc04ac17732998bf2b0f78571",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "password",
+        "7c943783d484215ebe18bd4b1382aa3de442428b15bc2f5307b1f0be0703475b",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "initial_password",
+        "253e94753df61f36417d2b7d4a63203b81c1affbc57aa55758529fc25e311a17",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "recovery_password",
+        "37ebdf6dc3cc7d18ba43f36b7319f5c34753c3a4c888b8fcecf3767fe52a7d91",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "admin_password",
+        "8a47259a90860ddc48a971b6f2d633a225c45b3233dcca09d3285e733867d4f6",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "old_password",
+        "86258237853881bc74deb0965ec406e111c71b9338417d73fdc4629c946a790a",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "new_password",
+        "60e73a4f125c6e035b987a0652b9cc3b17a154124fd0a1906ce1629d8829983b",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "verified_old_password",
+        "b4ecc6b92f57fec2a962b2a9fb86a57703265278b1a7be21b883184e6f696559",
+    ),
+    (
+        "api/tests/test_postgres_integration.py",
+        "original_verify_password",
+        "33268fc3ee1b30819e6c28328cfcce86f712af0abf9302739e953b11d9aa8219",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "e4eada162d4496107d413f4af9c90e0d53512bf874548c68abddc947edfabd23",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "c1497906d2da8b30fc3e4e89cae4537a8a8c01fe46fadf5d7a3a60eb084f7acf",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "41b10626ff104fc15c3c463d0c75cdbb952000f8a69e703f4b5e5851d24032cf",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "d9819f97c00543ed0a6ea4c55d883b9bfd888f0cfc230a6cdcc62aca3082ea09",
+    ),
+)
 CANDIDATE_STATUS_PATHS = (
     ".dockerignore",
     "compose.yaml",
@@ -207,6 +377,9 @@ CANDIDATE_STATUS_PATHS = (
     "AGENTS.md.example",
     "BACKLOG.md.example",
 )
+# Watch all app/build inputs plus the host fixture directory. Live planning files,
+# runner logs, and other paths outside those scopes are neither read nor archived.
+IMP013_CANDIDATE_STATUS_PATHS = (*CANDIDATE_STATUS_PATHS, "scripts")
 CANDIDATE_DOCKERIGNORE_RULES = (
     "**",
     "!api/",
@@ -303,12 +476,33 @@ class CandidatePreviewPolicy:
     nonruntime_test_changes: tuple[tuple[str, str], ...]
     max_file_bytes: int = MAX_CANDIDATE_FILE_BYTES
     max_total_bytes: int = MAX_CANDIDATE_TOTAL_BYTES
+    fingerprint_test_changes: bool = False
+    strict_scope: bool = False
+    status_paths: tuple[str, ...] | None = None
+    allowed_input_modes: frozenset[int] = frozenset({0o644, 0o664})
+    harness_changes: tuple[tuple[str, str], ...] = ()
+    fingerprint_harness_changes: bool = False
+    allowed_test_literal_digests: tuple[tuple[str, str, str], ...] = ()
+    committed_support_paths: tuple[str, ...] = ()
 
 
 CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
     base_commit=CANDIDATE_BASE_COMMIT,
     reviewed_inputs=CANDIDATE_REVIEWED_RUNTIME_INPUTS,
     nonruntime_test_changes=CANDIDATE_NONRUNTIME_TEST_CHANGES,
+)
+IMP013_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=IMP013_CANDIDATE_BASE_COMMIT,
+    reviewed_inputs=IMP013_CANDIDATE_REVIEWED_RUNTIME_INPUTS,
+    nonruntime_test_changes=IMP013_CANDIDATE_NONRUNTIME_TEST_CHANGES,
+    fingerprint_test_changes=True,
+    strict_scope=True,
+    status_paths=IMP013_CANDIDATE_STATUS_PATHS,
+    allowed_input_modes=frozenset({0o644, 0o664}),
+    harness_changes=IMP013_CANDIDATE_HARNESS_CHANGES,
+    fingerprint_harness_changes=True,
+    allowed_test_literal_digests=IMP013_CANDIDATE_TEST_LITERAL_DIGESTS,
+    committed_support_paths=(".dockerignore",),
 )
 
 
@@ -323,11 +517,13 @@ class CandidateInputRecord:
 
 @dataclass(slots=True, repr=False)
 class CandidateSnapshot:
-    """A pinned candidate overlay and its content-only SHA-256 fingerprint."""
+    """A pinned candidate input set and its content-only SHA-256 fingerprint."""
 
     base_commit: str
     fingerprint: str
     records: tuple[CandidateInputRecord, ...]
+    runtime_paths: tuple[str, ...] = ()
+    support_file_digests: tuple[tuple[str, str], ...] = ()
     prepared_compose_sha256: str | None = None
 
 
@@ -773,7 +969,7 @@ def classify_bootstrap_diagnostic(output: bytes) -> str:
         rb"(integrity|programming|operational|interface|data|database|other) "
         rb"sqlstate=([0-9a-z]{5}|unknown) "
         rb"schema=(missing-[a-z_]+|expected-present|unavailable|not-checked) "
-        rb"migration=(0001|0002|empty|other|unavailable|not-checked)",
+        rb"migration=(0001|0002|0003|0004|0005|empty|other|unavailable|not-checked)",
         sample,
     )
     if database_match is not None:
@@ -1083,12 +1279,83 @@ def _candidate_migration_diagnostic_program() -> str:
 CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON = _candidate_migration_diagnostic_program()
 
 
+def _imp013_candidate_migration_diagnostic_program() -> str:
+    program = CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
+    replacements = (
+        (
+            '        "revision_0004": "unavailable",\n'
+            '    },\n'
+            '    "discovered_revisions": [],',
+            '        "revision_0004": "unavailable",\n'
+            '        "revision_0005": "unavailable",\n'
+            '    },\n'
+            '    "discovered_revisions": [],',
+        ),
+        (
+            '    "document_conflict_proposals": "unavailable",\n'
+            '}',
+            '    "document_conflict_proposals": "unavailable",\n'
+            '    "project_document_pair_approvals": "unavailable",\n'
+            '}',
+        ),
+        (
+            '        "revision_0004": file_status(\n'
+            '            "/app/migrations/versions/20260925_0004_bounded_project_name_keys.py"\n'
+            '        ),\n'
+            '    }',
+            '        "revision_0004": file_status(\n'
+            '            "/app/migrations/versions/20260925_0004_bounded_project_name_keys.py"\n'
+            '        ),\n'
+            '        "revision_0005": file_status(\n'
+            '            "/app/migrations/versions/20260929_0005_document_pair_approvals.py"\n'
+            '        ),\n'
+            '    }',
+        ),
+        (
+            'expected_revisions = {"20260925_0001", "20260925_0002", '
+            '"20260925_0003", "20260925_0004"}',
+            'expected_revisions = {"20260925_0001", "20260925_0002", '
+            '"20260925_0003", "20260925_0004", "20260929_0005"}',
+        ),
+        (
+            '            result["document_conflict_proposals"] = (\n'
+            '                "yes" if "document_conflict_proposals" in tables else "no"\n'
+            '            )\n'
+            '            if "projects" in tables:',
+            '            result["document_conflict_proposals"] = (\n'
+            '                "yes" if "document_conflict_proposals" in tables else "no"\n'
+            '            )\n'
+            '            result["project_document_pair_approvals"] = (\n'
+            '                "yes" if "project_document_pair_approvals" in tables else "no"\n'
+            '            )\n'
+            '            if "projects" in tables:',
+        ),
+        (
+            '                elif current_revisions == ["20260925_0004"]:',
+            '                elif current_revisions == ["20260929_0005"]:',
+        ),
+    )
+    for before, after in replacements:
+        if program.count(before) != 1:
+            raise RuntimeError("The IMP-013 migration diagnostic template changed unexpectedly.")
+        program = program.replace(before, after, 1)
+    return program
+
+
+IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON = (
+    _imp013_candidate_migration_diagnostic_program()
+)
+
+
 def parse_migration_diagnostic(
     output: str,
     *,
     candidate: bool = False,
+    imp013_candidate: bool = False,
 ) -> dict[str, Any] | None:
     """Validate bounded diagnostic JSON and retain only allowlisted evidence."""
+    if candidate and imp013_candidate:
+        return None
     try:
         maximum_bytes = (
             MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES
@@ -1131,8 +1398,10 @@ def parse_migration_diagnostic(
         "project_document_revisions",
         "document_conflict_proposals",
     }
-    if candidate:
+    if candidate or imp013_candidate:
         expected_keys.update(candidate_schema_fields)
+    if imp013_candidate:
+        expected_keys.add("project_document_pair_approvals")
     if not isinstance(raw, dict) or set(raw) != expected_keys:
         return None
 
@@ -1155,7 +1424,7 @@ def parse_migration_diagnostic(
         "current": {"expected", "empty", "table-absent", "other", "unavailable"},
         "users": {"yes", "no", "unavailable"},
     }
-    if candidate:
+    if candidate or imp013_candidate:
         status_fields.update(
             {
                 "projects_name_key": {"yes", "no", "unavailable"},
@@ -1164,6 +1433,8 @@ def parse_migration_diagnostic(
                 "document_conflict_proposals": {"yes", "no", "unavailable"},
             }
         )
+    if imp013_candidate:
+        status_fields["project_document_pair_approvals"] = {"yes", "no", "unavailable"}
     if any(
         not isinstance(raw[field], str) or raw[field] not in allowed
         for field, allowed in status_fields.items()
@@ -1179,8 +1450,10 @@ def parse_migration_diagnostic(
 
     image_files = raw["image_files"]
     expected_file_keys = {"alembic_ini", "env_py", "revision_0001", "revision_0002"}
-    if candidate:
+    if candidate or imp013_candidate:
         expected_file_keys.update({"revision_0003", "revision_0004"})
+    if imp013_candidate:
+        expected_file_keys.add("revision_0005")
     if (
         not isinstance(image_files, dict)
         or set(image_files) != expected_file_keys
@@ -1196,7 +1469,13 @@ def parse_migration_diagnostic(
     def allowed_revisions(value: Any) -> list[str] | None:
         if not isinstance(value, list) or len(value) > 8:
             return None
-        expected_revisions = CANDIDATE_APP_REVISIONS if candidate else EXPECTED_APP_REVISIONS
+        expected_revisions = (
+            IMP013_CANDIDATE_APP_REVISIONS
+            if imp013_candidate
+            else CANDIDATE_APP_REVISIONS
+            if candidate
+            else EXPECTED_APP_REVISIONS
+        )
         if any(
             not isinstance(revision, str)
             or revision not in {*expected_revisions, "other"}
@@ -1282,6 +1561,7 @@ def format_migration_diagnostic(
     diagnostic: Mapping[str, Any],
     *,
     candidate: bool = False,
+    imp013_candidate: bool = False,
 ) -> str:
     """Render only fixed statuses, known revision IDs, and expected image paths."""
     script_location = (
@@ -1299,8 +1579,10 @@ def format_migration_diagnostic(
         ("0001", "revision_0001"),
         ("0002", "revision_0002"),
     )
-    if candidate:
+    if candidate or imp013_candidate:
         file_labels += (("0003", "revision_0003"), ("0004", "revision_0004"))
+    if imp013_candidate:
+        file_labels += (("0005", "revision_0005"),)
     files = ",".join(
         f"{label}:{diagnostic['image_files'][key]}" for label, key in file_labels
     )
@@ -1326,7 +1608,7 @@ def format_migration_diagnostic(
         f"alembic_version_table={diagnostic['alembic_version_table']} "
         f"catalog_current={diagnostic['current']} users={diagnostic['users']}"
     )
-    if candidate:
+    if candidate or imp013_candidate:
         summary += (
             " candidate_schema="
             f"projects_name_key:{diagnostic['projects_name_key']},"
@@ -1336,6 +1618,11 @@ def format_migration_diagnostic(
             "document_conflict_proposals:"
             f"{diagnostic['document_conflict_proposals']}"
         )
+    if imp013_candidate:
+        summary += (
+            " project_document_pair_approvals="
+            f"{diagnostic['project_document_pair_approvals']}"
+        )
     return summary
 
 
@@ -1343,10 +1630,25 @@ def migration_diagnostic_is_complete(
     diagnostic: Mapping[str, Any],
     *,
     candidate: bool = False,
+    imp013_candidate: bool = False,
 ) -> bool:
     """Require the committed IMP-003 image, head, and schema before auth setup."""
-    expected_revisions = CANDIDATE_APP_REVISIONS if candidate else EXPECTED_APP_REVISIONS
-    expected_head = CANDIDATE_APP_MIGRATION if candidate else EXPECTED_APP_MIGRATION
+    if candidate and imp013_candidate:
+        return False
+    expected_revisions = (
+        IMP013_CANDIDATE_APP_REVISIONS
+        if imp013_candidate
+        else CANDIDATE_APP_REVISIONS
+        if candidate
+        else EXPECTED_APP_REVISIONS
+    )
+    expected_head = (
+        IMP013_CANDIDATE_APP_MIGRATION
+        if imp013_candidate
+        else CANDIDATE_APP_MIGRATION
+        if candidate
+        else EXPECTED_APP_MIGRATION
+    )
     complete = (
         diagnostic["probe_stage"] == "complete"
         and diagnostic["discovery_status"] == "ok"
@@ -1369,8 +1671,8 @@ def migration_diagnostic_is_complete(
         and diagnostic["current"] == "expected"
         and diagnostic["users"] == "yes"
     )
-    if candidate:
-        return complete and all(
+    if candidate or imp013_candidate:
+        complete = complete and all(
             diagnostic[field] == "yes"
             for field in (
                 "projects_name_key",
@@ -1379,6 +1681,8 @@ def migration_diagnostic_is_complete(
                 "document_conflict_proposals",
             )
         )
+    if imp013_candidate:
+        return complete and diagnostic["project_document_pair_approvals"] == "yes"
     return complete
 
 
@@ -1510,20 +1814,21 @@ def _candidate_status(
     repository_root: Path,
     *,
     private_home: Path,
+    status_paths: Sequence[str] = CANDIDATE_STATUS_PATHS,
 ) -> dict[str, str]:
     try:
+        command = [
+            "git",
+            "--no-optional-locks",
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+        ]
+        command.extend(["--", *status_paths])
         completed = subprocess.run(
-            [
-                "git",
-                "--no-optional-locks",
-                "status",
-                "--porcelain=v1",
-                "-z",
-                "--untracked-files=all",
-                "--no-renames",
-                "--",
-                *CANDIDATE_STATUS_PATHS,
-            ],
+            command,
             cwd=repository_root,
             env=_git_environment(private_home),
             stdin=subprocess.DEVNULL,
@@ -1655,6 +1960,61 @@ def _read_candidate_file(root: Path, relative_path: str, *, maximum_bytes: int) 
     return content
 
 
+def select_committed_app_migration_profile(
+    source_dir: Path,
+    commit: str,
+    *,
+    profiles: Sequence[CommittedMigrationProfile] = COMMITTED_APP_MIGRATION_PROFILES,
+) -> str:
+    """Select only a known committed migration tree by its pinned revision bytes."""
+    if len(commit) not in {40, 64} or any(
+        character not in "0123456789abcdef" for character in commit
+    ):
+        raise FixtureError("The committed app migration revision is invalid.")
+    revisions_dir = source_dir / "api" / "migrations" / "versions"
+    try:
+        revision_files = tuple(
+            sorted(
+                path.name
+                for path in revisions_dir.iterdir()
+                if path.suffix == ".py"
+            )
+        )
+    except OSError:
+        raise FixtureError("The committed app migration directory is unavailable.") from None
+
+    pinned_profiles = tuple(profile for profile in profiles if profile.commit == commit)
+    candidates = pinned_profiles or tuple(
+        profile for profile in profiles if profile.commit is None
+    )
+    for profile in candidates:
+        if profile.name not in {"imp004", "imp013"}:
+            continue
+        expected = dict(profile.revision_files)
+        if (
+            len(expected) != len(profile.revision_files)
+            or revision_files != tuple(sorted(expected))
+        ):
+            continue
+        matches = True
+        for filename, expected_digest in profile.revision_files:
+            try:
+                content = _read_candidate_file(
+                    source_dir,
+                    f"api/migrations/versions/{filename}",
+                    maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+                )
+            except FixtureError:
+                matches = False
+                break
+            if hashlib.sha256(content).hexdigest() != expected_digest:
+                matches = False
+                break
+        if matches:
+            return profile.name
+    raise FixtureError("The committed app migration tree is not a supported pinned profile.")
+
+
 _CANDIDATE_SECRET_ASSIGNMENT = re.compile(
     r"(?im)^\s*(?:export\s+)?"
     r"(?P<name>[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY))"
@@ -1665,6 +2025,30 @@ _CANDIDATE_TOKEN_VALUE = re.compile(
     rb"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|"
     rb"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{24,})\b)"
 )
+# The IMP-013 API/UI tests use synthetic local values under these fixture labels.
+# This narrow exception is only used for digest-pinned, nonruntime test inputs.
+def _reject_candidate_secret_assignments(
+    path: str,
+    text_content: str,
+    *,
+    allowed_literal_digests: frozenset[tuple[str, str, str]] = frozenset(),
+) -> None:
+    for match in _CANDIDATE_SECRET_ASSIGNMENT.finditer(text_content):
+        value = match.group("value").strip().strip("\"'")
+        is_yaml_assignment = PurePosixPath(path).suffix.lower() in {".yaml", ".yml"}
+        is_quoted_literal = match.group("value").lstrip().startswith(("\"", "'", "`"))
+        if (
+            value
+            and not (value.startswith("${") and value.endswith("}"))
+            and (is_yaml_assignment or is_quoted_literal)
+        ):
+            literal_digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+            if (path, match.group("name").casefold(), literal_digest) in allowed_literal_digests:
+                continue
+            raise FixtureError(
+                f"Candidate input {path} has a literal secret assignment "
+                f"({match.group('name')})."
+            )
 
 
 def _reject_candidate_secrets(path: str, content: bytes) -> None:
@@ -1676,19 +2060,52 @@ def _reject_candidate_secrets(path: str, content: bytes) -> None:
         text_content = content.decode("utf-8", "strict")
     except UnicodeDecodeError:
         raise FixtureError("Candidate runtime inputs must be bounded UTF-8 text.") from None
-    for match in _CANDIDATE_SECRET_ASSIGNMENT.finditer(text_content):
-        value = match.group("value").strip().strip("\"'")
-        is_yaml_assignment = PurePosixPath(path).suffix.lower() in {".yaml", ".yml"}
-        is_quoted_literal = match.group("value").lstrip().startswith(("\"", "'", "`"))
-        if (
-            value
-            and not (value.startswith("${") and value.endswith("}"))
-            and (is_yaml_assignment or is_quoted_literal)
-        ):
-            raise FixtureError(
-                f"Candidate input {path} has a literal secret assignment "
-                f"({match.group('name')})."
-            )
+    _reject_candidate_secret_assignments(path, text_content)
+
+
+def _reject_candidate_test_secrets(
+    path: str,
+    content: bytes,
+    *,
+    allowed_literal_digests: frozenset[tuple[str, str, str]] = frozenset(),
+) -> None:
+    """Reject credential material in tests without flagging synthetic test values.
+
+    IMP-013 test changes are fingerprinted but never overlaid into the private app
+    snapshot. Keep path, encoding, private-key, provider-token, and literal-assignment
+    checks. Exempt only exact synthetic test literals identified by path, variable
+    name, and content digest; a different value under the same name is rejected.
+    """
+    if (
+        not path.startswith(("api/tests/", "web/src/"))
+        or _is_candidate_secret_path(path)
+    ):
+        raise FixtureError("A secret-bearing path is not an allowed candidate input.")
+    if _CANDIDATE_TOKEN_VALUE.search(content):
+        raise FixtureError("A candidate test input appears to contain credential material.")
+    try:
+        text_content = content.decode("utf-8", "strict")
+    except UnicodeDecodeError:
+        raise FixtureError("Candidate test inputs must be bounded UTF-8 text.") from None
+    _reject_candidate_secret_assignments(
+        path,
+        text_content,
+        allowed_literal_digests=allowed_literal_digests,
+    )
+
+
+def _reject_candidate_harness_secrets(path: str, content: bytes) -> None:
+    """Keep host-only fixture code text-only and free of known provider tokens."""
+    if path not in dict(IMP013_CANDIDATE_HARNESS_CHANGES):
+        raise FixtureError("A candidate fixture-harness path is not allowlisted.")
+    if _CANDIDATE_TOKEN_VALUE.search(content):
+        raise FixtureError("A candidate fixture harness appears to contain credential material.")
+    try:
+        content.decode("utf-8", "strict")
+    except UnicodeDecodeError:
+        raise FixtureError(
+            "Candidate fixture harness inputs must be bounded UTF-8 text."
+        ) from None
 
 
 def _candidate_records_fingerprint(
@@ -1732,7 +2149,38 @@ def _collect_candidate_worktree_inputs(
     )
     expected = dict(policy.reviewed_inputs)
     nonruntime = dict(policy.nonruntime_test_changes)
-    changes = _candidate_status(repository_root, private_home=private_home)
+    harness = dict(policy.harness_changes)
+    allowed_test_literals = policy.allowed_test_literal_digests
+    if (
+        len(nonruntime) != len(policy.nonruntime_test_changes)
+        or len(harness) != len(policy.harness_changes)
+        or len(set(allowed_test_literals)) != len(allowed_test_literals)
+        or set(expected).intersection(nonruntime)
+        or set(expected).intersection(harness)
+        or set(nonruntime).intersection(harness)
+        or any(status != "modified" for status in harness.values())
+        or (policy.fingerprint_harness_changes and not harness)
+        or any(
+            path not in nonruntime
+            or re.fullmatch(r"[a-z0-9_]+", name) is None
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            for path, name, digest in allowed_test_literals
+        )
+    ):
+        raise FixtureError("The candidate preview policy contains overlapping or invalid inputs.")
+    if policy.fingerprint_test_changes and any(
+        not path.startswith(("api/tests/", "web/src/"))
+        or _is_candidate_secret_path(path)
+        for path in nonruntime
+    ):
+        raise FixtureError("The candidate preview test-input policy is invalid.")
+    if any(path not in nonruntime for path, _name, _digest in allowed_test_literals):
+        raise FixtureError("The candidate preview test-literal policy is invalid.")
+    changes = _candidate_status(
+        repository_root,
+        private_home=private_home,
+        status_paths=policy.status_paths or CANDIDATE_STATUS_PATHS,
+    )
 
     for path, status in changes.items():
         if path in expected:
@@ -1741,27 +2189,57 @@ def _collect_candidate_worktree_inputs(
         elif path in nonruntime:
             if status != nonruntime[path]:
                 raise FixtureError("A candidate test-only change has an unexpected change state.")
+        elif path in harness:
+            if status != harness[path]:
+                raise FixtureError("A candidate fixture-harness change has an unexpected state.")
+        elif policy.strict_scope:
+            raise FixtureError("The candidate preview found an unexpected scoped input.")
         elif _is_candidate_build_scope(path):
             raise FixtureError("The candidate preview found an unexpected runtime input.")
 
     if set(path for path, _status in policy.reviewed_inputs) - set(changes):
         raise FixtureError("A reviewed candidate input is missing or is no longer dirty.")
+    if policy.fingerprint_test_changes and set(nonruntime) - set(changes):
+        raise FixtureError("A reviewed candidate test input is missing or is no longer dirty.")
+    if policy.fingerprint_harness_changes and set(harness) - set(changes):
+        raise FixtureError(
+            "A reviewed candidate fixture-harness input is missing or is no longer dirty."
+        )
 
     records: list[CandidateInputRecord] = []
     contents: dict[str, bytes] = {}
     total_bytes = 0
-    for path in reviewed_paths:
-        status = expected[path]
+    fingerprint_paths = set(reviewed_paths)
+    if policy.fingerprint_test_changes:
+        fingerprint_paths.update(nonruntime)
+    if policy.fingerprint_harness_changes:
+        fingerprint_paths.update(harness)
+    for path in sorted(fingerprint_paths):
+        if path in expected:
+            status = expected[path]
+        elif path in nonruntime:
+            status = nonruntime[path]
+        else:
+            status = harness[path]
         content, source_mode = _read_candidate_file_with_mode(
             repository_root,
             path,
             maximum_bytes=policy.max_file_bytes,
-            allowed_modes=frozenset({0o644, 0o664}),
+            allowed_modes=policy.allowed_input_modes,
         )
-        _reject_candidate_secrets(path, content)
+        if path in expected:
+            _reject_candidate_secrets(path, content)
+        elif path in nonruntime:
+            _reject_candidate_test_secrets(
+                path,
+                content,
+                allowed_literal_digests=frozenset(allowed_test_literals),
+            )
+        else:
+            _reject_candidate_harness_secrets(path, content)
         total_bytes += len(content)
         if total_bytes > policy.max_total_bytes:
-            raise FixtureError("Candidate runtime inputs exceed the total size limit.")
+            raise FixtureError("Candidate preview inputs exceed the total size limit.")
         contents[path] = content
         records.append(
             CandidateInputRecord(
@@ -1897,6 +2375,8 @@ def validate_candidate_snapshot_tree(
 ) -> None:
     """Verify every reviewed source remains exact in its private snapshot."""
     for record in snapshot.records:
+        if record.path not in snapshot.runtime_paths:
+            continue
         expected_digest = record.sha256
         if prepared and record.path == "compose.yaml":
             expected_digest = snapshot.prepared_compose_sha256 or ""
@@ -1909,6 +2389,22 @@ def validate_candidate_snapshot_tree(
             len(content) != record.size and not (prepared and record.path == "compose.yaml")
         ) or hashlib.sha256(content).hexdigest() != expected_digest:
             raise FixtureError("The private candidate snapshot changed after fingerprinting.")
+    if prepared and snapshot.prepared_compose_sha256 is not None:
+        compose = _read_candidate_file(
+            source_dir,
+            "compose.yaml",
+            maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+        )
+        if hashlib.sha256(compose).hexdigest() != snapshot.prepared_compose_sha256:
+            raise FixtureError("The private candidate Compose file changed after preparation.")
+    for path, expected_digest in snapshot.support_file_digests:
+        content = _read_candidate_file(
+            source_dir,
+            path,
+            maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+        )
+        if hashlib.sha256(content).hexdigest() != expected_digest:
+            raise FixtureError("A committed candidate support file changed after archiving.")
 
 
 def validate_candidate_worktree_snapshot(
@@ -1962,18 +2458,37 @@ def archive_candidate_snapshot(
         destination,
         private_home=private_home,
         expected_commit=commit,
+        additional_paths=policy.committed_support_paths,
     )
+    runtime_paths = {path for path, _status in policy.reviewed_inputs}
     for record in records:
+        if record.path not in runtime_paths:
+            continue
         _write_candidate_snapshot_file(
             destination,
             record.path,
             contents[record.path],
             status=record.status,
         )
+    support_file_digests = tuple(
+        (
+            path,
+            hashlib.sha256(
+                _read_candidate_file(
+                    destination,
+                    path,
+                    maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+                )
+            ).hexdigest(),
+        )
+        for path in policy.committed_support_paths
+    )
     candidate = CandidateSnapshot(
         base_commit=commit,
         fingerprint=fingerprint,
         records=records,
+        runtime_paths=tuple(path for path, _status in policy.reviewed_inputs),
+        support_file_digests=support_file_digests,
     )
     validate_candidate_snapshot_tree(destination, candidate)
     validate_candidate_worktree_snapshot(
@@ -2076,8 +2591,13 @@ def archive_head_snapshot(
     *,
     private_home: Path,
     expected_commit: str | None = None,
+    additional_paths: Sequence[str] = (),
 ) -> str:
     """Create an isolated source tree from one resolved HEAD commit, never the worktree."""
+    if len(set(additional_paths)) != len(additional_paths) or any(
+        path not in APP_SNAPSHOT_FILES for path in additional_paths
+    ):
+        raise FixtureError("The committed snapshot has an unreviewed support path.")
     git_env = _git_environment(private_home)
     try:
         revision = subprocess.run(
@@ -2120,7 +2640,14 @@ def archive_head_snapshot(
             raise FixtureError("A committed dotenv file prevents building a safe review snapshot.")
 
         archived = subprocess.run(
-            ["git", "archive", "--format=tar", commit, *APP_SNAPSHOT_PATHS],
+            [
+                "git",
+                "archive",
+                "--format=tar",
+                commit,
+                *APP_SNAPSHOT_PATHS,
+                *additional_paths,
+            ],
             cwd=repository_root,
             env=git_env,
             stdin=subprocess.DEVNULL,
@@ -2143,6 +2670,7 @@ def archive_head_snapshot(
             destination / "PROJECT.md.example",
             destination / "AGENTS.md.example",
             destination / "BACKLOG.md.example",
+            *(destination / path for path in additional_paths),
         )
         if not all(path.is_file() for path in required):
             raise FixtureError("The committed snapshot is missing the IMP-003 app surface.")
@@ -2307,6 +2835,19 @@ def set_snapshot_review_images(source_dir: Path, project_name: str) -> None:
     compose_file = source_dir / "compose.yaml"
     try:
         compose_text = compose_file.read_text(encoding="utf-8")
+        root_api_build = (
+            "  api:\n"
+            "    build:\n"
+            "      context: .\n"
+            "      dockerfile: api/Dockerfile\n"
+            "      target: runtime\n"
+        )
+        if compose_text.count(root_api_build) == 1:
+            # The committed IMP-004 app uses a root build context so its templates
+            # and migrations can be copied into the API image. Keep the same
+            # per-run image labels without narrowing or widening that context.
+            set_candidate_snapshot_review_images(source_dir, project_name)
+            return
         replacements = (
             (
                 "  db:\n    build:\n      context: ./db\n",
@@ -2643,13 +3184,23 @@ class ComposeController:
         env_file: Path,
         project_name: str,
         candidate: bool = False,
+        approval_candidate: bool = False,
+        committed_migration_profile: str | None = None,
     ) -> None:
+        if approval_candidate and not candidate:
+            raise FixtureError("The IMP-013 migration profile requires a candidate snapshot.")
+        if candidate and committed_migration_profile is not None:
+            raise FixtureError("A candidate snapshot cannot select a committed migration profile.")
+        if not candidate and committed_migration_profile not in {None, "imp004", "imp013"}:
+            raise FixtureError("The committed migration profile is invalid.")
         self.docker = docker
         self.source_dir = source_dir
         self.env_file = env_file
         self.project_name = project_name
         self.compose_file = source_dir / "compose.yaml"
         self.candidate = candidate
+        self.approval_candidate = approval_candidate
+        self.committed_migration_profile = committed_migration_profile
 
     def command(self, arguments: Sequence[str]) -> list[str]:
         return self.docker.command(
@@ -2824,20 +3375,32 @@ class ComposeController:
         )
 
     def migrate(self) -> str:
+        if self.approval_candidate:
+            migration_profile = "imp013"
+        elif self.candidate:
+            migration_profile = "imp004"
+        else:
+            migration_profile = self.committed_migration_profile
+        if migration_profile not in {"imp004", "imp013"}:
+            raise FixtureError("The committed app migration profile was not verified.")
+
         self.invoke(
             ["run", "--rm", "api", "alembic", "upgrade", "head"],
             label="fresh database migration",
             timeout=300,
         )
-        if self.candidate:
+        if migration_profile == "imp013":
+            diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic(
+                imp013_candidate=True,
+            )
+        else:
             diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic(
                 candidate=True
             )
-        else:
-            diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic()
         diagnostic = parse_migration_diagnostic(
             diagnostic_output,
-            candidate=self.candidate,
+            candidate=migration_profile == "imp004",
+            imp013_candidate=migration_profile == "imp013",
         )
         if diagnostic is None:
             raise FixtureError(
@@ -2846,7 +3409,8 @@ class ComposeController:
             )
         diagnostic_summary = format_migration_diagnostic(
             diagnostic,
-            candidate=self.candidate,
+            candidate=migration_profile == "imp004",
+            imp013_candidate=migration_profile == "imp013",
         )
         current = self.invoke(
             ["run", "--rm", "api", "alembic", "current"],
@@ -2855,13 +3419,19 @@ class ComposeController:
             capture_stdout=True,
         )
         expected_migration = (
-            CANDIDATE_APP_MIGRATION if self.candidate else EXPECTED_APP_MIGRATION
+            IMP013_CANDIDATE_APP_MIGRATION
+            if migration_profile == "imp013"
+            else EXPECTED_APP_MIGRATION
         )
         status = migration_revision_status(current, expected_revision=expected_migration)
         if (
             diagnostic_exit != 0
             or status != "expected"
-            or not migration_diagnostic_is_complete(diagnostic, candidate=self.candidate)
+            or not migration_diagnostic_is_complete(
+                diagnostic,
+                candidate=migration_profile == "imp004",
+                imp013_candidate=migration_profile == "imp013",
+            )
         ):
             expected_label = "candidate" if self.candidate else "committed"
             raise FixtureError(
@@ -2869,7 +3439,13 @@ class ComposeController:
                 f"(diagnostic_exit={diagnostic_exit}; alembic_current={status}; "
                 f"{diagnostic_summary}); output suppressed."
             )
-        reported_current = CANDIDATE_APP_MIGRATION if self.candidate else status
+        reported_current = (
+            IMP013_CANDIDATE_APP_MIGRATION
+            if self.approval_candidate or self.committed_migration_profile == "imp013"
+            else CANDIDATE_APP_MIGRATION
+            if self.candidate
+            else status
+        )
         return f"alembic_current={reported_current}; {diagnostic_summary}"
 
     def up(self) -> None:
@@ -2883,14 +3459,22 @@ class ComposeController:
             capture_stdout=True,
         )
 
-    def run_migration_diagnostic(self, *, candidate: bool = False) -> tuple[int, str, str]:
+    def run_migration_diagnostic(
+        self,
+        *,
+        candidate: bool = False,
+        imp013_candidate: bool = False,
+    ) -> tuple[int, str, str]:
         """Capture only bounded stdout from the fixed in-container probe."""
-        program = (
-            CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON if candidate else MIGRATION_DIAGNOSTIC_PYTHON
-        )
+        if imp013_candidate:
+            program = IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
+        elif candidate:
+            program = CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
+        else:
+            program = MIGRATION_DIAGNOSTIC_PYTHON
         maximum_bytes = (
             MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES
-            if candidate
+            if candidate or imp013_candidate
             else MAX_MIGRATION_DIAGNOSTIC_BYTES
         )
         try:
@@ -3492,9 +4076,9 @@ class ApiClient:
         if body is not None:
             headers["Content-Type"] = "application/json"
             data = json.dumps(body, separators=(",", ":")).encode("utf-8")
-        if method not in {"GET", "POST"}:
+        if method not in {"GET", "POST", "PUT"}:
             raise FixtureError("The fixture attempted an unsupported HTTP method.")
-        if method == "POST":
+        if method in {"POST", "PUT"}:
             headers["Origin"] = self.origin
             if csrf_token:
                 headers["X-CSRF-Token"] = csrf_token
@@ -3699,6 +4283,7 @@ class FixtureSupervisor:
         control_directory: Path | None = None,
         candidate_fingerprint: str | None = None,
         candidate_preflight: bool = False,
+        candidate_variant: str = "imp004",
     ) -> None:
         self.repository_root = repository_root.resolve()
         self.output = output
@@ -3711,11 +4296,16 @@ class FixtureSupervisor:
             r"[0-9a-f]{64}", candidate_fingerprint
         ) is None:
             raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
+        if candidate_variant not in {"imp004", "imp013"}:
+            raise FixtureError("The candidate review scope is invalid.")
         self.candidate_preflight = candidate_preflight
         self.candidate_fingerprint = candidate_fingerprint
+        self.candidate_variant = candidate_variant
         self.candidate_mode = candidate_preflight or candidate_fingerprint is not None
         if candidate_preflight and candidate_fingerprint is not None:
             raise FixtureError("Candidate preflight computes its own fingerprint.")
+        if candidate_variant == "imp013" and not self.candidate_mode:
+            raise FixtureError("The IMP-013 candidate scope requires explicit opt-in.")
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -3815,12 +4405,15 @@ class FixtureSupervisor:
             docker_socket=self.docker_socket,
             state_dir=self.state_dir,
         )
+        committed_migration_profile: str | None = None
         if self.candidate_mode:
+            policy = self._candidate_policy()
             self.candidate_snapshot = archive_candidate_snapshot(
                 self.repository_root,
                 self.source_dir,
                 private_home=self.state_dir,
                 expected_fingerprint=self.candidate_fingerprint,
+                policy=policy,
             )
             commit = self.candidate_snapshot.base_commit
             validate_candidate_snapshot_tree(self.source_dir, self.candidate_snapshot)
@@ -3841,6 +4434,10 @@ class FixtureSupervisor:
                 self.source_dir,
                 private_home=self.state_dir,
             )
+            committed_migration_profile = select_committed_app_migration_profile(
+                self.source_dir,
+                commit,
+            )
             set_snapshot_loopback_host(self.source_dir, host)
             set_snapshot_review_images(self.source_dir, self.identity.project_name)
         self.compose = ComposeController(
@@ -3849,6 +4446,8 @@ class FixtureSupervisor:
             env_file=env_file,
             project_name=self.identity.project_name,
             candidate=self.candidate_mode,
+            approval_candidate=self.candidate_variant == "imp013",
+            committed_migration_profile=committed_migration_profile,
         )
 
         snapshot_label = "candidate" if self.candidate_mode else "committed"
@@ -3915,11 +4514,19 @@ class FixtureSupervisor:
             self.repository_root,
             self.candidate_snapshot,
             private_home=self.state_dir,
+            policy=self._candidate_policy(),
         )
         validate_candidate_snapshot_tree(
             self.source_dir,
             self.candidate_snapshot,
             prepared=self.candidate_snapshot.prepared_compose_sha256 is not None,
+        )
+
+    def _candidate_policy(self) -> CandidatePreviewPolicy:
+        return (
+            IMP013_CANDIDATE_PREVIEW_POLICY
+            if self.candidate_variant == "imp013"
+            else CANDIDATE_PREVIEW_POLICY
         )
 
     def _provision_and_verify_accounts(self, admin_password: str) -> None:
@@ -4150,11 +4757,224 @@ class FixtureSupervisor:
         ):
             raise FixtureError("A second candidate Member read foreign project drafts.")
 
+        pair_approval_path = f"/api/projects/{project_id}/document-pair-approval"
+        if self.candidate_variant == "imp013":
+            self._verify_candidate_pair_approval(
+                client,
+                other_client,
+                project_id=project_id,
+                owner_id=owner_id,
+            )
+        elif other_client.request("GET", pair_approval_path).status != 404:
+            raise FixtureError("A second candidate Member discovered a foreign approval status.")
+
         self._validate_candidate_preview()
-        self._say(
-            "Candidate infrastructure preflight passed: normal Member sign-in, owned project "
-            "creation, three provenance-checked drafts, and cross-Member denial."
+        if self.candidate_variant == "imp013":
+            self._say(
+                "IMP-013 candidate preflight passed: normal Member sign-in, owned project and "
+                "draft creation, cross-Member denial, invalid/stale approval rejection, "
+                "version-bound pair approval, and approval invalidation after a saved edit."
+            )
+        else:
+            self._say(
+                "Candidate infrastructure preflight passed: normal Member sign-in, owned project "
+                "creation, three provenance-checked drafts, and cross-Member denial."
+            )
+
+    def _verify_candidate_pair_approval(
+        self,
+        client: ApiClient,
+        other_client: ApiClient,
+        *,
+        project_id: str,
+        owner_id: str,
+    ) -> None:
+        """Exercise IMP-013's real, authenticated saved-pair approval lifecycle."""
+        if not self.candidate_preflight or not self.identity:
+            raise FixtureError("The IMP-013 approval preflight is not configured safely.")
+        if not client.csrf_token or not other_client.csrf_token:
+            raise FixtureError("The synthetic Member approval sessions are unavailable.")
+
+        status_path = f"/api/projects/{project_id}/document-pair-approval?limit=20&offset=0"
+        write_base_path = f"/api/projects/{project_id}/documents"
+        blank_status = ApiClient._require_json_object(
+            client.request("GET", status_path),
+            200,
+            "initial document-pair approval status",
         )
+        if (
+            blank_status.get("approved") is not False
+            or blank_status.get("latest_approval") is not None
+            or blank_status.get("approvals") != []
+            or not isinstance(blank_status.get("current_project_revision"), dict)
+            or blank_status["current_project_revision"].get("revision_number") != 1
+            or not isinstance(blank_status.get("current_agents_revision"), dict)
+            or blank_status["current_agents_revision"].get("revision_number") != 1
+        ):
+            raise FixtureError("A fresh project returned an unexpected initial approval state.")
+
+        initial_pair = {"expected_project_revision": 1, "expected_agents_revision": 1}
+        invalid = client.request(
+            "POST",
+            status_path.split("?", 1)[0],
+            body=initial_pair,
+            csrf_token=client.csrf_token,
+        )
+        if invalid.status != 422:
+            raise FixtureError("The candidate approved unchanged starter documents.")
+
+        project_content = (
+            "# Project: Synthetic Approval Review\n\n"
+            "## Purpose and users\n"
+            "- Summary: A private synthetic project exercises version-bound document approval.\n"
+            "- Problem: Reviewers need a clear signal for the exact saved specification pair.\n"
+            "- Primary users: The generated local review Member.\n"
+            "- Usage context: An authenticated browser on the local review fixture.\n"
+            "- Product outcomes: The saved project and agent rules are approved together.\n\n"
+            "## Scope\n\n"
+            "### In scope\n"
+            "The fixture creates synthetic drafts and verifies their revision-bound approval.\n\n"
+            "### Out of scope\n"
+            "Production data, external deployment, and real user accounts are excluded.\n\n"
+            "## Behavior and domain rules\n"
+            "Approval applies only to the two current saved revisions.\n\n"
+            "## Technology and environment\n"
+            "The review runs in an isolated local Compose project with PostgreSQL.\n\n"
+            "## Architecture and repository map\n"
+            "The API stores revisions and approvals; the browser displays their status.\n\n"
+            "## Decisions, risks, and open questions\n"
+            "No project content or account is reused outside this disposable fixture.\n\n"
+            "## Definition of done\n"
+            "The same saved pair is approved and any later edit makes that approval stale.\n"
+        )
+        agents_content = (
+            "# Synthetic review agent rules\n\n"
+            "## Sources of truth and scope\n"
+            "The synthetic project document and this rules file are reviewed as a pair.\n\n"
+            "## Setup and verification commands\n"
+            "Use the local fixture preflight for synthetic API checks.\n\n"
+            "## Security and hardening workflow\n"
+            "Use only the generated Member and deny access to another Member's project.\n\n"
+            "## Git and task-state ownership\n"
+            "The fixture owns cleanup; it does not change task or repository state.\n"
+        )
+        for kind, content in (("project", project_content), ("agents", agents_content)):
+            saved = ApiClient._require_json_object(
+                client.request(
+                    "PUT",
+                    f"{write_base_path}/{kind}",
+                    body={"expected_revision": 1, "content": content},
+                    csrf_token=client.csrf_token,
+                ),
+                200,
+                f"IMP-013 {kind} draft save",
+            )
+            if (
+                saved.get("revision_number") != 2
+                or saved.get("origin") != "human"
+                or saved.get("author_user_id") != owner_id
+            ):
+                raise FixtureError("A synthetic draft save returned unexpected revision ownership.")
+
+        stale = client.request(
+            "POST",
+            status_path.split("?", 1)[0],
+            body={"expected_project_revision": 1, "expected_agents_revision": 2},
+            csrf_token=client.csrf_token,
+        )
+        if stale.status != 409:
+            raise FixtureError("The candidate accepted an approval for a stale document pair.")
+
+        approval_path = status_path.split("?", 1)[0]
+        approved = ApiClient._require_json_object(
+            client.request(
+                "POST",
+                approval_path,
+                body={"expected_project_revision": 2, "expected_agents_revision": 2},
+                csrf_token=client.csrf_token,
+            ),
+            200,
+            "IMP-013 saved document-pair approval",
+        )
+        approval_id = approved.get("id")
+        if (
+            not isinstance(approval_id, str)
+            or approved.get("actor_user_id") != owner_id
+            or approved.get("project_revision_number") != 2
+            or approved.get("agents_revision_number") != 2
+        ):
+            raise FixtureError("The candidate approval is not bound to the saved Member pair.")
+        try:
+            approval_id = str(uuid.UUID(approval_id))
+        except ValueError:
+            raise FixtureError("The candidate approval returned an invalid identifier.") from None
+
+        repeated = ApiClient._require_json_object(
+            client.request(
+                "POST",
+                approval_path,
+                body={"expected_project_revision": 2, "expected_agents_revision": 2},
+                csrf_token=client.csrf_token,
+            ),
+            200,
+            "idempotent IMP-013 pair approval",
+        )
+        status_after_approval = ApiClient._require_json_object(
+            client.request("GET", status_path),
+            200,
+            "saved document-pair approval status",
+        )
+        approval_history = status_after_approval.get("approvals")
+        if (
+            repeated.get("id") != approval_id
+            or status_after_approval.get("approved") is not True
+            or not isinstance(status_after_approval.get("latest_approval"), dict)
+            or status_after_approval["latest_approval"].get("id") != approval_id
+            or not isinstance(approval_history, list)
+            or not approval_history
+            or not isinstance(approval_history[0], dict)
+            or approval_history[0].get("id") != approval_id
+        ):
+            raise FixtureError("The candidate did not retain the exact approved revision pair.")
+
+        foreign_get = other_client.request("GET", status_path)
+        foreign_post = other_client.request(
+            "POST",
+            approval_path,
+            body={"expected_project_revision": 2, "expected_agents_revision": 2},
+            csrf_token=other_client.csrf_token,
+        )
+        if foreign_get.status != 404 or foreign_post.status != 404:
+            raise FixtureError("The candidate exposed approval data across Member ownership.")
+
+        updated = ApiClient._require_json_object(
+            client.request(
+                "PUT",
+                f"{write_base_path}/project",
+                body={
+                    "expected_revision": 2,
+                    "content": project_content
+                    + "\nA later synthetic edit requires another pair review.\n",
+                },
+                csrf_token=client.csrf_token,
+            ),
+            200,
+            "IMP-013 post-approval draft edit",
+        )
+        invalidated = ApiClient._require_json_object(
+            client.request("GET", status_path),
+            200,
+            "approval status after a saved document edit",
+        )
+        latest = invalidated.get("latest_approval")
+        if (
+            updated.get("revision_number") != 3
+            or invalidated.get("approved") is not False
+            or not isinstance(latest, dict)
+            or latest.get("id") != approval_id
+            or latest.get("project_revision_number") != 2
+        ):
+            raise FixtureError("A later saved edit did not invalidate the current pair approval.")
 
     def _publish_handoff(self) -> None:
         if self.identity is None or not self.identity.members:
@@ -4590,21 +5410,34 @@ class FixtureSupervisor:
         for cleanup_error in cleanup_errors:
             self._say(f"Cleanup warning: {cleanup_error}")
         if self.candidate_preflight:
+            if self.candidate_variant == "imp013":
+                self._say(
+                    "IMP013_CANDIDATE_PREFLIGHT_SCOPE=authenticated-api-approval; "
+                    "rendered browser review was not performed."
+                )
+                fingerprint_label = "IMP013_CANDIDATE_FINGERPRINT"
+                result_label = "IMP013_CANDIDATE_PREFLIGHT_RESULT"
+                cleanup_label = "IMP013_CANDIDATE_CLEANUP"
+            else:
+                self._say(
+                    "CANDIDATE_PREFLIGHT_SCOPE=infrastructure-only; authenticated browser rendering "
+                    "was not performed."
+                )
+                fingerprint_label = "CANDIDATE_FINGERPRINT"
+                result_label = "CANDIDATE_PREFLIGHT_RESULT"
+                cleanup_label = "CANDIDATE_CLEANUP"
             self._say(
-                "CANDIDATE_PREFLIGHT_SCOPE=infrastructure-only; authenticated browser rendering "
-                "was not performed."
-            )
-            self._say(
-                "CANDIDATE_FINGERPRINT="
+                fingerprint_label
+                + "="
                 + (
                     self.candidate_snapshot.fingerprint
                     if self.candidate_snapshot is not None
                     else "unavailable"
                 )
             )
-            self._say(f"CANDIDATE_PREFLIGHT_RESULT={'passed' if exit_code == 0 else 'failed'}")
+            self._say(f"{result_label}={'passed' if exit_code == 0 else 'failed'}")
             self._say(
-                "CANDIDATE_CLEANUP="
+                f"{cleanup_label}="
                 f"member_accounts:{self.cleanup_member_accounts},"
                 f"owned_compose:{self.cleanup_owned_compose},"
                 f"owned_images:{self.cleanup_owned_images},"
@@ -5023,7 +5856,8 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
         expected_script = str(Path(__file__).resolve())
         valid_argument_count = len(arguments) == 7 or (
             len(arguments) == 9
-            and arguments[7] == "--candidate-fingerprint"
+            and arguments[7]
+            in {"--candidate-fingerprint", "--imp013-candidate-fingerprint"}
             and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
         )
         if (
@@ -5271,6 +6105,7 @@ def _run_guardian(
     lifetime_minutes: int,
     lock_fd: int,
     candidate_fingerprint: str | None = None,
+    candidate_variant: str = "imp004",
 ) -> int:
     control_directory = _ensure_control_directory()
     _verify_control_lock_descriptor(control_directory, lock_fd)
@@ -5313,7 +6148,12 @@ def _run_guardian(
             str(lifetime_minutes),
         ]
         if candidate_fingerprint is not None:
-            command.extend(["--candidate-fingerprint", candidate_fingerprint])
+            fingerprint_flag = (
+                "--imp013-candidate-fingerprint"
+                if candidate_variant == "imp013"
+                else "--candidate-fingerprint"
+            )
+            command.extend([fingerprint_flag, candidate_fingerprint])
 
         def remember_child(process: subprocess.Popen[bytes]) -> None:
             nonlocal child_record
@@ -5434,6 +6274,7 @@ def launch_unattended(
     handoff_directory: Path,
     lifetime_minutes: int,
     candidate_fingerprint: str | None = None,
+    candidate_variant: str = "imp004",
 ) -> int:
     """Launch a detached supervisor under a guardian-held PTY and report its URL."""
     if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
@@ -5443,6 +6284,10 @@ def launch_unattended(
     lock_fd = _open_control_lock(control_directory)
     guardian: subprocess.Popen[bytes] | None = None
     try:
+        if candidate_variant not in {"imp004", "imp013"} or (
+            candidate_variant == "imp013" and candidate_fingerprint is None
+        ):
+            raise FixtureError("The candidate review scope requires a valid opt-in fingerprint.")
         validate_approved_handoff_directory(handoff_directory)
         previous_status = read_cleanup_status(handoff_directory)
         prepare_handoff_channel(
@@ -5468,7 +6313,12 @@ def launch_unattended(
             str(lock_fd),
         ]
         if candidate_fingerprint is not None:
-            command.extend(["--candidate-fingerprint", candidate_fingerprint])
+            fingerprint_flag = (
+                "--imp013-candidate-fingerprint"
+                if candidate_variant == "imp013"
+                else "--candidate-fingerprint"
+            )
+            command.extend([fingerprint_flag, candidate_fingerprint])
         try:
             guardian = subprocess.Popen(
                 command,
@@ -5512,11 +6362,18 @@ def launch_unattended(
         guardian.stdout.close()
         print(f"BROWSER_REVIEW_URL={event['origin']}/")
         if candidate_fingerprint is not None:
-            print(f"CANDIDATE_FINGERPRINT={candidate_fingerprint}")
-            print(
-                "This exact opt-in candidate requires authenticated rendered review; "
-                "candidate preflight alone is infrastructure evidence."
-            )
+            if candidate_variant == "imp013":
+                print(f"IMP013_CANDIDATE_FINGERPRINT={candidate_fingerprint}")
+                print(
+                    "This exact IMP-013 candidate requires authenticated approval-flow and "
+                    "rendered review; preflight alone is infrastructure evidence."
+                )
+            else:
+                print(f"CANDIDATE_FINGERPRINT={candidate_fingerprint}")
+                print(
+                    "This exact opt-in candidate requires authenticated rendered review; "
+                    "candidate preflight alone is infrastructure evidence."
+                )
         print(f"Read the generated Member login: {handoff_directory / MEMBER_HANDOFF_FILE}")
         print(
             "Use the normal sign-in form, then leave the same authenticated page open "
@@ -5719,6 +6576,29 @@ def _candidate_fingerprint_argument(value: str) -> str:
     return value
 
 
+def _add_candidate_fingerprint_arguments(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--candidate-fingerprint",
+        dest="candidate_fingerprint",
+        type=_candidate_fingerprint_argument,
+        help="opt into the pinned IMP-004 candidate after its infrastructure preflight",
+    )
+    group.add_argument(
+        "--imp013-candidate-fingerprint",
+        dest="imp013_candidate_fingerprint",
+        type=_candidate_fingerprint_argument,
+        help="opt into the pinned IMP-013 candidate after its approval preflight",
+    )
+
+
+def _candidate_selection(parsed: argparse.Namespace) -> tuple[str | None, str]:
+    imp013_fingerprint = getattr(parsed, "imp013_candidate_fingerprint", None)
+    if imp013_fingerprint is not None:
+        return imp013_fingerprint, "imp013"
+    return getattr(parsed, "candidate_fingerprint", None), "imp004"
+
+
 def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -5746,21 +6626,29 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         default=LOCAL_DOCKER_SOCKET,
         help="path to the local Unix Docker socket (TCP/remote engines are not accepted)",
     )
-    start.add_argument(
-        "--candidate-fingerprint",
-        type=_candidate_fingerprint_argument,
-        help="opt into the reviewed dirty candidate only at this exact preflight fingerprint",
-    )
+    _add_candidate_fingerprint_arguments(start)
     preflight = subparsers.add_parser(
         "candidate-preflight",
         help=(
-            "build and verify candidate migrations/projects, then clean up "
+            "build and verify the IMP-004 candidate migrations/projects, then clean up "
             "without browser handoff"
         ),
     )
     preflight.description = (
         "Opt in to the pinned IMP-004 runtime allowlist; this infrastructure check does not "
         "perform rendered browser review or publish credentials."
+    )
+    imp013_preflight = subparsers.add_parser(
+        "imp013-candidate-preflight",
+        help=(
+            "build and verify the pinned IMP-013 runtime, migration, and approval flow; "
+            "clean up without browser handoff"
+        ),
+    )
+    imp013_preflight.description = (
+        "Opt in to the exact IMP-013 runtime/test allowlist over committed HEAD 60e9480; "
+        "this fresh-stack preflight exercises the normal synthetic Member approval API flow "
+        "but does not perform rendered browser review or publish credentials."
     )
     launch = subparsers.add_parser(
         "launch",
@@ -5781,11 +6669,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
             f"default {DEFAULT_LIFETIME_MINUTES})"
         ),
     )
-    launch.add_argument(
-        "--candidate-fingerprint",
-        type=_candidate_fingerprint_argument,
-        help="opt into the reviewed dirty candidate only at this exact preflight fingerprint",
-    )
+    _add_candidate_fingerprint_arguments(launch)
     stop = subparsers.add_parser(
         "stop",
         help="stop the recorded local fixture and wait for verified cleanup status",
@@ -5811,18 +6695,12 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     guardian.add_argument("--handoff-dir", type=Path, required=True)
     guardian.add_argument("--lifetime-minutes", type=int, required=True)
     guardian.add_argument("--lock-fd", type=int, required=True)
-    guardian.add_argument(
-        "--candidate-fingerprint",
-        type=_candidate_fingerprint_argument,
-    )
+    _add_candidate_fingerprint_arguments(guardian)
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
     supervise.add_argument("--handoff-dir", type=Path, required=True)
     supervise.add_argument("--lifetime-minutes", type=int, required=True)
-    supervise.add_argument(
-        "--candidate-fingerprint",
-        type=_candidate_fingerprint_argument,
-    )
+    _add_candidate_fingerprint_arguments(supervise)
 
     parsed = parser.parse_args(arguments)
     if parsed.command in {"start", "launch", "_guardian", "_supervise"} and not (
@@ -5842,38 +6720,52 @@ def main(arguments: Sequence[str] | None = None) -> int:
     previous_umask = os.umask(0o077)
     try:
         if parsed.command == "launch":
+            candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
             return launch_unattended(
                 parsed.handoff_dir,
                 parsed.lifetime_minutes,
-                candidate_fingerprint=parsed.candidate_fingerprint,
+                candidate_fingerprint=candidate_fingerprint,
+                candidate_variant=candidate_variant,
             )
         if parsed.command == "stop":
             return stop_unattended(parsed.handoff_dir)
         if parsed.command == "recover":
             return recover_unattended(parsed.handoff_dir)
         if parsed.command == "_guardian":
+            candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
             return _run_guardian(
                 parsed.handoff_dir,
                 parsed.lifetime_minutes,
                 parsed.lock_fd,
-                candidate_fingerprint=parsed.candidate_fingerprint,
+                candidate_fingerprint=candidate_fingerprint,
+                candidate_variant=candidate_variant,
             )
         if parsed.command == "_supervise":
+            candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
             supervisor = FixtureSupervisor(
                 root,
                 lifetime_minutes=parsed.lifetime_minutes,
                 handoff_directory=parsed.handoff_dir,
                 control_directory=_ensure_control_directory(),
-                candidate_fingerprint=parsed.candidate_fingerprint,
+                candidate_fingerprint=candidate_fingerprint,
+                candidate_variant=candidate_variant,
             )
             return supervisor.run()
         if parsed.command == "candidate-preflight":
             return FixtureSupervisor(root, candidate_preflight=True).run()
+        if parsed.command == "imp013-candidate-preflight":
+            return FixtureSupervisor(
+                root,
+                candidate_preflight=True,
+                candidate_variant="imp013",
+            ).run()
+        candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
         supervisor = FixtureSupervisor(
             root,
             docker_socket=parsed.docker_socket,
             lifetime_minutes=parsed.lifetime_minutes,
-            candidate_fingerprint=parsed.candidate_fingerprint,
+            candidate_fingerprint=candidate_fingerprint,
+            candidate_variant=candidate_variant,
         )
         return supervisor.run()
     except FixtureError as error:

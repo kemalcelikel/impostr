@@ -21,6 +21,7 @@ from app.config import AppSettings
 from app.database import get_database_engine
 from app.dependencies import require_browser_mutation
 from app.document_contract import DocumentKind
+from app.document_pair_approvals import router as document_pair_approvals_router
 from app.passwords import dummy_password_hash
 from app.project_documents import (
     router as project_documents_router,
@@ -102,6 +103,7 @@ def create_app(
     api_router.include_router(admin_router)
     api_router.include_router(projects_router)
     api_router.include_router(project_documents_router)
+    api_router.include_router(document_pair_approvals_router)
     application.include_router(api_router)
 
     @application.middleware("http")

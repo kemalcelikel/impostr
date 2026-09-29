@@ -2,11 +2,14 @@
 
 These instructions cover the IMP-001 bootstrap, IMP-003 identity/account
 administration, and the IMP-004 project and Markdown-draft implementation present
-in this worktree. Run commands from the repository root. Docker Compose is the
-supported install and start path; there is no supported direct Vite development-
-server command. This is local-only, work-branch software, not a shared-server
-release. Consult `BACKLOG.md` for the IMP-004 delivery outcome on this branch;
-neither a candidate preview nor a worktree alone constitutes a release.
+in this worktree, plus the human-only pair-approval candidate from IMP-013. Run
+commands from the repository root. Docker Compose is the supported install and
+start path; there is no supported direct Vite development-server command. This is
+local-only, work-branch software, not a shared-server release. The IMP-013
+candidate's rendered review and final local gates passed, but it remains
+uncommitted and blocked pending coordinator outcome. Neither a candidate preview
+nor a worktree alone constitutes a delivered release. Consult `BACKLOG.md` for
+task outcomes.
 
 ## Prerequisites and pinned runtimes
 
@@ -67,10 +70,12 @@ neither a candidate preview nor a worktree alone constitutes a release.
    `20260925_0003` for project-name keys and document/revision/conflict-proposal
    tables; the API seeds three root-template drafts on project creation and startup.
    `20260925_0004` bounds normalized project-name keys to 64-character digests.
-   The candidate fixture separately
-   checked a fresh database at head `20260925_0004`; this does not establish that
-   every existing local database has been migrated. The API and front door wait
-   for their dependencies' health checks.
+   `20260929_0005` adds immutable records binding a human approval to one
+   `PROJECT.md`/`AGENTS.md` revision pair. Existing drafts are not automatically
+   approved by this migration. The IMP-013 candidate preflight checked a fresh
+   database at head `20260929_0005`; this does not establish that every existing
+   local database has been migrated. The API and front door wait for their
+   dependencies' health checks.
 
 3. Bootstrap the first administrator once, after migrations and stack startup.
    Replace `adminname` with a chosen username accepted by the account rules. The
@@ -115,10 +120,33 @@ docker compose -p impostr-verify1 --profile checks run --build --rm api-check sh
 docker compose -p impostr-verify1 --profile checks run --build --rm web-check sh -c 'npm run test && npm run lint && npm run format:check && npm run typecheck && npm run build'
 ```
 
-The current IMP-004 API gate skips 9 PostgreSQL-specific integration tests; all
-9 passed separately against a fresh isolated validation database migrated to
-`20260925_0004`. The earlier IMP-001/003 baseline had only 3 such tests. Do not
-run integration tests against a database containing local project data.
+The earlier IMP-004 API gate skipped 9 PostgreSQL-specific integration tests;
+those 9 were reported as passing separately against a fresh isolated validation
+database migrated to `20260925_0004`. The IMP-001/003 baseline had only 3 such
+tests. These earlier results do not include the IMP-013 candidate or establish
+its final gates. Do not run integration tests against a database containing local
+project data.
+
+The Compose `integration` profile runs PostgreSQL-backed tests against its own
+database service and sets the opt-in integration-test flag. For a fresh, unique
+project name (change the example suffix if it is already in use), run from the
+repository root after creating the local `.env` described above. Migrate that
+disposable database before running its tests, and remove only its resources:
+
+```sh
+docker compose -p impostr-imp013-pg-check-01 config --quiet
+docker compose -p impostr-imp013-pg-check-01 --profile integration build db api-integration-check
+docker compose -p impostr-imp013-pg-check-01 run --rm api alembic upgrade head
+docker compose -p impostr-imp013-pg-check-01 run --rm api alembic current
+docker compose -p impostr-imp013-pg-check-01 --profile integration run --rm api-integration-check \
+  sh -c 'python -m pytest -p no:cacheprovider tests/test_postgres_integration.py tests/test_document_pair_approval_postgres.py'
+docker compose -p impostr-imp013-pg-check-01 --profile integration down -v --remove-orphans
+```
+
+This starts the profile's database dependency; `-v` deletes that named project's
+database volume, so never reuse a project name containing local data. The IMP-013
+isolated PostgreSQL check migrated a fresh database to `20260929_0005` and passed
+all 10 integration tests, then removed its disposable resources.
 
 In the earlier IMP-001/003 baseline validation, the coordinator verified Compose
 configuration, image builds, a fresh migration at `20260925_0002`, stack
@@ -130,8 +158,9 @@ passed Ruff, format, and mypy; separate PostgreSQL migration and 3 integration
 tests passed. The baseline web gate passed 6 tests plus lint, format, typecheck,
 and build. Browser checks at 1440, 1024, 768, and 375 px found no horizontal
 overflow and confirmed keyboard focus. These IMP-001/003 results are not final
-IMP-004 gates. The latest toolkit run passed 98 tests with one gated live-Docker
+IMP-004 gates. A prior toolkit run passed 98 tests with one gated live-Docker
 test skipped; the separately exercised live recovery test is described below.
+That toolkit result predates the IMP-013 candidate and is not its final gate.
 
 ## Disposable authenticated browser review (operator-only)
 
@@ -285,6 +314,65 @@ agent isolation, or shared-server readiness. The candidate preview and browser
 review do not make the dirty implementation committed or establish production
 acceptance.
 
+### Reviewing the dirty IMP-013 approval candidate
+
+This is a separate operator-only preview of the bounded IMP-013 candidate, based
+on committed `HEAD` `60e9480`; it is not the IMP-004 candidate mode above. It uses
+the local Docker daemon and the same private handoff, synthetic-account, and
+unconfined shared-browser-tool-server cautions described above. Run from the
+repository root. First run its fresh-stack API preflight:
+
+```sh
+python3 scripts/local_browser_fixture.py imp013-candidate-preflight
+```
+
+The preflight accepts only its explicit IMP-013 runtime/test allowlist over that
+base, fingerprints the candidate and fixture inputs, creates synthetic accounts
+and project drafts, checks project isolation and the authenticated approval flow,
+and performs owned cleanup. It exercises rejection of an invalid pair, approval
+of a valid saved pair, and invalidation after a later saved edit. It does not
+publish a browser login or provide rendered-review evidence. If it passes, copy
+the lowercase fingerprint printed by that run; never reuse a fingerprint from an
+earlier run or copy one into documentation.
+
+Only if the candidate inputs are unchanged since that preflight, launch its
+authenticated rendered review with that exact fingerprint:
+
+```sh
+python3 scripts/local_browser_fixture.py launch \
+  --handoff-dir /tmp/opencode/impostr-review-handoff \
+  --lifetime-minutes 30 \
+  --imp013-candidate-fingerprint <FINGERPRINT_FROM_THIS_PREFLIGHT>
+```
+
+Replace the fingerprint placeholder with the exact value from the immediately
+preceding preflight. As in the IMP-004 procedure, use only the generated,
+short-lived synthetic Member login through normal sign-in; keep credentials,
+session data, origin, and raw logs out of Git and public channels. The coordinator
+owns sign-in and rendered review. On completion, stop the fixture and verify its
+sanitized cleanup record using the same ownership checks as above:
+
+```sh
+python3 scripts/local_browser_fixture.py stop \
+  --handoff-dir /tmp/opencode/impostr-review-handoff
+```
+
+After the UI repair, the independent code review returned APPROVED. The exact
+candidate preflight passed with migration head `20260929_0005`, and the
+authenticated rendered reviewer passed valid-pair approval, approval invalidation
+after the `AGENTS.md` edit to revision 3, and responsive review at 1440, 1024, 768,
+and 375 px, including the narrow action layout. A two-tab stale-save check
+produced the expected r2/r3 conflict while preserving the editor text and
+conflict-proposal comparison; no false history alert appeared.
+Fixture stop and owned cleanup were verified. Final API (81 passed, 10 PostgreSQL-
+profile skips, plus Ruff/format/mypy), isolated PostgreSQL (10 passed), web (60
+passed plus lint/format/typecheck/build), and toolkit (116 passed, one gated live-
+Docker test skipped) checks also passed. These results are local candidate gates,
+not a commit or release. If any candidate input changes, repeat preflight and
+rendered review against the new fingerprint. A failed review remains a failure even when
+cleanup succeeds; use the ownership-checked recovery steps above if cleanup is
+not verified.
+
 The separately gated live SIGKILL recovery test is run from the repository root
 with Docker available and an appropriate container image already cached. It does
 not pull an image; if none is cached, the test skips. The test starts two isolated
@@ -365,6 +453,40 @@ ordered by revision number. Conflict-proposal pagination uses a stable cursor so
 concurrent proposals do not shift already paged rows; a new history request can
 show later proposals.
 
+### Human-only saved-pair review and approval
+
+The IMP-013 candidate adds direct human editing and comparison of the saved
+`PROJECT.md` and `AGENTS.md` drafts, followed by one approval bound to their exact
+current revisions. A project owner or administrator may use this workflow; it
+does not require or start an OpenCode session, model, or agent proposal. Approval
+history records prior approved revision pairs. Editing either document creates a
+new immutable revision and makes the current pair unapproved until the newly saved
+pair is reviewed and explicitly approved. Approval records a human decision for
+the validated saved pair; it does not certify that the decisions are true or
+sufficient.
+
+Draft saves may retain raw HTML as Markdown content, but its tags, attributes, and
+descendant text never count as evidence for a required decision. The server uses
+the bounded Markdown evidence grammar described in `PROJECT.md`: required section
+headings must be present, and substantive text in section prose, list items, or
+table data cells may supply decisions; headings alone do not. Ordinary emphasis,
+inline-code values, and link labels may contribute. Fenced or indented code
+examples, comments, attributes, destinations, image alt text, reference definitions,
+markup-only content, ambiguous boundaries, and explicit undecided values cannot
+satisfy required decisions. This is not an HTML/CSS visibility detector. The
+check also rejects unchanged starter content, unresolved placeholders, and
+remaining starter checklist/setup notes, but does not judge whether an otherwise
+valid choice is substantively correct.
+
+Approval is server-side and tied to the current pair. A failed content check
+returns HTTP 422 with document-specific validation errors; a stale submitted
+revision pair returns HTTP 409 with the latest saved pair rather than
+approving a different version. Reconcile the comparison and explicitly retry;
+stale conflicts do not discard either saved revision or unsaved editor text.
+Only a successful explicit action creates an approval record. Status reflects
+whether that recorded pair is still the current valid pair; previous approval
+records remain in history after a later edit.
+
 The API also mirrors current document heads as files named `PROJECT.md`,
 `AGENTS.md`, and `BACKLOG.md` under an opaque project-ID directory in
 `IMPOSTR_WORKSPACE_ROOT` (Compose currently mounts `/workspaces` as a bounded
@@ -391,8 +513,9 @@ verified. The safe approach to test is a PostgreSQL-native archive (for example,
 restored with PostgreSQL tooling (for example, `pg_restore`) into a new, uniquely
 named Compose project with a fresh volume. Do not use the live project volume as a
 restore target or publish the test stack on the same front-door port. Verify
-migration head `20260925_0004`, project ownership, all three current drafts,
-revision/proposal history, and normal authorization against synthetic data; then
+migration head `20260929_0005`, project ownership, all three current drafts,
+revision/proposal/approval history, and normal authorization against synthetic
+data; then
 remove only that test project's resources and verify the original stack/data
 remain untouched. These tool choices and steps are guidance, not verified
 commands. Record the recovery drill as unverified until actually exercised. Do not
@@ -426,18 +549,23 @@ use Alembic downgrade or `docker compose down -v` on the source stack as recover
   containing data you need: it permanently removes that project's database
   volume. Use volume deletion only for an explicitly disposable, isolated test
   stack. Migration `0003` adds project document/revision/proposal tables and the
-  owner-scoped name key; `0004` bounds that key. These migrations have no verified
-  backup/restore recovery procedure. Do not use a downgrade as routine recovery;
-  in particular, downgrading `0003` drops project document histories and conflict
-  proposals. The database volume is persistent local storage, not a tested backup
+  owner-scoped name key; `0004` bounds that key; `0005` adds pair-approval records.
+  These migrations have no verified backup/restore recovery procedure. Do not use
+  a downgrade as routine recovery;
+  downgrading `0005` drops approval records, and downgrading `0003` drops project
+  document histories and conflict proposals. The database volume is persistent
+  local storage, not a tested backup
   or durability guarantee.
 
 ## Release boundary
 
 Compose binds the front door to loopback by default and does not publish the
 database or API ports. This worktree includes account authentication,
-administrator-managed accounts, project creation, and private draft/revision
-history. It does not yet provide chat, approvals, exports, or an agent gateway.
+administrator-managed accounts, project creation, private draft/revision history,
+and a human-only pair-approval candidate for `PROJECT.md` and `AGENTS.md`. The
+candidate has passed rendered review and local gates but remains uncommitted and
+blocked pending coordinator outcome. It does not provide chat, exports, or an agent
+gateway.
 It has no TLS or domain setup, trusted external reverse-proxy/client-IP contract,
 verified backup/restore runbook, complete release security gate, or verified agent
 isolation. Do not expose it by changing the published binding, firewall, or proxy
