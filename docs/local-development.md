@@ -1,10 +1,12 @@
 # Local development setup
 
-These instructions cover the IMP-001 bootstrap and the IMP-003 identity/account
-administration and private project-metadata slice. Run commands from the repository
-root. Docker Compose is the supported install and start path; there is no supported
-direct Vite development-server command. The application is local-only, not a
-shared-server release.
+These instructions cover the IMP-001 bootstrap, IMP-003 identity/account
+administration, and the IMP-004 project and Markdown-draft implementation present
+in this worktree. Run commands from the repository root. Docker Compose is the
+supported install and start path; there is no supported direct Vite development-
+server command. This is local-only, work-branch software, not a shared-server
+release. Consult `BACKLOG.md` for the IMP-004 delivery outcome on this branch;
+neither a candidate preview nor a worktree alone constitutes a release.
 
 ## Prerequisites and pinned runtimes
 
@@ -60,11 +62,15 @@ shared-server release.
    ```
 
    The migration command starts and waits for the database dependency. Apply
-   migrations before starting/updating the API and front door. The current
-   migration revision is `20260925_0002`; it adds account/session, audit,
-   rate-limit, bootstrap-state, and project-metadata tables. This is metadata only:
-   it does not implement project creation or store planning documents. The API and
-   front door wait for their dependencies' health checks.
+   migrations before starting/updating the API and front door. The earlier
+   IMP-001/003 baseline check reached `20260925_0002`. This worktree adds
+   `20260925_0003` for project-name keys and document/revision/conflict-proposal
+   tables; the API seeds three root-template drafts on project creation and startup.
+   `20260925_0004` bounds normalized project-name keys to 64-character digests.
+   The candidate fixture separately
+   checked a fresh database at head `20260925_0004`; this does not establish that
+   every existing local database has been migrated. The API and front door wait
+   for their dependencies' health checks.
 
 3. Bootstrap the first administrator once, after migrations and stack startup.
    Replace `adminname` with a chosen username accepted by the account rules. The
@@ -109,20 +115,22 @@ docker compose -p impostr-verify1 --profile checks run --build --rm api-check sh
 docker compose -p impostr-verify1 --profile checks run --build --rm web-check sh -c 'npm run test && npm run lint && npm run format:check && npm run typecheck && npm run build'
 ```
 
-The 3 PostgreSQL-specific integration tests are skipped in the default API gate and
-were run separately against an isolated validation database. Do not run those
-integration tests against a database containing local project data.
+The current IMP-004 API gate skips 9 PostgreSQL-specific integration tests; all
+9 passed separately against a fresh isolated validation database migrated to
+`20260925_0004`. The earlier IMP-001/003 baseline had only 3 such tests. Do not
+run integration tests against a database containing local project data.
 
-The coordinator verified Compose configuration, image builds, a fresh migration
-and current revision (`20260925_0002`), stack start/status/restart, and health
-behavior. Health returned 200 normally, 503 with the database stopped, and 200
-after database recovery; `/api/agents` returned 404. The only published service
-was `127.0.0.1:8080`; all listed commands exited 0. The API gate passed 32 tests,
-skipped 3 PostgreSQL-only tests, and passed Ruff, format, and mypy. Separate
-PostgreSQL migration and 3 integration tests passed. The web gate passed 6 tests
-plus lint, format, typecheck, and build; the toolkit suite passed 6 tests. Browser
-checks at 1440, 1024, 768, and 375 px found no horizontal overflow and confirmed
-keyboard focus. The latest toolkit run passed 82 tests with one gated live-Docker
+In the earlier IMP-001/003 baseline validation, the coordinator verified Compose
+configuration, image builds, a fresh migration at `20260925_0002`, stack
+start/status/restart, and health behavior. Health returned 200 normally, 503 with
+the database stopped, and 200 after database recovery; `/api/agents` returned
+404. The only published service was `127.0.0.1:8080`; all listed commands exited
+0. That baseline API gate passed 32 tests, skipped 3 PostgreSQL-only tests, and
+passed Ruff, format, and mypy; separate PostgreSQL migration and 3 integration
+tests passed. The baseline web gate passed 6 tests plus lint, format, typecheck,
+and build. Browser checks at 1440, 1024, 768, and 375 px found no horizontal
+overflow and confirmed keyboard focus. These IMP-001/003 results are not final
+IMP-004 gates. The latest toolkit run passed 98 tests with one gated live-Docker
 test skipped; the separately exercised live recovery test is described below.
 
 ## Disposable authenticated browser review (operator-only)
@@ -194,14 +202,88 @@ The launcher also refuses to replace an existing login or prior run with
 unverified cleanup. The requested lifetime is bounded (5–240 minutes) and the
 fixture performs automatic teardown at its limit.
 
-The fixture archives committed `HEAD` for the app snapshot, not dirty working-tree
-changes. Uncommitted IMP-004 code is therefore not included. Keep its partial work
-and unrelated planning changes untouched. The normal browser page is served only
-on loopback, but the shared Playwright tool server is **not OS-confined** and may
-have access to Docker, host secrets, or another stack. This is an accepted residual
-host risk for this local synthetic review, not a security control; do not claim a
-proven denial, intentionally use those capabilities, or extend this exception to
-product-agent isolation or shared-server readiness.
+By default, the fixture archives committed `HEAD` for the app snapshot, not dirty
+working-tree changes. Uncommitted IMP-004 code is therefore excluded from the
+default mode. An opt-in, fingerprint-pinned candidate mode is described below; it
+does not change the default. The normal browser page is served only on loopback,
+but the shared Playwright tool server is **not OS-confined** and may have access to
+Docker, host secrets, or another stack. This is an accepted residual host risk for
+this local synthetic review, not a security control; do not claim a proven denial,
+intentionally use those capabilities, or extend this exception to product-agent
+isolation or shared-server readiness.
+
+### Reviewing the dirty IMP-004 candidate
+
+This operator-only path is separate from the committed-`HEAD` fixture mode. It is
+for reviewing the specific IMP-004 worktree candidate based on `2d71c1b`; it is not
+a general dirty-tree preview or a product/deployment command. The preflight needs
+Docker with the local Docker socket. Candidate launch additionally requires the
+already-approved handoff directory `/tmp/opencode/impostr-review-handoff` to be
+owned by the operator with mode `0700` and available through the permitted file
+tools. If the channel's permissions may have changed, prove a harmless write/read
+marker first. If that fails, stop before creating credentials; do not choose
+another path or tool.
+
+First run the candidate infrastructure preflight from the repository root:
+
+```sh
+python3 scripts/local_browser_fixture.py candidate-preflight
+```
+
+It accepts only the fixture's explicit reviewed runtime-input and test-only
+allowlists over the pinned base commit. It rejects unrelated or missing changes,
+symlinks, traversal, oversized inputs (512 KiB per file and 2 MiB total), and
+recognized literal secrets. The tests are accepted as test-only input, not copied
+into runtime images. The fixture fingerprints the base commit, path/status/mode,
+and input content digests; the fingerprint does not disclose file contents. The
+preflight builds and migrates a fresh isolated Compose stack to `20260925_0004`,
+checks project creation, template provenance for all three drafts, cross-member
+denial and cleanup. It does **not** perform browser rendering or publish a login.
+Copy the exact lowercase 64-character `CANDIDATE_FINGERPRINT` it prints. Do not
+reuse any fingerprint from an earlier run or from this document.
+
+Only if preflight passes and none of its candidate inputs have changed, launch the
+rendered-review fixture with that exact fingerprint (replace the placeholder):
+
+```sh
+python3 scripts/local_browser_fixture.py launch \
+  --handoff-dir /tmp/opencode/impostr-review-handoff \
+  --lifetime-minutes 30 \
+  --candidate-fingerprint <CANDIDATE_FINGERPRINT_FROM_THIS_PREFLIGHT>
+```
+
+The launch refuses an invalid or stale fingerprint, rechecks the snapshot, and
+uses a new uniquely named local Compose project and loopback-only front door. Read
+only the generated `member-login.json` through the permitted tool, use it for
+normal Member sign-in, and keep that authenticated page open for the rendered
+review. The fingerprint printed at launch must match the preflight fingerprint.
+Candidate preflight alone is infrastructure evidence, not rendered-review signoff.
+Any candidate input change requires a fresh preflight and rendered review of that
+same new fingerprint.
+
+After review, stop the supervisor and inspect only the sanitized cleanup status:
+
+```sh
+python3 scripts/local_browser_fixture.py stop \
+  --handoff-dir /tmp/opencode/impostr-review-handoff
+```
+
+Read `/tmp/opencode/impostr-review-handoff/cleanup-status.json` through the
+permitted tool. Confirm the phase is stopped, the generated login/accounts are
+removed or disabled, owned Compose resources and run-built images are removed,
+private fixture state is removed, and recovery is either `not-needed` or
+`completed`. A failed review remains a failure even if owned cleanup succeeded.
+If cleanup is not verified, follow the ownership-checked `recover` procedure above;
+do not run broad Docker cleanup or delete recovery state manually. The fixture
+removes only resources it registered to its unique project and does not prune the
+shared Docker cache.
+
+The candidate fixture necessarily uses the local Docker daemon and contains an
+unconfined shared browser-tool-server residual risk. Use only its generated
+synthetic account and project. Do not infer Docker/host-secret denial, product
+agent isolation, or shared-server readiness. The candidate preview and browser
+review do not make the dirty implementation committed or establish production
+acceptance.
 
 The separately gated live SIGKILL recovery test is run from the repository root
 with Docker available and an appropriate container image already cached. It does
@@ -250,10 +332,71 @@ established.
   These controls do not make the local-only deployment suitable for external
   exposure.
 
-- A signed-in member can read only project metadata belonging to their account;
-  administrators can read all project metadata, with admin reads audited. Project
-  creation is not implemented, so a fresh local database can have no projects.
-  This slice does not contain planning documents or project workflow data.
+- A signed-in member can list, create, and read projects owned by their account;
+  administrators can read all project metadata and documents, with admin reads
+  audited. Project names are trimmed and NFC-normalized, 1–120 characters, cannot
+  contain path separators/control/format characters, and are unique per owner after
+  NFKC normalization, trimming and case-folding. Names never become filesystem
+  paths. A new project receives an opaque ID, creator and UTC creation time, plus
+  draft `PROJECT.md`, `AGENTS.md`, and `BACKLOG.md` revisions seeded from the root
+  `.example` templates. The initial revision records template source and SHA-256
+  provenance. On API startup, missing template drafts are also backfilled for
+  existing metadata-only projects. This does not create a Git repository or launch
+  the toolkit.
+
+## Project drafts, history, and local data recovery
+
+PostgreSQL is authoritative for project metadata, each document's current-head
+number, immutable document revisions, and stale-write conflict proposals. A
+revision records UTF-8 Markdown content, a SHA-256 content digest, UTC timestamp,
+origin (`template` or `human`), author where applicable, and template source/digest
+for template revisions. Each of the three document kinds allows at most 128 KiB
+of UTF-8 content. Project and document reads/writes are restricted to the owner;
+administrators may access all projects and their reads/writes are audited. A
+foreign or missing project is reported as not found.
+
+Saving a draft requires the revision number the editor read. A current expected
+revision creates the next immutable `human` revision. A stale expected revision
+does not overwrite the saved head: the API returns HTTP 409 with the latest
+revision and records the submitted text, expected/observed revision numbers,
+author, timestamp and digest as an immutable conflict proposal. Review and
+reapplication are explicit; there is no automatic merge. Revision history is
+ordered by revision number. Conflict-proposal pagination uses a stable cursor so
+concurrent proposals do not shift already paged rows; a new history request can
+show later proposals.
+
+The API also mirrors current document heads as files named `PROJECT.md`,
+`AGENTS.md`, and `BACKLOG.md` under an opaque project-ID directory in
+`IMPOSTR_WORKSPACE_ROOT` (Compose currently mounts `/workspaces` as a bounded
+256 MiB `tmpfs`, mode `0700`, with `noexec`, `nosuid`, and `nodev`). Workspace
+directories use mode `0700` and document files mode `0600`, owned by the API user.
+They are a disposable cache, not an agent workspace, approval surface, or source
+of truth.
+Authorized document reads rebuild the mirror from the current PostgreSQL heads.
+Mirror write failures do not replace or roll back PostgreSQL data; the cache is
+discarded and a later authorized read rebuilds it. The bounded cache can evict old
+entries, so do not back it up or edit it as durable data.
+
+The named `postgres-data` volume persists across ordinary `docker compose down`;
+`down -v` removes it. Keep database backups outside the repository, protected
+from other local users, and treat dumps as sensitive project/account data; do not
+commit them. A copy of the workspace mirror
+does not recover project ownership/history, and a database dump does not reproduce
+uncommitted application code. Match the application/migration version when
+restoring.
+
+**Backup/restore status:** No backup/restore procedure or restore drill is
+verified. The safe approach to test is a PostgreSQL-native archive (for example,
+`pg_dump` in custom format) stored with owner-only permissions outside the repo,
+restored with PostgreSQL tooling (for example, `pg_restore`) into a new, uniquely
+named Compose project with a fresh volume. Do not use the live project volume as a
+restore target or publish the test stack on the same front-door port. Verify
+migration head `20260925_0004`, project ownership, all three current drafts,
+revision/proposal history, and normal authorization against synthetic data; then
+remove only that test project's resources and verify the original stack/data
+remain untouched. These tool choices and steps are guidance, not verified
+commands. Record the recovery drill as unverified until actually exercised. Do not
+use Alembic downgrade or `docker compose down -v` on the source stack as recovery.
 
 ## Restart, updates, and troubleshooting
 
@@ -282,20 +425,23 @@ established.
   `postgres-data` volume persists by default. Do not use `down -v` for a stack
   containing data you need: it permanently removes that project's database
   volume. Use volume deletion only for an explicitly disposable, isolated test
-  stack. Backups and restore procedures are not established. Migration `0002`
-  creates identity, session, audit, rate-limit, and project-metadata data; do not
-  use a downgrade as routine recovery because it drops these tables. No migration
-  recovery procedure or durable-storage guarantee is established.
+  stack. Migration `0003` adds project document/revision/proposal tables and the
+  owner-scoped name key; `0004` bounds that key. These migrations have no verified
+  backup/restore recovery procedure. Do not use a downgrade as routine recovery;
+  in particular, downgrading `0003` drops project document histories and conflict
+  proposals. The database volume is persistent local storage, not a tested backup
+  or durability guarantee.
 
 ## Release boundary
 
 Compose binds the front door to loopback by default and does not publish the
-database or API ports. The application has account authentication and
-administrator-managed accounts, but does not yet provide project creation,
-planning documents, chat, approvals, exports, or an agent gateway. It has no TLS
-or domain setup, trusted external reverse-proxy/client-IP contract, backup/restore
-runbook, complete release security gate, or verified agent isolation. Do not
-expose it by changing the published binding, firewall, or proxy configuration.
+database or API ports. This worktree includes account authentication,
+administrator-managed accounts, project creation, and private draft/revision
+history. It does not yet provide chat, approvals, exports, or an agent gateway.
+It has no TLS or domain setup, trusted external reverse-proxy/client-IP contract,
+verified backup/restore runbook, complete release security gate, or verified agent
+isolation. Do not expose it by changing the published binding, firewall, or proxy
+configuration.
 The agent-runtime gate remains blocked: installed OpenCode agents and a bare
 `bwrap` namespace smoke test do not demonstrate a brokered, secret-safe isolated
 integration. Do not infer shared-server readiness from local checks.

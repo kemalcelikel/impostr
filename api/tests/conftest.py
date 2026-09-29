@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -42,8 +43,17 @@ def engine() -> Iterator[Engine]:
 
 
 @pytest.fixture
-def client(engine: Engine, settings: AppSettings) -> Iterator[TestClient]:
-    with TestClient(create_app(engine, settings)) as test_client:
+def workspace_root(tmp_path: Path) -> Path:
+    return tmp_path / "private-workspaces"
+
+
+@pytest.fixture
+def client(
+    engine: Engine,
+    settings: AppSettings,
+    workspace_root: Path,
+) -> Iterator[TestClient]:
+    with TestClient(create_app(engine, settings, workspace_root=workspace_root)) as test_client:
         yield test_client
 
 

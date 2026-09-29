@@ -28,7 +28,8 @@ services:
 
   api:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
       target: runtime
     environment:
       DB_HOST: db
@@ -39,6 +40,8 @@ services:
       APP_PORT: ${APP_PORT:-8080}
       IMPOSTR_PUBLIC_ORIGIN: ${IMPOSTR_PUBLIC_ORIGIN:-}
       IMPOSTR_RATE_LIMIT_KEY: ${IMPOSTR_RATE_LIMIT_KEY:-${DB_PASSWORD:?Set DB_PASSWORD in .env}}
+      IMPOSTR_TEMPLATE_DIR: /app/templates
+      IMPOSTR_WORKSPACE_ROOT: /workspaces
     depends_on:
       db:
         condition: service_healthy
@@ -57,6 +60,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /workspaces:mode=0700,uid=10001,gid=10001,size=256m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -89,13 +93,16 @@ services:
 
   api-check:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
       target: development
     profiles:
       - checks
     environment:
       RUFF_CACHE_DIR: /tmp/ruff
       MYPY_CACHE_DIR: /tmp/mypy
+      IMPOSTR_TEMPLATE_DIR: /app/templates
+      IMPOSTR_WORKSPACE_ROOT: /workspaces
     command: ["python", "-m", "pytest", "-p", "no:cacheprovider"]
     read_only: true
     tmpfs:
@@ -109,7 +116,8 @@ services:
 
   api-integration-check:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
       target: development
     profiles:
       - integration
@@ -122,6 +130,8 @@ services:
       APP_PORT: ${APP_PORT:-8080}
       IMPOSTR_PUBLIC_ORIGIN: ${IMPOSTR_PUBLIC_ORIGIN:-}
       IMPOSTR_RATE_LIMIT_KEY: ${IMPOSTR_RATE_LIMIT_KEY:-${DB_PASSWORD:?Set DB_PASSWORD in .env}}
+      IMPOSTR_TEMPLATE_DIR: /app/templates
+      IMPOSTR_WORKSPACE_ROOT: /workspaces
       IMPOSTR_TEST_POSTGRES: "1"
       RUFF_CACHE_DIR: /tmp/ruff
       MYPY_CACHE_DIR: /tmp/mypy
@@ -131,6 +141,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /workspaces:mode=0700,uid=10001,gid=10001,size=256m,noexec,nosuid,nodev
     security_opt:
       - no-new-privileges:true
     cap_drop:

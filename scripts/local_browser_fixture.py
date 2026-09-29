@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import http.cookiejar
 import ipaddress
 import json
@@ -49,6 +50,18 @@ MAX_BOOTSTRAP_DIAGNOSTIC_BYTES = 16 * 1024
 MAX_MIGRATION_DIAGNOSTIC_BYTES = 2 * 1024
 EXPECTED_APP_MIGRATION = "20260925_0002"
 EXPECTED_APP_REVISIONS = ("20260925_0001", EXPECTED_APP_MIGRATION)
+CANDIDATE_BASE_COMMIT = "2d71c1b64cb1398c9e29b29141a0891ddc7b90f6"
+CANDIDATE_APP_MIGRATION = "20260925_0004"
+CANDIDATE_APP_REVISIONS = (
+    "20260925_0001",
+    "20260925_0002",
+    "20260925_0003",
+    CANDIDATE_APP_MIGRATION,
+)
+CANDIDATE_PREVIEW_SCHEMA_VERSION = 1
+MAX_CANDIDATE_FILE_BYTES = 512 * 1024
+MAX_CANDIDATE_TOTAL_BYTES = 2 * 1024 * 1024
+MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES = 3 * 1024
 DEFAULT_LIFETIME_MINUTES = 120
 MIN_LIFETIME_MINUTES = 5
 MAX_LIFETIME_MINUTES = 240
@@ -153,6 +166,72 @@ APP_SNAPSHOT_FILES = frozenset(
         "BACKLOG.md.example",
     }
 )
+CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
+    (".dockerignore", "added"),
+    ("api/Dockerfile", "modified"),
+    ("api/app/document_contract.py", "added"),
+    ("api/app/main.py", "modified"),
+    ("api/app/models.py", "modified"),
+    ("api/app/project_documents.py", "added"),
+    ("api/app/project_names.py", "added"),
+    ("api/app/project_templates.py", "added"),
+    ("api/app/projects.py", "modified"),
+    ("api/app/workspaces.py", "added"),
+    ("api/migrations/versions/20260925_0003_project_document_revisions.py", "added"),
+    ("api/migrations/versions/20260925_0004_bounded_project_name_keys.py", "added"),
+    ("compose.yaml", "modified"),
+    ("web/nginx/default.conf", "modified"),
+    ("web/src/App.tsx", "modified"),
+    ("web/src/ProjectWorkspace.tsx", "added"),
+    ("web/src/api.ts", "added"),
+)
+# The dirty IMP-004 test changes are intentionally not copied into a runtime
+# image. Accept only this reviewed test-only set while collecting runtime inputs.
+CANDIDATE_NONRUNTIME_TEST_CHANGES = (
+    ("api/tests/conftest.py", "modified"),
+    ("api/tests/test_migrations.py", "modified"),
+    ("api/tests/test_postgres_integration.py", "modified"),
+    ("api/tests/test_projects.py", "modified"),
+    ("api/tests/test_transaction_failures.py", "modified"),
+    ("api/tests/test_workspaces.py", "added"),
+    ("web/src/App.test.tsx", "modified"),
+    ("web/src/ProjectWorkspace.test.tsx", "added"),
+)
+CANDIDATE_STATUS_PATHS = (
+    ".dockerignore",
+    "compose.yaml",
+    "db",
+    "api",
+    "web",
+    "PROJECT.md.example",
+    "AGENTS.md.example",
+    "BACKLOG.md.example",
+)
+CANDIDATE_DOCKERIGNORE_RULES = (
+    "**",
+    "!api/",
+    "!api/Dockerfile",
+    "!api/requirements.lock",
+    "!api/requirements-dev.lock",
+    "!api/pyproject.toml",
+    "!api/alembic.ini",
+    "!api/app/",
+    "!api/app/**",
+    "!api/migrations/",
+    "!api/migrations/**",
+    "!api/tests/",
+    "!api/tests/**",
+    "!PROJECT.md.example",
+    "!AGENTS.md.example",
+    "!BACKLOG.md.example",
+    "api/**/__pycache__/",
+    "api/**/.pytest_cache/",
+    "api/**/.mypy_cache/",
+    "api/**/.ruff_cache/",
+    "api/**/*.pyc",
+    "api/**/.env",
+    "api/**/.env.*",
+)
 REVIEW_IMAGE_PROJECT_LABEL = "io.impostr.local-browser-review.project"
 REVIEW_IMAGE_SERVICE_LABEL = "io.impostr.local-browser-review.service"
 REVIEW_IMAGE_SERVICES = ("db", "api", "frontdoor")
@@ -213,6 +292,43 @@ def review_image_labels(project_name: str, service: str) -> dict[str, str]:
 
 class FixtureError(Exception):
     """A safe-to-display fixture failure with no command or response details."""
+
+
+@dataclass(frozen=True, slots=True)
+class CandidatePreviewPolicy:
+    """The fixed, reviewed source list used by the opt-in candidate preview."""
+
+    base_commit: str
+    reviewed_inputs: tuple[tuple[str, str], ...]
+    nonruntime_test_changes: tuple[tuple[str, str], ...]
+    max_file_bytes: int = MAX_CANDIDATE_FILE_BYTES
+    max_total_bytes: int = MAX_CANDIDATE_TOTAL_BYTES
+
+
+CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=CANDIDATE_BASE_COMMIT,
+    reviewed_inputs=CANDIDATE_REVIEWED_RUNTIME_INPUTS,
+    nonruntime_test_changes=CANDIDATE_NONRUNTIME_TEST_CHANGES,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateInputRecord:
+    path: str
+    status: str
+    size: int
+    mode: int
+    sha256: str
+
+
+@dataclass(slots=True, repr=False)
+class CandidateSnapshot:
+    """A pinned candidate overlay and its content-only SHA-256 fingerprint."""
+
+    base_commit: str
+    fingerprint: str
+    records: tuple[CandidateInputRecord, ...]
+    prepared_compose_sha256: str | None = None
 
 
 class StopRequested(Exception):
@@ -679,9 +795,13 @@ def classify_bootstrap_diagnostic(output: bytes) -> str:
     return next((code for marker, code in markers if marker in sample), "unclassified")
 
 
-def migration_revision_status(output: str) -> str:
+def migration_revision_status(
+    output: str,
+    *,
+    expected_revision: str = EXPECTED_APP_MIGRATION,
+) -> str:
     """Return a fixed status for Alembic's current-revision output."""
-    if EXPECTED_APP_MIGRATION in output.split():
+    if expected_revision in output.split():
         return "expected"
     return "empty" if not output.strip() else "unexpected"
 
@@ -875,10 +995,107 @@ print(json.dumps(result, separators=(",", ":")))
 """
 
 
-def parse_migration_diagnostic(output: str) -> dict[str, Any] | None:
+def _candidate_migration_diagnostic_program() -> str:
+    program = MIGRATION_DIAGNOSTIC_PYTHON
+    replacements = (
+        (
+            '        "revision_0002": "unavailable",\n'
+            '    },\n'
+            '    "discovered_revisions": [],',
+            '        "revision_0002": "unavailable",\n'
+            '        "revision_0003": "unavailable",\n'
+            '        "revision_0004": "unavailable",\n'
+            '    },\n'
+            '    "discovered_revisions": [],',
+        ),
+        (
+            '    "users": "unavailable",\n'
+            '}',
+            '    "users": "unavailable",\n'
+            '    "projects_name_key": "unavailable",\n'
+            '    "project_documents": "unavailable",\n'
+            '    "project_document_revisions": "unavailable",\n'
+            '    "document_conflict_proposals": "unavailable",\n'
+            '}',
+        ),
+        (
+            '        "revision_0002": file_status(\n'
+            '            "/app/migrations/versions/'
+            '20260925_0002_identity_and_project_metadata.py"\n'
+            '        ),\n'
+            '    }',
+            '        "revision_0002": file_status(\n'
+            '            "/app/migrations/versions/'
+            '20260925_0002_identity_and_project_metadata.py"\n'
+            '        ),\n'
+            '        "revision_0003": file_status(\n'
+            '            "/app/migrations/versions/20260925_0003_project_document_revisions.py"\n'
+            '        ),\n'
+            '        "revision_0004": file_status(\n'
+            '            "/app/migrations/versions/20260925_0004_bounded_project_name_keys.py"\n'
+            '        ),\n'
+            '    }',
+        ),
+        (
+            'expected_revisions = {"20260925_0001", "20260925_0002"}',
+            'expected_revisions = {"20260925_0001", "20260925_0002", '
+            '"20260925_0003", "20260925_0004"}',
+        ),
+        (
+            '            result["users"] = "yes" if "users" in tables else "no"\n'
+            '            if "alembic_version" not in tables:',
+            '            result["users"] = "yes" if "users" in tables else "no"\n'
+            '            result["project_documents"] = (\n'
+            '                "yes" if "project_documents" in tables else "no"\n'
+            '            )\n'
+            '            result["project_document_revisions"] = (\n'
+            '                "yes" if "project_document_revisions" in tables else "no"\n'
+            '            )\n'
+            '            result["document_conflict_proposals"] = (\n'
+            '                "yes" if "document_conflict_proposals" in tables else "no"\n'
+            '            )\n'
+            '            if "projects" in tables:\n'
+            '                project_columns = {\n'
+            '                    column["name"]\n'
+            '                    for column in inspect(connection).get_columns(\n'
+            '                        "projects", schema=schema_name\n'
+            '                    )\n'
+            '                }\n'
+            '                result["projects_name_key"] = (\n'
+            '                    "yes" if "name_key" in project_columns else "no"\n'
+            '                )\n'
+            '            else:\n'
+            '                result["projects_name_key"] = "no"\n'
+            '            if "alembic_version" not in tables:',
+        ),
+        (
+            '                elif current_revisions == ["20260925_0002"]:',
+            '                elif current_revisions == ["20260925_0004"]:',
+        ),
+    )
+    for before, after in replacements:
+        if program.count(before) != 1:
+            raise RuntimeError("The candidate migration diagnostic template changed unexpectedly.")
+        program = program.replace(before, after, 1)
+    return program
+
+
+CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON = _candidate_migration_diagnostic_program()
+
+
+def parse_migration_diagnostic(
+    output: str,
+    *,
+    candidate: bool = False,
+) -> dict[str, Any] | None:
     """Validate bounded diagnostic JSON and retain only allowlisted evidence."""
     try:
-        if len(output.encode("utf-8")) > MAX_MIGRATION_DIAGNOSTIC_BYTES:
+        maximum_bytes = (
+            MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES
+            if candidate
+            else MAX_MIGRATION_DIAGNOSTIC_BYTES
+        )
+        if len(output.encode("utf-8")) > maximum_bytes:
             return None
         raw: Any = json.loads(output)
     except (UnicodeError, json.JSONDecodeError, RecursionError):
@@ -908,6 +1125,14 @@ def parse_migration_diagnostic(output: str) -> dict[str, Any] | None:
         "current",
         "users",
     }
+    candidate_schema_fields = {
+        "projects_name_key",
+        "project_documents",
+        "project_document_revisions",
+        "document_conflict_proposals",
+    }
+    if candidate:
+        expected_keys.update(candidate_schema_fields)
     if not isinstance(raw, dict) or set(raw) != expected_keys:
         return None
 
@@ -930,6 +1155,15 @@ def parse_migration_diagnostic(output: str) -> dict[str, Any] | None:
         "current": {"expected", "empty", "table-absent", "other", "unavailable"},
         "users": {"yes", "no", "unavailable"},
     }
+    if candidate:
+        status_fields.update(
+            {
+                "projects_name_key": {"yes", "no", "unavailable"},
+                "project_documents": {"yes", "no", "unavailable"},
+                "project_document_revisions": {"yes", "no", "unavailable"},
+                "document_conflict_proposals": {"yes", "no", "unavailable"},
+            }
+        )
     if any(
         not isinstance(raw[field], str) or raw[field] not in allowed
         for field, allowed in status_fields.items()
@@ -945,6 +1179,8 @@ def parse_migration_diagnostic(output: str) -> dict[str, Any] | None:
 
     image_files = raw["image_files"]
     expected_file_keys = {"alembic_ini", "env_py", "revision_0001", "revision_0002"}
+    if candidate:
+        expected_file_keys.update({"revision_0003", "revision_0004"})
     if (
         not isinstance(image_files, dict)
         or set(image_files) != expected_file_keys
@@ -960,9 +1196,10 @@ def parse_migration_diagnostic(output: str) -> dict[str, Any] | None:
     def allowed_revisions(value: Any) -> list[str] | None:
         if not isinstance(value, list) or len(value) > 8:
             return None
+        expected_revisions = CANDIDATE_APP_REVISIONS if candidate else EXPECTED_APP_REVISIONS
         if any(
             not isinstance(revision, str)
-            or revision not in {*EXPECTED_APP_REVISIONS, "other"}
+            or revision not in {*expected_revisions, "other"}
             for revision in value
         ):
             return None
@@ -1041,7 +1278,11 @@ def classify_migration_diagnostic_stderr(output: bytes) -> str:
     return "suppressed"
 
 
-def format_migration_diagnostic(diagnostic: Mapping[str, Any]) -> str:
+def format_migration_diagnostic(
+    diagnostic: Mapping[str, Any],
+    *,
+    candidate: bool = False,
+) -> str:
     """Render only fixed statuses, known revision IDs, and expected image paths."""
     script_location = (
         "/app/migrations"
@@ -1058,10 +1299,12 @@ def format_migration_diagnostic(diagnostic: Mapping[str, Any]) -> str:
         ("0001", "revision_0001"),
         ("0002", "revision_0002"),
     )
+    if candidate:
+        file_labels += (("0003", "revision_0003"), ("0004", "revision_0004"))
     files = ",".join(
         f"{label}:{diagnostic['image_files'][key]}" for label, key in file_labels
     )
-    return (
+    summary = (
         f"probe_stage={diagnostic['probe_stage']} "
         f"discovery_status={diagnostic['discovery_status']} "
         f"database_probe_status={diagnostic['database_probe_status']} "
@@ -1083,11 +1326,28 @@ def format_migration_diagnostic(diagnostic: Mapping[str, Any]) -> str:
         f"alembic_version_table={diagnostic['alembic_version_table']} "
         f"catalog_current={diagnostic['current']} users={diagnostic['users']}"
     )
+    if candidate:
+        summary += (
+            " candidate_schema="
+            f"projects_name_key:{diagnostic['projects_name_key']},"
+            f"project_documents:{diagnostic['project_documents']},"
+            "project_document_revisions:"
+            f"{diagnostic['project_document_revisions']},"
+            "document_conflict_proposals:"
+            f"{diagnostic['document_conflict_proposals']}"
+        )
+    return summary
 
 
-def migration_diagnostic_is_complete(diagnostic: Mapping[str, Any]) -> bool:
+def migration_diagnostic_is_complete(
+    diagnostic: Mapping[str, Any],
+    *,
+    candidate: bool = False,
+) -> bool:
     """Require the committed IMP-003 image, head, and schema before auth setup."""
-    return (
+    expected_revisions = CANDIDATE_APP_REVISIONS if candidate else EXPECTED_APP_REVISIONS
+    expected_head = CANDIDATE_APP_MIGRATION if candidate else EXPECTED_APP_MIGRATION
+    complete = (
         diagnostic["probe_stage"] == "complete"
         and diagnostic["discovery_status"] == "ok"
         and diagnostic["database_probe_status"] == "ok"
@@ -1100,8 +1360,8 @@ def migration_diagnostic_is_complete(diagnostic: Mapping[str, Any]) -> bool:
         and diagnostic["versions_directory_owner"] in {"root", "app"}
         and diagnostic["runtime_versions_access"] == "yes"
         and all(status == "present" for status in diagnostic["image_files"].values())
-        and diagnostic["discovered_revisions"] == list(EXPECTED_APP_REVISIONS)
-        and diagnostic["heads"] == [EXPECTED_APP_MIGRATION]
+        and diagnostic["discovered_revisions"] == list(expected_revisions)
+        and diagnostic["heads"] == [expected_head]
         and diagnostic["database_config"] == "expected"
         and diagnostic["database"] == "expected"
         and diagnostic["schema"] == "public"
@@ -1109,6 +1369,17 @@ def migration_diagnostic_is_complete(diagnostic: Mapping[str, Any]) -> bool:
         and diagnostic["current"] == "expected"
         and diagnostic["users"] == "yes"
     )
+    if candidate:
+        return complete and all(
+            diagnostic[field] == "yes"
+            for field in (
+                "projects_name_key",
+                "project_documents",
+                "project_document_revisions",
+                "document_conflict_proposals",
+            )
+        )
+    return complete
 
 
 def choose_loopback_host() -> str:
@@ -1157,6 +1428,580 @@ def _git_environment(home: Path) -> dict[str, str]:
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_TERMINAL_PROMPT": "0",
     }
+
+
+def _is_candidate_build_scope(path: str) -> bool:
+    return path in {
+        ".dockerignore",
+        "compose.yaml",
+        "PROJECT.md.example",
+        "AGENTS.md.example",
+        "BACKLOG.md.example",
+    } or path.startswith(("api/", "db/", "web/"))
+
+
+def _is_candidate_secret_path(path: str) -> bool:
+    return any(
+        component == ".env"
+        or (component.startswith(".env.") and component != ".env.example")
+        or component.lower().endswith((".pem", ".p12", ".pfx", ".key"))
+        for component in PurePosixPath(path).parts
+    )
+
+
+def validate_candidate_reviewed_paths(
+    paths: Sequence[str],
+    *,
+    policy: CandidatePreviewPolicy = CANDIDATE_PREVIEW_POLICY,
+) -> tuple[str, ...]:
+    """Require the exact reviewed path set; callers cannot add planning inputs."""
+    expected = dict(policy.reviewed_inputs)
+    if len(expected) != len(policy.reviewed_inputs) or not expected:
+        raise FixtureError("The candidate preview allowlist is invalid.")
+    if any(status not in {"added", "modified"} for status in expected.values()):
+        raise FixtureError("The candidate preview allowlist has an invalid change type.")
+
+    supplied = tuple(paths)
+    if len(supplied) != len(set(supplied)):
+        raise FixtureError("The candidate preview contains duplicate input paths.")
+    for path in supplied:
+        if not isinstance(path, str) or not path or "\\" in path:
+            raise FixtureError("The candidate preview contains an unsafe input path.")
+        relative = PurePosixPath(path)
+        if (
+            relative.is_absolute()
+            or str(relative) != path
+            or any(part in {"", ".", ".."} for part in relative.parts)
+            or not _is_candidate_build_scope(path)
+            or _is_candidate_secret_path(path)
+        ):
+            raise FixtureError("The candidate preview contains an unsafe or unrelated path.")
+    if set(supplied) != set(expected):
+        raise FixtureError("The candidate preview is missing or contains an unreviewed input.")
+    return tuple(sorted(expected))
+
+
+def _parse_candidate_status(output: bytes) -> dict[str, str]:
+    if output and not output.endswith(b"\0"):
+        raise FixtureError("Candidate source status could not be parsed safely.")
+    changes: dict[str, str] = {}
+    for entry in output.split(b"\0")[:-1]:
+        if len(entry) < 4 or entry[2:3] != b" ":
+            raise FixtureError("Candidate source status could not be parsed safely.")
+        try:
+            path = entry[3:].decode("utf-8", "strict")
+            status = entry[:2].decode("ascii", "strict")
+        except UnicodeError:
+            raise FixtureError("Candidate source status contains an invalid path.") from None
+        if not path or path in changes:
+            raise FixtureError("Candidate source status contains an ambiguous path.")
+        if status == "??":
+            changes[path] = "added"
+        elif status == " M":
+            changes[path] = "modified"
+        else:
+            # Staged edits, deletes, renames, mode changes, conflicts and submodules
+            # are not the reviewed worktree overlay.
+            changes[path] = "unexpected"
+    return changes
+
+
+def _candidate_status(
+    repository_root: Path,
+    *,
+    private_home: Path,
+) -> dict[str, str]:
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "--no-optional-locks",
+                "status",
+                "--porcelain=v1",
+                "-z",
+                "--untracked-files=all",
+                "--no-renames",
+                "--",
+                *CANDIDATE_STATUS_PATHS,
+            ],
+            cwd=repository_root,
+            env=_git_environment(private_home),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise FixtureError("The candidate runtime inputs could not be inspected.") from None
+    if (
+        completed.returncode != 0
+        or not isinstance(completed.stdout, bytes)
+        or len(completed.stdout) > 128 * 1024
+    ):
+        raise FixtureError("The candidate runtime input status is unavailable or oversized.")
+    return _parse_candidate_status(completed.stdout)
+
+
+def _read_candidate_file_with_mode(
+    root: Path,
+    relative_path: str,
+    *,
+    maximum_bytes: int,
+    allowed_modes: frozenset[int] = frozenset({0o644}),
+) -> tuple[bytes, int]:
+    """Read one plain candidate file without following path links."""
+    relative = PurePosixPath(relative_path)
+    if (
+        relative.is_absolute()
+        or str(relative) != relative_path
+        or "\\" in relative_path
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise FixtureError("The candidate preview contains an unsafe input path.")
+
+    root_fd = -1
+    parent_fd = -1
+    file_fd = -1
+    try:
+        root_fd = os.open(
+            root,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        parent_fd = root_fd
+        for component in relative.parts[:-1]:
+            next_fd = os.open(
+                component,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=parent_fd,
+            )
+            if parent_fd != root_fd:
+                os.close(parent_fd)
+            parent_fd = next_fd
+
+        file_name = relative.parts[-1]
+        before = os.stat(file_name, dir_fd=parent_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_uid != os.geteuid()
+            or before.st_nlink != 1
+            or stat.S_IMODE(before.st_mode) not in allowed_modes
+            or before.st_size < 0
+            or before.st_size > maximum_bytes
+        ):
+            raise FixtureError("A candidate input is unsafe or exceeds its size limit.")
+        file_fd = os.open(
+            file_name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_fd,
+        )
+        opened = os.fstat(file_fd)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_uid != os.geteuid()
+            or opened.st_nlink != 1
+            or stat.S_IMODE(opened.st_mode) not in allowed_modes
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise FixtureError("A candidate input changed during its safety check.")
+
+        content = bytearray()
+        while len(content) <= maximum_bytes:
+            chunk = os.read(file_fd, min(64 * 1024, maximum_bytes + 1 - len(content)))
+            if not chunk:
+                break
+            content.extend(chunk)
+        after = os.fstat(file_fd)
+        opened_identity = (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_size,
+            opened.st_mtime_ns,
+            opened.st_ctime_ns,
+        )
+        after_identity = (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        if (
+            len(content) > maximum_bytes
+            or len(content) != opened.st_size
+            or after_identity != opened_identity
+        ):
+            raise FixtureError("A candidate input changed or exceeded its size limit.")
+        return bytes(content), stat.S_IMODE(opened.st_mode)
+    except FixtureError:
+        raise
+    except OSError:
+        raise FixtureError("A candidate input could not be read safely.") from None
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if parent_fd >= 0 and parent_fd != root_fd:
+            os.close(parent_fd)
+        if root_fd >= 0:
+            os.close(root_fd)
+
+
+def _read_candidate_file(root: Path, relative_path: str, *, maximum_bytes: int) -> bytes:
+    content, _mode = _read_candidate_file_with_mode(
+        root,
+        relative_path,
+        maximum_bytes=maximum_bytes,
+    )
+    return content
+
+
+_CANDIDATE_SECRET_ASSIGNMENT = re.compile(
+    r"(?im)^\s*(?:export\s+)?"
+    r"(?P<name>[A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY))"
+    r"\s*(?P<operator>[:=])\s*(?P<value>\S.*?)\s*$"
+)
+_CANDIDATE_TOKEN_VALUE = re.compile(
+    rb"(?:-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|"
+    rb"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|"
+    rb"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{24,})\b)"
+)
+
+
+def _reject_candidate_secrets(path: str, content: bytes) -> None:
+    if _is_candidate_secret_path(path):
+        raise FixtureError("A secret-bearing path is not an allowed candidate input.")
+    if _CANDIDATE_TOKEN_VALUE.search(content):
+        raise FixtureError("A candidate input appears to contain credential material.")
+    try:
+        text_content = content.decode("utf-8", "strict")
+    except UnicodeDecodeError:
+        raise FixtureError("Candidate runtime inputs must be bounded UTF-8 text.") from None
+    for match in _CANDIDATE_SECRET_ASSIGNMENT.finditer(text_content):
+        value = match.group("value").strip().strip("\"'")
+        is_yaml_assignment = PurePosixPath(path).suffix.lower() in {".yaml", ".yml"}
+        is_quoted_literal = match.group("value").lstrip().startswith(("\"", "'", "`"))
+        if (
+            value
+            and not (value.startswith("${") and value.endswith("}"))
+            and (is_yaml_assignment or is_quoted_literal)
+        ):
+            raise FixtureError(
+                f"Candidate input {path} has a literal secret assignment "
+                f"({match.group('name')})."
+            )
+
+
+def _candidate_records_fingerprint(
+    base_commit: str,
+    records: Sequence[CandidateInputRecord],
+) -> str:
+    if len(base_commit) not in {40, 64} or any(
+        character not in "0123456789abcdef" for character in base_commit
+    ):
+        raise FixtureError("The candidate base revision could not be verified.")
+    ordered = sorted(records, key=lambda item: item.path)
+    if len({item.path for item in ordered}) != len(ordered):
+        raise FixtureError("The candidate fingerprint contains duplicate paths.")
+    payload = {
+        "schema_version": CANDIDATE_PREVIEW_SCHEMA_VERSION,
+        "base_commit": base_commit,
+        "inputs": [
+            {
+                "path": item.path,
+                "status": item.status,
+                "size": item.size,
+                "mode": item.mode,
+                "sha256": item.sha256,
+            }
+            for item in ordered
+        ],
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _collect_candidate_worktree_inputs(
+    repository_root: Path,
+    *,
+    private_home: Path,
+    policy: CandidatePreviewPolicy,
+) -> tuple[tuple[CandidateInputRecord, ...], dict[str, bytes]]:
+    reviewed_paths = validate_candidate_reviewed_paths(
+        tuple(path for path, _status in policy.reviewed_inputs),
+        policy=policy,
+    )
+    expected = dict(policy.reviewed_inputs)
+    nonruntime = dict(policy.nonruntime_test_changes)
+    changes = _candidate_status(repository_root, private_home=private_home)
+
+    for path, status in changes.items():
+        if path in expected:
+            if status != expected[path]:
+                raise FixtureError("A reviewed candidate input has an unexpected change state.")
+        elif path in nonruntime:
+            if status != nonruntime[path]:
+                raise FixtureError("A candidate test-only change has an unexpected change state.")
+        elif _is_candidate_build_scope(path):
+            raise FixtureError("The candidate preview found an unexpected runtime input.")
+
+    if set(path for path, _status in policy.reviewed_inputs) - set(changes):
+        raise FixtureError("A reviewed candidate input is missing or is no longer dirty.")
+
+    records: list[CandidateInputRecord] = []
+    contents: dict[str, bytes] = {}
+    total_bytes = 0
+    for path in reviewed_paths:
+        status = expected[path]
+        content, source_mode = _read_candidate_file_with_mode(
+            repository_root,
+            path,
+            maximum_bytes=policy.max_file_bytes,
+            allowed_modes=frozenset({0o644, 0o664}),
+        )
+        _reject_candidate_secrets(path, content)
+        total_bytes += len(content)
+        if total_bytes > policy.max_total_bytes:
+            raise FixtureError("Candidate runtime inputs exceed the total size limit.")
+        contents[path] = content
+        records.append(
+            CandidateInputRecord(
+                path=path,
+                status=status,
+                size=len(content),
+                mode=source_mode,
+                sha256=hashlib.sha256(content).hexdigest(),
+            )
+        )
+    return tuple(records), contents
+
+
+def _resolve_head_commit(repository_root: Path, *, private_home: Path) -> str:
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+            cwd=repository_root,
+            env=_git_environment(private_home),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise FixtureError("The committed source revision could not be inspected.") from None
+    if revision.returncode != 0:
+        raise FixtureError("The checkout does not have a committed HEAD snapshot.")
+    commit = revision.stdout.decode("ascii", "ignore").strip()
+    if len(commit) not in {40, 64} or any(
+        character not in "0123456789abcdef" for character in commit
+    ):
+        raise FixtureError("The committed source revision could not be verified.")
+    return commit
+
+
+def _write_candidate_snapshot_file(
+    destination: Path,
+    relative_path: str,
+    content: bytes,
+    *,
+    status: str,
+) -> None:
+    relative = PurePosixPath(relative_path)
+    if (
+        relative.is_absolute()
+        or str(relative) != relative_path
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise FixtureError("The candidate snapshot contains an unsafe path.")
+    root = destination.resolve(strict=True)
+    root_fd = -1
+    parent_fd = -1
+    file_fd = -1
+    try:
+        root_fd = os.open(
+            root,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        parent_fd = root_fd
+        for component in relative.parts[:-1]:
+            next_fd = os.open(
+                component,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=parent_fd,
+            )
+            if parent_fd != root_fd:
+                os.close(parent_fd)
+            parent_fd = next_fd
+
+        file_name = relative.parts[-1]
+        try:
+            existing = os.stat(file_name, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            existing = None
+        if status == "added":
+            if existing is not None:
+                raise FixtureError("A candidate addition already exists in the pinned base.")
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        elif status == "modified":
+            if (
+                existing is None
+                or not stat.S_ISREG(existing.st_mode)
+                or existing.st_uid != os.geteuid()
+                or existing.st_nlink != 1
+                or stat.S_IMODE(existing.st_mode) != 0o644
+            ):
+                raise FixtureError("A candidate modification does not match its pinned base file.")
+            flags = os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        else:
+            raise FixtureError("The candidate snapshot contains an unknown change type.")
+
+        file_fd = os.open(file_name, flags, 0o644, dir_fd=parent_fd)
+        os.fchmod(file_fd, 0o644)
+        opened = os.fstat(file_fd)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_uid != os.geteuid()
+            or opened.st_nlink != 1
+            or stat.S_IMODE(opened.st_mode) != 0o644
+            or (
+                existing is not None
+                and (opened.st_dev, opened.st_ino) != (existing.st_dev, existing.st_ino)
+            )
+        ):
+            raise FixtureError("The candidate snapshot input changed during its safety check.")
+        view = memoryview(content)
+        while view:
+            written = os.write(file_fd, view)
+            if written <= 0:
+                raise OSError("short write")
+            view = view[written:]
+        os.fsync(file_fd)
+    except FixtureError:
+        raise
+    except OSError:
+        raise FixtureError("A candidate input could not be overlaid safely.") from None
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if parent_fd >= 0 and parent_fd != root_fd:
+            os.close(parent_fd)
+        if root_fd >= 0:
+            os.close(root_fd)
+
+
+def validate_candidate_snapshot_tree(
+    source_dir: Path,
+    snapshot: CandidateSnapshot,
+    *,
+    prepared: bool = False,
+) -> None:
+    """Verify every reviewed source remains exact in its private snapshot."""
+    for record in snapshot.records:
+        expected_digest = record.sha256
+        if prepared and record.path == "compose.yaml":
+            expected_digest = snapshot.prepared_compose_sha256 or ""
+        content = _read_candidate_file(
+            source_dir,
+            record.path,
+            maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+        )
+        if (
+            len(content) != record.size and not (prepared and record.path == "compose.yaml")
+        ) or hashlib.sha256(content).hexdigest() != expected_digest:
+            raise FixtureError("The private candidate snapshot changed after fingerprinting.")
+
+
+def validate_candidate_worktree_snapshot(
+    repository_root: Path,
+    snapshot: CandidateSnapshot,
+    *,
+    private_home: Path,
+    policy: CandidatePreviewPolicy = CANDIDATE_PREVIEW_POLICY,
+) -> None:
+    """Fail if the pinned base or any reviewed worktree input changed after capture."""
+    if _resolve_head_commit(repository_root, private_home=private_home) != snapshot.base_commit:
+        raise FixtureError("The candidate base revision changed during preview.")
+    records, _contents = _collect_candidate_worktree_inputs(
+        repository_root,
+        private_home=private_home,
+        policy=policy,
+    )
+    if (
+        records != snapshot.records
+        or _candidate_records_fingerprint(snapshot.base_commit, records) != snapshot.fingerprint
+    ):
+        raise FixtureError("The reviewed candidate changed during preview.")
+
+
+def archive_candidate_snapshot(
+    repository_root: Path,
+    destination: Path,
+    *,
+    private_home: Path,
+    expected_fingerprint: str | None = None,
+    policy: CandidatePreviewPolicy = CANDIDATE_PREVIEW_POLICY,
+) -> CandidateSnapshot:
+    """Overlay only the fixed dirty runtime allowlist on its pinned commit."""
+    repository = repository_root.resolve(strict=True)
+    commit = _resolve_head_commit(repository, private_home=private_home)
+    if commit != policy.base_commit:
+        raise FixtureError("Candidate preview is pinned to a different committed base.")
+    records, contents = _collect_candidate_worktree_inputs(
+        repository,
+        private_home=private_home,
+        policy=policy,
+    )
+    fingerprint = _candidate_records_fingerprint(commit, records)
+    if expected_fingerprint is not None and fingerprint != expected_fingerprint:
+        raise FixtureError(
+            f"The candidate fingerprint changed; actual sha256={fingerprint}."
+        )
+
+    archive_head_snapshot(
+        repository,
+        destination,
+        private_home=private_home,
+        expected_commit=commit,
+    )
+    for record in records:
+        _write_candidate_snapshot_file(
+            destination,
+            record.path,
+            contents[record.path],
+            status=record.status,
+        )
+    candidate = CandidateSnapshot(
+        base_commit=commit,
+        fingerprint=fingerprint,
+        records=records,
+    )
+    validate_candidate_snapshot_tree(destination, candidate)
+    validate_candidate_worktree_snapshot(
+        repository,
+        candidate,
+        private_home=private_home,
+        policy=policy,
+    )
+    return candidate
+
+
+def validate_candidate_dockerignore(source_dir: Path) -> None:
+    """Keep a root-context build limited to reviewed API inputs and templates."""
+    try:
+        raw = _read_candidate_file(
+            source_dir,
+            ".dockerignore",
+            maximum_bytes=16 * 1024,
+        )
+        rules = tuple(
+            line.strip()
+            for line in raw.decode("utf-8", "strict").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        )
+    except UnicodeDecodeError:
+        raise FixtureError("The candidate root build ignore file is invalid.") from None
+    if rules != CANDIDATE_DOCKERIGNORE_RULES:
+        raise FixtureError("The candidate root build context is not safely allowlisted.")
 
 
 def _tracked_secret_path(path: str) -> bool:
@@ -1225,7 +2070,13 @@ def _extract_git_tar(archive_bytes: bytes, destination: Path) -> None:
         raise FixtureError("The committed source archive could not be extracted safely.") from None
 
 
-def archive_head_snapshot(repository_root: Path, destination: Path, *, private_home: Path) -> str:
+def archive_head_snapshot(
+    repository_root: Path,
+    destination: Path,
+    *,
+    private_home: Path,
+    expected_commit: str | None = None,
+) -> str:
     """Create an isolated source tree from one resolved HEAD commit, never the worktree."""
     git_env = _git_environment(private_home)
     try:
@@ -1246,6 +2097,8 @@ def archive_head_snapshot(repository_root: Path, destination: Path, *, private_h
             character not in "0123456789abcdef" for character in commit
         ):
             raise FixtureError("The committed source revision could not be verified.")
+        if expected_commit is not None and commit != expected_commit:
+            raise FixtureError("The committed source revision changed during snapshot creation.")
 
         tree = subprocess.run(
             ["git", "ls-tree", "-r", "--name-only", "-z", commit],
@@ -1405,6 +2258,50 @@ def set_snapshot_loopback_host(source_dir: Path, host: str) -> None:
         raise FixtureError("The private Compose snapshot could not be bound to loopback.") from None
 
 
+def _rewrite_candidate_compose(source_dir: Path, transform: Callable[[str], str]) -> None:
+    try:
+        original = _read_candidate_file(
+            source_dir,
+            "compose.yaml",
+            maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+        ).decode("utf-8", "strict")
+        updated = transform(original)
+        _write_candidate_snapshot_file(
+            source_dir,
+            "compose.yaml",
+            updated.encode("utf-8", "strict"),
+            status="modified",
+        )
+    except FixtureError:
+        raise
+    except (OSError, UnicodeError):
+        raise FixtureError(
+            "The private candidate Compose snapshot could not be rewritten safely."
+        ) from None
+
+
+def set_candidate_snapshot_loopback_host(source_dir: Path, host: str) -> None:
+    """Bind the candidate front door to a generated address in IPv4 loopback."""
+    try:
+        address = ipaddress.ip_address(host)
+        if not address.is_loopback or address.version != 4:
+            raise FixtureError("The generated candidate front-door address is not IPv4 loopback.")
+        original = '"127.0.0.1:${APP_PORT:-8080}:8080"'
+
+        def replace_bind(compose_text: str) -> str:
+            if compose_text.count(original) != 1:
+                raise FixtureError(
+                    "The candidate front-door binding does not match the expected safe form."
+                )
+            return compose_text.replace(original, f'"{host}:${{APP_PORT:-8080}}:8080"', 1)
+
+        _rewrite_candidate_compose(source_dir, replace_bind)
+    except FixtureError:
+        raise
+    except ValueError:
+        raise FixtureError("The generated candidate front-door address is invalid.") from None
+
+
 def set_snapshot_review_images(source_dir: Path, project_name: str) -> None:
     """Tag and label only the three app images in this private Compose snapshot."""
     compose_file = source_dir / "compose.yaml"
@@ -1452,6 +2349,56 @@ def set_snapshot_review_images(source_dir: Path, project_name: str) -> None:
         raise
     except OSError:
         raise FixtureError("The private Compose images could not be isolated by run.") from None
+
+
+def set_candidate_snapshot_review_images(source_dir: Path, project_name: str) -> None:
+    """Tag candidate images without changing its reviewed root API build context."""
+    def add_run_image_tags(compose_text: str) -> str:
+        replacements = (
+            (
+                "  db:\n    build:\n      context: ./db\n",
+                "  db:\n"
+                f"    image: {review_image_reference(project_name, 'db')}\n"
+                "    build:\n"
+                f"      labels:\n        {REVIEW_IMAGE_PROJECT_LABEL}: {project_name}\n"
+                f"        {REVIEW_IMAGE_SERVICE_LABEL}: db\n"
+                "      context: ./db\n",
+            ),
+            (
+                "  api:\n"
+                "    build:\n"
+                "      context: .\n"
+                "      dockerfile: api/Dockerfile\n"
+                "      target: runtime\n",
+                "  api:\n"
+                f"    image: {review_image_reference(project_name, 'api')}\n"
+                "    build:\n"
+                f"      labels:\n        {REVIEW_IMAGE_PROJECT_LABEL}: {project_name}\n"
+                f"        {REVIEW_IMAGE_SERVICE_LABEL}: api\n"
+                "      context: .\n"
+                "      dockerfile: api/Dockerfile\n"
+                "      target: runtime\n",
+            ),
+            (
+                "  frontdoor:\n    build:\n      context: ./web\n      target: runtime\n",
+                "  frontdoor:\n"
+                f"    image: {review_image_reference(project_name, 'frontdoor')}\n"
+                "    build:\n"
+                f"      labels:\n        {REVIEW_IMAGE_PROJECT_LABEL}: {project_name}\n"
+                f"        {REVIEW_IMAGE_SERVICE_LABEL}: frontdoor\n"
+                "      context: ./web\n"
+                "      target: runtime\n",
+            ),
+        )
+        for original, replacement in replacements:
+            if compose_text.count(original) != 1:
+                raise FixtureError(
+                    "The candidate Compose build definitions do not match the reviewed layout."
+                )
+            compose_text = compose_text.replace(original, replacement, 1)
+        return compose_text
+
+    _rewrite_candidate_compose(source_dir, add_run_image_tags)
 
 
 def private_docker_environment(state_dir: Path) -> dict[str, str]:
@@ -1695,12 +2642,14 @@ class ComposeController:
         source_dir: Path,
         env_file: Path,
         project_name: str,
+        candidate: bool = False,
     ) -> None:
         self.docker = docker
         self.source_dir = source_dir
         self.env_file = env_file
         self.project_name = project_name
         self.compose_file = source_dir / "compose.yaml"
+        self.candidate = candidate
 
     def command(self, arguments: Sequence[str]) -> list[str]:
         return self.docker.command(
@@ -1854,8 +2803,14 @@ class ComposeController:
         self.verify_project_images_removed()
 
     def config_json(self) -> str:
+        arguments: list[str] = []
+        if self.candidate:
+            # Include profile-only check services in the candidate safety check,
+            # without building or starting them.
+            arguments.extend(["--profile", "checks", "--profile", "integration"])
+        arguments.extend(["config", "--format", "json"])
         return self.invoke(
-            ["config", "--format", "json"],
+            arguments,
             label="private Compose configuration validation",
             timeout=30,
             capture_stdout=True,
@@ -1864,7 +2819,7 @@ class ComposeController:
     def build(self) -> None:
         self.invoke(
             ["build", "db", "api", "frontdoor"],
-            label="committed app image build",
+            label="candidate app image build" if self.candidate else "committed app image build",
             timeout=900,
         )
 
@@ -1874,32 +2829,48 @@ class ComposeController:
             label="fresh database migration",
             timeout=300,
         )
-        diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic()
-        diagnostic = parse_migration_diagnostic(diagnostic_output)
+        if self.candidate:
+            diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic(
+                candidate=True
+            )
+        else:
+            diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic()
+        diagnostic = parse_migration_diagnostic(
+            diagnostic_output,
+            candidate=self.candidate,
+        )
         if diagnostic is None:
             raise FixtureError(
                 f"Fresh migration diagnostics were unavailable or exceeded their bound "
                 f"(exit={diagnostic_exit}; stderr_category={stderr_category}); output suppressed."
             )
-        diagnostic_summary = format_migration_diagnostic(diagnostic)
+        diagnostic_summary = format_migration_diagnostic(
+            diagnostic,
+            candidate=self.candidate,
+        )
         current = self.invoke(
             ["run", "--rm", "api", "alembic", "current"],
             label="fresh database revision verification",
             timeout=120,
             capture_stdout=True,
         )
-        status = migration_revision_status(current)
+        expected_migration = (
+            CANDIDATE_APP_MIGRATION if self.candidate else EXPECTED_APP_MIGRATION
+        )
+        status = migration_revision_status(current, expected_revision=expected_migration)
         if (
             diagnostic_exit != 0
             or status != "expected"
-            or not migration_diagnostic_is_complete(diagnostic)
+            or not migration_diagnostic_is_complete(diagnostic, candidate=self.candidate)
         ):
+            expected_label = "candidate" if self.candidate else "committed"
             raise FixtureError(
-                f"Fresh migrations did not reach the committed application revision "
+                f"Fresh migrations did not reach the {expected_label} application revision "
                 f"(diagnostic_exit={diagnostic_exit}; alembic_current={status}; "
                 f"{diagnostic_summary}); output suppressed."
             )
-        return f"alembic_current={status}; {diagnostic_summary}"
+        reported_current = CANDIDATE_APP_MIGRATION if self.candidate else status
+        return f"alembic_current={reported_current}; {diagnostic_summary}"
 
     def up(self) -> None:
         self.invoke(["up", "-d"], label="disposable app startup", timeout=240)
@@ -1912,8 +2883,16 @@ class ComposeController:
             capture_stdout=True,
         )
 
-    def run_migration_diagnostic(self) -> tuple[int, str, str]:
+    def run_migration_diagnostic(self, *, candidate: bool = False) -> tuple[int, str, str]:
         """Capture only bounded stdout from the fixed in-container probe."""
+        program = (
+            CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON if candidate else MIGRATION_DIAGNOSTIC_PYTHON
+        )
+        maximum_bytes = (
+            MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES
+            if candidate
+            else MAX_MIGRATION_DIAGNOSTIC_BYTES
+        )
         try:
             completed = subprocess.run(
                 self.command(
@@ -1924,7 +2903,7 @@ class ComposeController:
                         "api",
                         "python",
                         "-c",
-                        MIGRATION_DIAGNOSTIC_PYTHON,
+                        program,
                     ]
                 ),
                 cwd=self.source_dir,
@@ -1940,7 +2919,7 @@ class ComposeController:
 
         if (
             not isinstance(completed.stdout, bytes)
-            or len(completed.stdout) > MAX_MIGRATION_DIAGNOSTIC_BYTES
+            or len(completed.stdout) > maximum_bytes
         ):
             return (
                 completed.returncode,
@@ -2210,6 +3189,140 @@ def validate_compose_config(config_text: str, identity: RunIdentity) -> None:
             raise FixtureError("The database is not using the project-owned volume.")
     except (AttributeError, TypeError, ValueError, IndexError):
         raise FixtureError("The committed Compose configuration failed safety checks.") from None
+
+
+def validate_candidate_compose_config(
+    config_text: str,
+    identity: RunIdentity,
+    source_dir: Path,
+) -> None:
+    """Apply the committed fixture's safety checks plus the candidate root context."""
+    validate_compose_config(config_text, identity)
+    try:
+        config: Any = json.loads(config_text)
+        services = config["services"]
+        networks = config["networks"]
+        volumes = config["volumes"]
+        expected_services = {
+            "db",
+            "api",
+            "frontdoor",
+            "api-check",
+            "api-integration-check",
+            "web-check",
+        }
+        if set(services) != expected_services:
+            raise FixtureError("The candidate Compose file contains an unexpected service.")
+        if set(networks) != {"backend", "checks", "edge"}:
+            raise FixtureError("The candidate Compose file contains an unexpected network.")
+        if networks["checks"].get("internal") is not True:
+            raise FixtureError("The candidate checks network must remain internal.")
+        if set(volumes) != {"postgres-data"}:
+            raise FixtureError("The candidate Compose file contains an unexpected volume.")
+        forbidden_service_options = {
+            "cap_add",
+            "cgroup",
+            "configs",
+            "container_name",
+            "device_cgroup_rules",
+            "devices",
+            "develop",
+            "env_file",
+            "entrypoint",
+            "extends",
+            "external_links",
+            "extra_hosts",
+            "ipc",
+            "network_mode",
+            "pid",
+            "post_start",
+            "pre_stop",
+            "privileged",
+            "secrets",
+            "sysctls",
+            "use_api_socket",
+            "userns_mode",
+            "uts",
+            "volumes_from",
+        }
+        for service_name, service in services.items():
+            if any(service.get(option) for option in forbidden_service_options):
+                raise FixtureError(
+                    f"Candidate service {service_name} has an unsafe host/runtime option."
+                )
+            if service_name in {"db", "api", "frontdoor"} and (
+                service.get("command") or service.get("entrypoint")
+            ):
+                raise FixtureError("A candidate runtime service overrides its pinned command.")
+
+        root = source_dir.resolve(strict=True)
+        build_layout = {
+            "db": (root / "db", "Dockerfile", None),
+            "api": (root, "api/Dockerfile", "runtime"),
+            "frontdoor": (root / "web", "Dockerfile", "runtime"),
+            "api-check": (root, "api/Dockerfile", "development"),
+            "api-integration-check": (root, "api/Dockerfile", "development"),
+            "web-check": (root / "web", "Dockerfile", "checks"),
+        }
+        expected_build_keys = {
+            "db": {"context", "dockerfile", "labels"},
+            "api": {"context", "dockerfile", "target", "labels"},
+            "frontdoor": {"context", "dockerfile", "target", "labels"},
+            "api-check": {"context", "dockerfile", "target"},
+            "api-integration-check": {"context", "dockerfile", "target"},
+            "web-check": {"context", "dockerfile", "target"},
+        }
+        for service_name, (expected_context, expected_dockerfile, expected_target) in (
+            build_layout.items()
+        ):
+            build = services[service_name].get("build")
+            if not isinstance(build, dict) or set(build) - expected_build_keys[service_name]:
+                raise FixtureError("A candidate service has an unexpected build configuration.")
+            context = build.get("context")
+            if not isinstance(context, str) or not Path(context).is_absolute():
+                raise FixtureError("A candidate build context is not an absolute snapshot path.")
+            if Path(context).resolve(strict=True) != expected_context.resolve(strict=True):
+                raise FixtureError("A candidate service points outside its reviewed build context.")
+            dockerfile = build.get("dockerfile", "Dockerfile")
+            if dockerfile != expected_dockerfile or ".." in PurePosixPath(dockerfile).parts:
+                raise FixtureError("A candidate service uses an unexpected Dockerfile.")
+            if expected_target is None:
+                if "target" in build:
+                    raise FixtureError("The candidate database build target is unexpected.")
+            elif build.get("target") != expected_target:
+                raise FixtureError("A candidate service uses an unexpected image target.")
+
+        for service_name, expected_networks in (
+            ("api-check", {"checks"}),
+            ("api-integration-check", {"backend"}),
+            ("web-check", {"checks"}),
+        ):
+            configured = services[service_name].get("networks", {})
+            if not isinstance(configured, (dict, list)) or set(configured) != expected_networks:
+                raise FixtureError("A candidate check service has an unexpected network.")
+            service = services[service_name]
+            if service.get("env_file") or service.get("volumes") or service.get("ports"):
+                raise FixtureError("A candidate check service has an unsafe host attachment.")
+
+        db_environment = services["db"].get("environment", {})
+        api_environment = services["api"].get("environment", {})
+        if (
+            db_environment.get("POSTGRES_DB") != "impostr_review"
+            or db_environment.get("POSTGRES_USER") != "review_owner"
+            or db_environment.get("IMPOSTR_APP_DB_USER") != "review_app"
+            or db_environment.get("IMPOSTR_APP_DB_PASSWORD") != identity.app_password
+            or api_environment.get("DB_HOST") != "db"
+            or str(api_environment.get("DB_PORT")) != "5432"
+            or api_environment.get("DB_NAME") != "impostr_review"
+            or api_environment.get("DB_USER") != "review_app"
+            or api_environment.get("IMPOSTR_TEMPLATE_DIR") != "/app/templates"
+            or api_environment.get("IMPOSTR_WORKSPACE_ROOT") != "/workspaces"
+        ):
+            raise FixtureError("The candidate app is not bound to its private fixture database.")
+    except FixtureError:
+        raise
+    except (AttributeError, KeyError, TypeError, ValueError, OSError):
+        raise FixtureError("The candidate Compose configuration failed safety checks.") from None
 
 
 def run_hidden_password_prompts(
@@ -2584,6 +3697,8 @@ class FixtureSupervisor:
         lifetime_minutes: int = DEFAULT_LIFETIME_MINUTES,
         handoff_directory: Path | None = None,
         control_directory: Path | None = None,
+        candidate_fingerprint: str | None = None,
+        candidate_preflight: bool = False,
     ) -> None:
         self.repository_root = repository_root.resolve()
         self.output = output
@@ -2592,6 +3707,15 @@ class FixtureSupervisor:
         self.lifetime_minutes = lifetime_minutes
         self.handoff_directory = handoff_directory
         self.control_directory = control_directory
+        if candidate_fingerprint is not None and re.fullmatch(
+            r"[0-9a-f]{64}", candidate_fingerprint
+        ) is None:
+            raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
+        self.candidate_preflight = candidate_preflight
+        self.candidate_fingerprint = candidate_fingerprint
+        self.candidate_mode = candidate_preflight or candidate_fingerprint is not None
+        if candidate_preflight and candidate_fingerprint is not None:
+            raise FixtureError("Candidate preflight computes its own fingerprint.")
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -2602,6 +3726,7 @@ class FixtureSupervisor:
         self.cleanup_recovery_status = "not-needed"
         self.state_dir: Path | None = None
         self.source_dir: Path | None = None
+        self.candidate_snapshot: CandidateSnapshot | None = None
         self.identity: RunIdentity | None = None
         self.docker: DockerClient | None = None
         self.compose: ComposeController | None = None
@@ -2663,7 +3788,9 @@ class FixtureSupervisor:
         self._old_signal_handlers.clear()
 
     def _prepare(self) -> None:
-        if not self.input_stream.isatty() or not self.output.isatty():
+        if not self.candidate_preflight and (
+            not self.input_stream.isatty() or not self.output.isatty()
+        ):
             raise FixtureError("Start the fixture in a foreground interactive terminal.")
         if (
             self.lifetime_minutes < MIN_LIFETIME_MINUTES
@@ -2688,25 +3815,52 @@ class FixtureSupervisor:
             docker_socket=self.docker_socket,
             state_dir=self.state_dir,
         )
-        commit = archive_head_snapshot(
-            self.repository_root,
-            self.source_dir,
-            private_home=self.state_dir,
-        )
-        set_snapshot_loopback_host(self.source_dir, host)
-        set_snapshot_review_images(self.source_dir, self.identity.project_name)
+        if self.candidate_mode:
+            self.candidate_snapshot = archive_candidate_snapshot(
+                self.repository_root,
+                self.source_dir,
+                private_home=self.state_dir,
+                expected_fingerprint=self.candidate_fingerprint,
+            )
+            commit = self.candidate_snapshot.base_commit
+            validate_candidate_snapshot_tree(self.source_dir, self.candidate_snapshot)
+            validate_candidate_dockerignore(self.source_dir)
+            set_candidate_snapshot_loopback_host(self.source_dir, host)
+            set_candidate_snapshot_review_images(self.source_dir, self.identity.project_name)
+            self.candidate_snapshot.prepared_compose_sha256 = hashlib.sha256(
+                _read_candidate_file(
+                    self.source_dir,
+                    "compose.yaml",
+                    maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+                )
+            ).hexdigest()
+            self._validate_candidate_preview()
+        else:
+            commit = archive_head_snapshot(
+                self.repository_root,
+                self.source_dir,
+                private_home=self.state_dir,
+            )
+            set_snapshot_loopback_host(self.source_dir, host)
+            set_snapshot_review_images(self.source_dir, self.identity.project_name)
         self.compose = ComposeController(
             docker=self.docker,
             source_dir=self.source_dir,
             env_file=env_file,
             project_name=self.identity.project_name,
+            candidate=self.candidate_mode,
         )
 
-        self._say("Checking the local Docker engine and committed app snapshot…")
+        snapshot_label = "candidate" if self.candidate_mode else "committed"
+        self._say(f"Checking the local Docker engine and {snapshot_label} app snapshot…")
         self.docker.probe_local_engine()
         config_text = self.compose.config_json()
-        validate_compose_config(config_text, self.identity)
+        if self.candidate_mode:
+            validate_candidate_compose_config(config_text, self.identity, self.source_dir)
+        else:
+            validate_compose_config(config_text, self.identity)
         del config_text
+        self._validate_candidate_preview()
         self.compose.verify_no_existing_project_resources()
 
         # From this point on, only this random, previously empty project is ours.
@@ -2714,12 +3868,23 @@ class FixtureSupervisor:
         # partially failed build/run follows the same project-scoped cleanup path.
         self._register_recovery_context(owned=True)
         self.project_owned = True
-        self._say(f"Building committed snapshot {commit[:12]} in a private temporary tree…")
+        if self.candidate_mode and self.candidate_snapshot is not None:
+            self._say(
+                f"Building candidate snapshot {commit[:12]} with fingerprint "
+                f"{self.candidate_snapshot.fingerprint} in a private temporary tree…"
+            )
+        else:
+            self._say(f"Building committed snapshot {commit[:12]} in a private temporary tree…")
         self.compose.build()
+        self._validate_candidate_preview()
         self._say("Applying fresh migrations and starting the loopback-only front door…")
         migration_evidence = self.compose.migrate()
         self._say(f"Fresh migration evidence: {migration_evidence}")
+        self._validate_candidate_preview()
         self.compose.up()
+        if self.candidate_mode:
+            self.compose.verify_project_resources_owned()
+            self._validate_candidate_preview()
 
         api = ApiClient(self.identity.origin)
         self.api_clients.append(api)
@@ -2740,6 +3905,22 @@ class FixtureSupervisor:
         self.identity.postgres_password = None
         self.identity.app_password = None
         self.identity.rate_limit_key = None
+
+    def _validate_candidate_preview(self) -> None:
+        if not self.candidate_mode:
+            return
+        if self.candidate_snapshot is None or self.state_dir is None or self.source_dir is None:
+            raise FixtureError("The candidate source snapshot is unavailable.")
+        validate_candidate_worktree_snapshot(
+            self.repository_root,
+            self.candidate_snapshot,
+            private_home=self.state_dir,
+        )
+        validate_candidate_snapshot_tree(
+            self.source_dir,
+            self.candidate_snapshot,
+            prepared=self.candidate_snapshot.prepared_compose_sha256 is not None,
+        )
 
     def _provision_and_verify_accounts(self, admin_password: str) -> None:
         """Authenticate normally, provision two members, and exercise auth denials."""
@@ -2831,6 +4012,148 @@ class FixtureSupervisor:
         self._say(
             "Pre-handoff checks passed: two member roles, member-to-admin denial (403), "
             "expired/revoked session denial (401), and admin logout (401)."
+        )
+
+    def _verify_candidate_project_creation(self) -> None:
+        """Exercise candidate project creation through normal synthetic Member auth."""
+        if (
+            not self.candidate_preflight
+            or self.identity is None
+            or self.source_dir is None
+            or len(self.identity.members) != 2
+        ):
+            raise FixtureError("The candidate project preflight is not configured safely.")
+        member = self.identity.members[0]
+        other_member = self.identity.members[1]
+        if (
+            member.password is None
+            or member.user_id is None
+            or other_member.password is None
+            or other_member.user_id is None
+        ):
+            raise FixtureError("Candidate project preflight Members are unavailable.")
+
+        client = ApiClient(self.identity.origin)
+        other_client = ApiClient(self.identity.origin)
+        self.api_clients.extend((client, other_client))
+        member_user = client.login(member.username, member.password, expected_role="user")
+        owner_id = _safe_account_id(member_user["id"])
+        if owner_id != member.user_id:
+            raise FixtureError("Candidate project preflight signed in as an unexpected Member.")
+
+        empty_list = client.request("GET", "/api/projects")
+        if empty_list.status != 200 or empty_list.payload != []:
+            raise FixtureError(
+                "The fresh candidate database did not start with an empty project list."
+            )
+
+        project_name = f"candidate-preflight-{self.identity.run_id}"
+        creation = ApiClient._require_json_object(
+            client.request(
+                "POST",
+                "/api/projects",
+                body={"name": project_name},
+                csrf_token=client.csrf_token,
+            ),
+            201,
+            "candidate Member project creation",
+        )
+        project_id_value = creation.get("id")
+        if not isinstance(project_id_value, str):
+            raise FixtureError("Candidate project creation returned an invalid identifier.")
+        project_id = _safe_account_id(project_id_value)
+        if (
+            uuid.UUID(project_id).version != 4
+            or creation.get("name") != project_name
+            or creation.get("owner_user_id") != owner_id
+        ):
+            raise FixtureError("Candidate project creation returned unexpected ownership data.")
+
+        listed = client.request("GET", "/api/projects")
+        if (
+            listed.status != 200
+            or not isinstance(listed.payload, list)
+            or len(listed.payload) != 1
+            or not isinstance(listed.payload[0], dict)
+            or listed.payload[0].get("id") != project_id
+            or listed.payload[0].get("owner_user_id") != owner_id
+        ):
+            raise FixtureError("The candidate Member could not read its created project.")
+
+        document_response = client.request(
+            "GET",
+            f"/api/projects/{project_id}/documents",
+        )
+        if (
+            document_response.status != 200
+            or not isinstance(document_response.payload, list)
+            or len(document_response.payload) != 3
+        ):
+            raise FixtureError("Candidate project creation did not return three draft documents.")
+        expected_sources = {
+            "project": ("PROJECT.md", "PROJECT.md.example"),
+            "agents": ("AGENTS.md", "AGENTS.md.example"),
+            "backlog": ("BACKLOG.md", "BACKLOG.md.example"),
+        }
+        observed_kinds: set[str] = set()
+        for document in document_response.payload:
+            if not isinstance(document, dict):
+                raise FixtureError("A candidate draft response has an unexpected shape.")
+            kind = document.get("kind")
+            if not isinstance(kind, str) or kind not in expected_sources or kind in observed_kinds:
+                raise FixtureError("Candidate project drafts contain an unexpected document kind.")
+            observed_kinds.add(kind)
+            filename, template_name = expected_sources[kind]
+            template_bytes = _read_candidate_file(
+                self.source_dir,
+                template_name,
+                maximum_bytes=MAX_CANDIDATE_FILE_BYTES,
+            )
+            expected_digest = hashlib.sha256(template_bytes).hexdigest()
+            content = document.get("content")
+            if not isinstance(content, str):
+                raise FixtureError("A candidate project draft is not UTF-8 text.")
+            try:
+                content_bytes = content.encode("utf-8", "strict")
+            except UnicodeEncodeError:
+                raise FixtureError("A candidate project draft is not valid UTF-8 text.") from None
+            if (
+                document.get("filename") != filename
+                or type(document.get("revision_number")) is not int
+                or document.get("revision_number") != 1
+                or document.get("origin") != "template"
+                or document.get("author_user_id") is not None
+                or document.get("template_source") != template_name
+                or document.get("content_sha256") != expected_digest
+                or document.get("template_sha256") != expected_digest
+                or content_bytes != template_bytes
+            ):
+                raise FixtureError("A candidate starter draft failed its provenance check.")
+        if observed_kinds != set(expected_sources):
+            raise FixtureError("Candidate project creation omitted a starter draft.")
+
+        other_user = other_client.login(
+            other_member.username,
+            other_member.password,
+            expected_role="user",
+        )
+        if _safe_account_id(other_user["id"]) != other_member.user_id:
+            raise FixtureError("The second candidate Member resolved to an unexpected account.")
+        other_projects = other_client.request("GET", "/api/projects")
+        if other_projects.status != 200 or other_projects.payload != []:
+            raise FixtureError("Candidate project metadata crossed Member ownership.")
+        if other_client.request("GET", f"/api/projects/{project_id}").status != 404:
+            raise FixtureError("A second candidate Member discovered a foreign project.")
+        if (
+            other_client.request("GET", f"/api/projects/{project_id}/documents").status
+            != 404
+        ):
+            raise FixtureError("A second candidate Member read foreign project drafts.")
+
+        self._validate_candidate_preview()
+        self._say(
+            "Candidate infrastructure preflight passed: normal Member sign-in, owned project "
+            "creation, three provenance-checked drafts, and cross-Member denial."
         )
 
     def _publish_handoff(self) -> None:
@@ -3080,6 +4403,8 @@ class FixtureSupervisor:
             self.cleanup_owned_images = "not-verified"
             for attempt in range(2):
                 try:
+                    if self.candidate_mode:
+                        self.compose.verify_project_resources_owned()
                     self.compose.down()
                     self.compose.verify_project_resources_removed()
                     compose_resources_removed = True
@@ -3195,8 +4520,11 @@ class FixtureSupervisor:
                 self.channel_status = initial_status
                 self._update_channel_status(**self.channel_status)
             self._prepare()
-            self._publish_handoff()
-            self._wait_for_operator()
+            if self.candidate_preflight:
+                self._verify_candidate_project_creation()
+            else:
+                self._publish_handoff()
+                self._wait_for_operator()
         except FixtureError as error:
             failure = str(error)
         except (KeyboardInterrupt, StopRequested):
@@ -3207,6 +4535,12 @@ class FixtureSupervisor:
         except Exception:
             failure = "An unexpected fixture error occurred; diagnostic details suppressed."
         finally:
+            if self.candidate_mode and self.candidate_snapshot is not None:
+                try:
+                    self._validate_candidate_preview()
+                except FixtureError as error:
+                    if failure is None:
+                        failure = str(error)
             for signal_number in self._old_signal_handlers:
                 try:
                     signal.signal(signal_number, signal.SIG_IGN)
@@ -3255,8 +4589,30 @@ class FixtureSupervisor:
             self._say(f"Fixture failed closed: {failure}")
         for cleanup_error in cleanup_errors:
             self._say(f"Cleanup warning: {cleanup_error}")
+        if self.candidate_preflight:
+            self._say(
+                "CANDIDATE_PREFLIGHT_SCOPE=infrastructure-only; authenticated browser rendering "
+                "was not performed."
+            )
+            self._say(
+                "CANDIDATE_FINGERPRINT="
+                + (
+                    self.candidate_snapshot.fingerprint
+                    if self.candidate_snapshot is not None
+                    else "unavailable"
+                )
+            )
+            self._say(f"CANDIDATE_PREFLIGHT_RESULT={'passed' if exit_code == 0 else 'failed'}")
+            self._say(
+                "CANDIDATE_CLEANUP="
+                f"member_accounts:{self.cleanup_member_accounts},"
+                f"owned_compose:{self.cleanup_owned_compose},"
+                f"owned_images:{self.cleanup_owned_images},"
+                f"private_state:{self.cleanup_private_state}"
+            )
         if exit_code == 0:
-            self._say("Disposable browser-review fixture stopped cleanly.")
+            if not self.candidate_preflight:
+                self._say("Disposable browser-review fixture stopped cleanly.")
             return 0
         return 1
 
@@ -3665,8 +5021,13 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
         arguments = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
         arguments = [os.fsdecode(argument) for argument in arguments if argument]
         expected_script = str(Path(__file__).resolve())
+        valid_argument_count = len(arguments) == 7 or (
+            len(arguments) == 9
+            and arguments[7] == "--candidate-fingerprint"
+            and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
+        )
         if (
-            len(arguments) != 7
+            not valid_argument_count
             or Path(arguments[1]) != Path(expected_script)
             or arguments[2] != "_supervise"
             or arguments[3] != "--handoff-dir"
@@ -3905,7 +5266,12 @@ def _write_guardian_failure_status(
         return False
 
 
-def _run_guardian(handoff_directory: Path, lifetime_minutes: int, lock_fd: int) -> int:
+def _run_guardian(
+    handoff_directory: Path,
+    lifetime_minutes: int,
+    lock_fd: int,
+    candidate_fingerprint: str | None = None,
+) -> int:
     control_directory = _ensure_control_directory()
     _verify_control_lock_descriptor(control_directory, lock_fd)
 
@@ -3946,6 +5312,8 @@ def _run_guardian(handoff_directory: Path, lifetime_minutes: int, lock_fd: int) 
             "--lifetime-minutes",
             str(lifetime_minutes),
         ]
+        if candidate_fingerprint is not None:
+            command.extend(["--candidate-fingerprint", candidate_fingerprint])
 
         def remember_child(process: subprocess.Popen[bytes]) -> None:
             nonlocal child_record
@@ -4062,7 +5430,11 @@ def _clean_previous_run(status: Mapping[str, Any] | None) -> bool:
     )
 
 
-def launch_unattended(handoff_directory: Path, lifetime_minutes: int) -> int:
+def launch_unattended(
+    handoff_directory: Path,
+    lifetime_minutes: int,
+    candidate_fingerprint: str | None = None,
+) -> int:
     """Launch a detached supervisor under a guardian-held PTY and report its URL."""
     if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
         print("This host cannot safely signal the unattended fixture.", file=sys.stderr)
@@ -4095,6 +5467,8 @@ def launch_unattended(handoff_directory: Path, lifetime_minutes: int) -> int:
             "--lock-fd",
             str(lock_fd),
         ]
+        if candidate_fingerprint is not None:
+            command.extend(["--candidate-fingerprint", candidate_fingerprint])
         try:
             guardian = subprocess.Popen(
                 command,
@@ -4137,6 +5511,12 @@ def launch_unattended(handoff_directory: Path, lifetime_minutes: int) -> int:
         assert guardian.stdout is not None
         guardian.stdout.close()
         print(f"BROWSER_REVIEW_URL={event['origin']}/")
+        if candidate_fingerprint is not None:
+            print(f"CANDIDATE_FINGERPRINT={candidate_fingerprint}")
+            print(
+                "This exact opt-in candidate requires authenticated rendered review; "
+                "candidate preflight alone is infrastructure evidence."
+            )
         print(f"Read the generated Member login: {handoff_directory / MEMBER_HANDOFF_FILE}")
         print(
             "Use the normal sign-in form, then leave the same authenticated page open "
@@ -4333,10 +5713,17 @@ def stop_unattended(handoff_directory: Path, *, timeout: int = CLEANUP_WAIT_SECO
         return 1
 
 
+def _candidate_fingerprint_argument(value: str) -> str:
+    if re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise argparse.ArgumentTypeError("must be a lowercase 64-character SHA-256 fingerprint")
+    return value
+
+
 def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run a disposable authenticated local browser-review fixture from committed HEAD."
+            "Run a disposable authenticated local browser-review fixture from committed HEAD; "
+            "candidate mode is opt-in and fingerprint-pinned."
         ),
         epilog=(
             "The unattended launcher stores only one generated Member login and a sanitized "
@@ -4359,6 +5746,22 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         default=LOCAL_DOCKER_SOCKET,
         help="path to the local Unix Docker socket (TCP/remote engines are not accepted)",
     )
+    start.add_argument(
+        "--candidate-fingerprint",
+        type=_candidate_fingerprint_argument,
+        help="opt into the reviewed dirty candidate only at this exact preflight fingerprint",
+    )
+    preflight = subparsers.add_parser(
+        "candidate-preflight",
+        help=(
+            "build and verify candidate migrations/projects, then clean up "
+            "without browser handoff"
+        ),
+    )
+    preflight.description = (
+        "Opt in to the pinned IMP-004 runtime allowlist; this infrastructure check does not "
+        "perform rendered browser review or publish credentials."
+    )
     launch = subparsers.add_parser(
         "launch",
         help="start the detached PTY supervisor and publish a private Member handoff",
@@ -4377,6 +5780,11 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
             f"automatic teardown limit ({MIN_LIFETIME_MINUTES}-{MAX_LIFETIME_MINUTES}, "
             f"default {DEFAULT_LIFETIME_MINUTES})"
         ),
+    )
+    launch.add_argument(
+        "--candidate-fingerprint",
+        type=_candidate_fingerprint_argument,
+        help="opt into the reviewed dirty candidate only at this exact preflight fingerprint",
     )
     stop = subparsers.add_parser(
         "stop",
@@ -4403,10 +5811,18 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     guardian.add_argument("--handoff-dir", type=Path, required=True)
     guardian.add_argument("--lifetime-minutes", type=int, required=True)
     guardian.add_argument("--lock-fd", type=int, required=True)
+    guardian.add_argument(
+        "--candidate-fingerprint",
+        type=_candidate_fingerprint_argument,
+    )
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
     supervise.add_argument("--handoff-dir", type=Path, required=True)
     supervise.add_argument("--lifetime-minutes", type=int, required=True)
+    supervise.add_argument(
+        "--candidate-fingerprint",
+        type=_candidate_fingerprint_argument,
+    )
 
     parsed = parser.parse_args(arguments)
     if parsed.command in {"start", "launch", "_guardian", "_supervise"} and not (
@@ -4426,7 +5842,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
     previous_umask = os.umask(0o077)
     try:
         if parsed.command == "launch":
-            return launch_unattended(parsed.handoff_dir, parsed.lifetime_minutes)
+            return launch_unattended(
+                parsed.handoff_dir,
+                parsed.lifetime_minutes,
+                candidate_fingerprint=parsed.candidate_fingerprint,
+            )
         if parsed.command == "stop":
             return stop_unattended(parsed.handoff_dir)
         if parsed.command == "recover":
@@ -4436,6 +5856,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 parsed.handoff_dir,
                 parsed.lifetime_minutes,
                 parsed.lock_fd,
+                candidate_fingerprint=parsed.candidate_fingerprint,
             )
         if parsed.command == "_supervise":
             supervisor = FixtureSupervisor(
@@ -4443,12 +5864,16 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 lifetime_minutes=parsed.lifetime_minutes,
                 handoff_directory=parsed.handoff_dir,
                 control_directory=_ensure_control_directory(),
+                candidate_fingerprint=parsed.candidate_fingerprint,
             )
             return supervisor.run()
+        if parsed.command == "candidate-preflight":
+            return FixtureSupervisor(root, candidate_preflight=True).run()
         supervisor = FixtureSupervisor(
             root,
             docker_socket=parsed.docker_socket,
             lifetime_minutes=parsed.lifetime_minutes,
+            candidate_fingerprint=parsed.candidate_fingerprint,
         )
         return supervisor.run()
     except FixtureError as error:

@@ -7,14 +7,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.lock ./requirements.lock
+COPY api/requirements.lock ./requirements.lock
 RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock \
     && groupadd --system --gid 10001 impostr \
     && useradd --system --uid 10001 --gid impostr --no-create-home --shell /usr/sbin/nologin impostr
 
-COPY alembic.ini ./alembic.ini
-COPY app ./app
-COPY migrations ./migrations
+COPY api/alembic.ini ./alembic.ini
+COPY api/app ./app
+COPY api/migrations ./migrations
+COPY PROJECT.md.example AGENTS.md.example BACKLOG.md.example ./templates/
 
 USER 10001:10001
 EXPOSE 8000
@@ -23,10 +24,10 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-ser
 FROM runtime AS development
 
 USER root
-COPY requirements-dev.lock ./requirements-dev.lock
+COPY api/requirements-dev.lock ./requirements-dev.lock
 RUN python -m pip install --no-cache-dir --require-hashes -r requirements-dev.lock
 
-COPY pyproject.toml ./pyproject.toml
-COPY tests ./tests
+COPY api/pyproject.toml ./pyproject.toml
+COPY api/tests ./tests
 USER 10001:10001
 CMD ["pytest", "-p", "no:cacheprovider"]

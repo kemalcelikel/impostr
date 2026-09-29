@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ApiError, apiRequest } from "./api";
+import ProjectWorkspace, { type ProjectSummary } from "./ProjectWorkspace";
 
 type Role = "admin" | "user";
 
@@ -10,80 +12,10 @@ type User = {
   created_at: string;
 };
 
-type Project = {
-  id: string;
-  name: string;
-  owner_user_id: string;
-  created_at: string;
-};
-
 type CsrfResponse = { csrf_token: string };
 type SessionResponse = { user: User; csrf_token?: string };
 type PageState = "loading" | "anonymous" | "authenticated" | "unavailable";
 type ResetPasswordResult = { ok: boolean; message: string };
-
-type RequestOptions = {
-  method?: "GET" | "POST";
-  csrfToken?: string;
-  body?: unknown;
-  signal?: AbortSignal;
-};
-
-class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const method = options.method ?? "GET";
-  const headers = new Headers({ Accept: "application/json" });
-  if (options.csrfToken) {
-    headers.set("X-CSRF-Token", options.csrfToken);
-  }
-  if (options.body !== undefined) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      method,
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      cache: "no-store",
-      credentials: "same-origin",
-      signal: options.signal,
-    });
-  } catch {
-    throw new ApiError("Impostr could not be reached. Check the connection and try again.", 0);
-  }
-
-  if (!response.ok) {
-    let detail = "The request could not be completed.";
-    try {
-      const payload: unknown = await response.json();
-      if (isRecord(payload) && typeof payload.detail === "string") {
-        detail = payload.detail;
-      }
-    } catch {
-      // Keep the response generic when the server does not return JSON.
-    }
-    throw new ApiError(detail, response.status);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  return (await response.json()) as T;
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The request could not be completed.";
@@ -241,6 +173,7 @@ function ResetPasswordForm({
 
 export default function App() {
   const [pageState, setPageState] = useState<PageState>("loading");
+  const [sessionGeneration, setSessionGeneration] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [csrfToken, setCsrfToken] = useState("");
   const [error, setError] = useState("");
@@ -249,7 +182,9 @@ export default function App() {
   const [sessionCheckNumber, setSessionCheckNumber] = useState(0);
   const [workspaceRefreshNumber, setWorkspaceRefreshNumber] = useState(0);
   const [userOffset, setUserOffset] = useState(0);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectOffset, setProjectOffset] = useState(0);
+  const [workspaceHasEdits, setWorkspaceHasEdits] = useState(false);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [accounts, setAccounts] = useState<User[]>([]);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
@@ -259,6 +194,7 @@ export default function App() {
   const deactivationTriggerRef = useRef<HTMLButtonElement | null>(null);
   const accountsHeadingRef = useRef<HTMLHeadingElement>(null);
   const deactivationDialogWasOpen = useRef(false);
+  const sessionGenerationRef = useRef(0);
 
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -275,15 +211,31 @@ export default function App() {
     setNewPassword("");
   }, []);
 
+  const clearWorkspaceState = useCallback((): void => {
+    setProjects([]);
+    setAccounts([]);
+    setProjectOffset(0);
+    setUserOffset(0);
+    setWorkspaceHasEdits(false);
+    setWorkspaceLoading(false);
+    setWorkspaceError("");
+  }, []);
+
+  const advanceSessionGeneration = useCallback((): void => {
+    const nextGeneration = sessionGenerationRef.current + 1;
+    sessionGenerationRef.current = nextGeneration;
+    setSessionGeneration(nextGeneration);
+  }, []);
+
   const refreshCsrf = useCallback(async (): Promise<void> => {
     const csrf = await apiRequest<CsrfResponse>("/api/auth/csrf");
     setCsrfToken(csrf.csrf_token);
   }, []);
 
   const recoverExpiredSession = useCallback((): void => {
+    advanceSessionGeneration();
+    clearWorkspaceState();
     setUser(null);
-    setProjects([]);
-    setAccounts([]);
     setCsrfToken("");
     setPageState("anonymous");
     setError("Your session has expired. Sign in again.");
@@ -294,7 +246,34 @@ export default function App() {
       setPageState("unavailable");
       setError(errorMessage(csrfError));
     });
-  }, [clearSensitiveFormValues, refreshCsrf]);
+  }, [advanceSessionGeneration, clearSensitiveFormValues, clearWorkspaceState, refreshCsrf]);
+
+  const handleWorkspaceSessionExpired = useCallback((): void => {
+    if (sessionGenerationRef.current !== sessionGeneration) return;
+    recoverExpiredSession();
+  }, [recoverExpiredSession, sessionGeneration]);
+
+  const addCreatedProject = useCallback(
+    (created: ProjectSummary): void => {
+      const currentUserId = user?.id;
+      if (
+        sessionGenerationRef.current !== sessionGeneration ||
+        currentUserId === undefined ||
+        created.owner_user_id !== currentUserId
+      ) {
+        return;
+      }
+      setProjects((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+    },
+    [sessionGeneration, user?.id],
+  );
+
+  const reportWorkspacePending = useCallback(
+    (pending: boolean): void => {
+      if (sessionGenerationRef.current === sessionGeneration) setWorkspaceHasEdits(pending);
+    },
+    [sessionGeneration],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -315,6 +294,9 @@ export default function App() {
           signal: controller.signal,
         });
         if (response.status === 401) {
+          if (!active) return;
+          advanceSessionGeneration();
+          clearWorkspaceState();
           clearSensitiveFormValues();
           setUser(null);
           setPageState("anonymous");
@@ -326,11 +308,15 @@ export default function App() {
         }
         const payload = (await response.json()) as SessionResponse;
         if (!active) return;
+        advanceSessionGeneration();
+        clearWorkspaceState();
         setUser(payload.user);
         setPageState("authenticated");
         setError("");
       } catch (restoreError) {
         if (!active || controller.signal.aborted) return;
+        advanceSessionGeneration();
+        clearWorkspaceState();
         clearSensitiveFormValues();
         setUser(null);
         setPageState("unavailable");
@@ -343,23 +329,25 @@ export default function App() {
       active = false;
       controller.abort();
     };
-  }, [clearSensitiveFormValues, sessionCheckNumber]);
+  }, [advanceSessionGeneration, clearSensitiveFormValues, clearWorkspaceState, sessionCheckNumber]);
 
   useEffect(() => {
     if (pageState !== "authenticated" || user === null) return;
     const currentUser = user;
+    const currentSessionGeneration = sessionGeneration;
     const controller = new AbortController();
     let active = true;
 
     async function loadWorkspace(): Promise<void> {
       setWorkspaceLoading(true);
       setWorkspaceError("");
-      setProjects([]);
-      setAccounts([]);
       try {
-        const projectPromise = apiRequest<Project[]>("/api/projects", {
-          signal: controller.signal,
-        });
+        const projectPromise = apiRequest<ProjectSummary[]>(
+          projectOffset === 0 ? "/api/projects" : `/api/projects?limit=100&offset=${projectOffset}`,
+          {
+            signal: controller.signal,
+          },
+        );
         const accountPromise =
           currentUser.role === "admin"
             ? apiRequest<User[]>(`/api/admin/users?limit=100&offset=${userOffset}`, {
@@ -367,18 +355,26 @@ export default function App() {
               })
             : Promise.resolve([]);
         const [nextProjects, nextAccounts] = await Promise.all([projectPromise, accountPromise]);
-        if (!active) return;
+        if (!active || sessionGenerationRef.current !== currentSessionGeneration) return;
         setProjects(nextProjects);
         setAccounts(nextAccounts);
       } catch (loadError) {
-        if (!active || controller.signal.aborted) return;
+        if (
+          !active ||
+          controller.signal.aborted ||
+          sessionGenerationRef.current !== currentSessionGeneration
+        ) {
+          return;
+        }
         if (loadError instanceof ApiError && loadError.status === 401) {
           recoverExpiredSession();
         } else {
           setWorkspaceError(errorMessage(loadError));
         }
       } finally {
-        if (active) setWorkspaceLoading(false);
+        if (active && sessionGenerationRef.current === currentSessionGeneration) {
+          setWorkspaceLoading(false);
+        }
       }
     }
 
@@ -387,7 +383,15 @@ export default function App() {
       active = false;
       controller.abort();
     };
-  }, [pageState, recoverExpiredSession, user, userOffset, workspaceRefreshNumber]);
+  }, [
+    pageState,
+    projectOffset,
+    recoverExpiredSession,
+    sessionGeneration,
+    user,
+    userOffset,
+    workspaceRefreshNumber,
+  ]);
 
   useEffect(() => {
     const dialog = deactivationDialogRef.current;
@@ -445,6 +449,8 @@ export default function App() {
       if (!response.csrf_token) {
         throw new ApiError("The sign-in response was incomplete.", 500);
       }
+      advanceSessionGeneration();
+      clearWorkspaceState();
       setUser(response.user);
       setCsrfToken(response.csrf_token);
       setLoginPassword("");
@@ -458,6 +464,9 @@ export default function App() {
   }
 
   async function logout(): Promise<void> {
+    if (workspaceHasEdits && !window.confirm("Unsaved draft text will be lost. Sign out anyway?")) {
+      return;
+    }
     setBusyAction("logout");
     setError("");
     setNotice("");
@@ -466,9 +475,9 @@ export default function App() {
         method: "POST",
         csrfToken,
       });
+      advanceSessionGeneration();
+      clearWorkspaceState();
       setUser(null);
-      setProjects([]);
-      setAccounts([]);
       setCsrfToken("");
       setPageState("anonymous");
       setNotice("You have signed out.");
@@ -803,51 +812,18 @@ export default function App() {
               </div>
             ) : null}
 
-            <section
-              aria-labelledby="projects-title"
-              className="rounded-2xl border border-line bg-surface/95 p-5 sm:p-7"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line pb-5">
-                <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-copy-muted">
-                    Project metadata
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold" id="projects-title">
-                    {user.role === "admin" ? "Project metadata" : "Your projects"}
-                  </h2>
-                </div>
-                <span className="font-mono text-xs text-copy-muted">
-                  {user.role === "admin" ? "All projects · audited" : "Creator-private"}
-                </span>
-              </div>
-              {workspaceLoading ? (
-                <p aria-live="polite" className="py-6 text-sm text-copy-muted" role="status">
-                  Loading project metadata…
-                </p>
-              ) : workspaceError ? (
-                <p className="py-6 text-sm leading-6 text-copy-muted">
-                  Project metadata is unavailable until workspace loading succeeds.
-                </p>
-              ) : projects.length === 0 ? (
-                <p className="py-6 text-sm leading-6 text-copy-muted">
-                  No project metadata is available yet.
-                </p>
-              ) : (
-                <ul className="grid gap-3 py-5 sm:grid-cols-2">
-                  {projects.map((project) => (
-                    <li
-                      className="rounded-xl border border-line bg-canvas px-4 py-4"
-                      key={project.id}
-                    >
-                      <p className="break-words font-medium text-foreground">{project.name}</p>
-                      <p className="mt-2 font-mono text-xs text-copy-muted">
-                        Created {new Date(project.created_at).toLocaleDateString()}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+            <ProjectWorkspace
+              key={sessionGeneration}
+              csrfToken={csrfToken}
+              loadError={workspaceError}
+              loading={workspaceLoading}
+              onProjectCreated={addCreatedProject}
+              onSessionExpired={handleWorkspaceSessionExpired}
+              onPendingChange={reportWorkspacePending}
+              onProjectPageChange={setProjectOffset}
+              projectOffset={projectOffset}
+              projects={projects}
+            />
 
             {user.role === "admin" ? (
               <section

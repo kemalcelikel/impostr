@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -37,6 +37,299 @@ afterEach(() => {
 });
 
 describe("account access", () => {
+  it.each(["dirty", "saving"])(
+    "keeps the %s editor through project-list refresh even when the new page omits it",
+    async (state) => {
+      const project = {
+        id: "00000000-0000-4000-8000-000000000020",
+        name: "Open plan",
+        owner_user_id: admin.id,
+        created_at: admin.created_at,
+      };
+      const drafts = (["project", "agents", "backlog"] as const).map((kind) => ({
+        id: kind,
+        kind,
+        filename: `${kind.toUpperCase()}.md`,
+        content: `# Original ${kind}\n`,
+        revision_number: 1,
+      }));
+      let projectLists = 0;
+      let finishRefresh!: (response: Response) => void;
+      const refreshed = new Promise<Response>((resolve) => {
+        finishRefresh = resolve;
+      });
+      let finishSave!: (response: Response) => void;
+      const saved = new Promise<Response>((resolve) => {
+        finishSave = resolve;
+      });
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        if (path === "/api/auth/csrf") return Promise.resolve(jsonResponse({ csrf_token: "csrf" }));
+        if (path === "/api/auth/session") return Promise.resolve(jsonResponse({ user: admin }));
+        if (path === "/api/projects")
+          return ++projectLists === 1 ? Promise.resolve(jsonResponse([project])) : refreshed;
+        if (path.startsWith("/api/admin/users") && init?.method === "POST")
+          return Promise.resolve(jsonResponse({ ...admin, username: "new-member" }, 201));
+        if (path.startsWith("/api/admin/users")) return Promise.resolve(jsonResponse([]));
+        if (path.endsWith("/documents")) return Promise.resolve(jsonResponse(drafts));
+        if (path.endsWith("/documents/project") && init?.method === "PUT") return saved;
+        throw new Error(`Unexpected request ${path}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      render(<App />);
+      fireEvent.click(await screen.findByRole("button", { name: "Open project Open plan" }));
+      const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      fireEvent.change(editor, { target: { value: "# Keep this edit\n" } });
+      if (state === "saving") fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Username" }), {
+        target: { value: "new-member" },
+      });
+      fireEvent.change(screen.getByLabelText("Initial password"), {
+        target: { value: "a strong passphrase" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+      await waitFor(() => expect(projectLists).toBe(2));
+      expect(editor).toHaveValue("# Keep this edit\n");
+      finishRefresh(jsonResponse([]));
+      expect(
+        await screen.findByText("This open project is not on the current list page."),
+      ).toBeInTheDocument();
+      expect(editor).toHaveValue("# Keep this edit\n");
+      expect(screen.getByRole("button", { name: "Close project" })).toBeDisabled();
+      if (state === "saving") {
+        finishSave(
+          jsonResponse({ ...drafts[0], revision_number: 2, content: "# Keep this edit\n" }),
+        );
+        expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Close project" })).toBeEnabled();
+      }
+    },
+  );
+
+  it("pages through private projects beyond the first hundred", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name: `Plan ${index}`,
+      owner_user_id: admin.id,
+      created_at: admin.created_at,
+    }));
+    const last = { ...firstPage[0], id: "00000000-0000-4000-8000-999999999999", name: "Plan 101" };
+    const drafts = (["project", "agents", "backlog"] as const).map((kind) => ({
+      id: kind,
+      kind,
+      filename: `${kind}.md`,
+      content: `# ${kind} page one\n`,
+      revision_number: 1,
+    }));
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path === "/api/auth/csrf") return Promise.resolve(jsonResponse({ csrf_token: "csrf" }));
+      if (path === "/api/auth/session") return Promise.resolve(jsonResponse({ user: admin }));
+      if (path === "/api/projects") return Promise.resolve(jsonResponse(firstPage));
+      if (path === "/api/projects?limit=100&offset=100")
+        return Promise.resolve(jsonResponse([last]));
+      if (path === `/api/projects/${firstPage[0].id}/documents`)
+        return Promise.resolve(jsonResponse(drafts));
+      if (path.startsWith("/api/admin/users")) return Promise.resolve(jsonResponse([]));
+      throw new Error(`Unexpected request ${path}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open project Plan 0" }));
+    expect(await screen.findByRole("textbox", { name: "Edit project.md" })).toHaveValue(
+      "# project page one\n",
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Next projects" }));
+    expect(
+      await screen.findByRole("button", { name: "Open project Plan 101" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next projects" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Previous projects" }));
+    expect(await screen.findByRole("button", { name: "Open project Plan 99" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a project to review its drafts")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Edit project.md" })).not.toBeInTheDocument();
+  });
+
+  it("warns before signing out with unsaved project text", async () => {
+    const project = {
+      id: "00000000-0000-4000-8000-000000000020",
+      name: "Pending plan",
+      owner_user_id: admin.id,
+      created_at: admin.created_at,
+    };
+    const drafts = (["project", "agents", "backlog"] as const).map((kind) => ({
+      id: kind,
+      kind,
+      filename: `${kind}.md`,
+      content: `# Original ${kind}\n`,
+      revision_number: 1,
+    }));
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      if (path === "/api/auth/csrf") return Promise.resolve(jsonResponse({ csrf_token: "csrf" }));
+      if (path === "/api/auth/session") return Promise.resolve(jsonResponse({ user: admin }));
+      if (path === "/api/projects") return Promise.resolve(jsonResponse([project]));
+      if (path.startsWith("/api/admin/users")) return Promise.resolve(jsonResponse([]));
+      if (path.endsWith("/documents")) return Promise.resolve(jsonResponse(drafts));
+      if (path === "/api/auth/logout") return Promise.resolve(jsonResponse(undefined, 204));
+      throw new Error(`Unexpected request ${path} ${init?.method ?? "GET"}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open project Pending plan" }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Edit project.md" }), {
+      target: { value: "# New text\n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(confirm).toHaveBeenCalledWith("Unsaved draft text will be lost. Sign out anyway?");
+    expect(fetchMock.mock.calls.some(([path]) => pathOf(path) === "/api/auth/logout")).toBe(false);
+    expect(screen.getByRole("textbox", { name: "Edit project.md" })).toHaveValue("# New text\n");
+  });
+
+  it("ignores a late project create from account A after account B signs in", async () => {
+    const memberA: TestUser = {
+      ...admin,
+      id: "00000000-0000-4000-8000-000000000041",
+      username: "alice",
+      role: "user",
+    };
+    const memberB: TestUser = {
+      ...admin,
+      id: "00000000-0000-4000-8000-000000000042",
+      username: "bob",
+      role: "user",
+    };
+    const projectA = {
+      id: "00000000-0000-4000-8000-000000000043",
+      name: "Alice confidential plan",
+      owner_user_id: memberA.id,
+      created_at: admin.created_at,
+    };
+    const projectB = {
+      id: "00000000-0000-4000-8000-000000000044",
+      name: "Bob private plan",
+      owner_user_id: memberB.id,
+      created_at: admin.created_at,
+    };
+    const bDrafts = (["project", "agents", "backlog"] as const).map((kind) => ({
+      id: kind,
+      kind,
+      filename: kind === "project" ? "PROJECT.md" : `${kind.toUpperCase()}.md`,
+      content: kind === "project" ? "# Bob's private draft\n" : `# ${kind}\n`,
+      revision_number: 1,
+      content_sha256: `sha-${kind}`,
+      origin: "template",
+      author_user_id: null,
+      created_at: admin.created_at,
+      template_source: `${kind}.example`,
+      template_sha256: `template-${kind}`,
+    }));
+    let activeUser: TestUser | null = null;
+    let csrfRequests = 0;
+    let finishCreate!: (response: Response) => void;
+    const pendingCreate = new Promise<Response>((resolve) => {
+      finishCreate = resolve;
+    });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path === "/api/auth/csrf") {
+        csrfRequests += 1;
+        return Promise.resolve(jsonResponse({ csrf_token: `csrf-${csrfRequests}` }));
+      }
+      if (path === "/api/auth/session")
+        return Promise.resolve(jsonResponse({ detail: "Authentication required" }, 401));
+      if (path === "/api/auth/login" && method === "POST") {
+        const payload = JSON.parse(String(init?.body)) as { username: string };
+        activeUser = payload.username === memberA.username ? memberA : memberB;
+        return Promise.resolve(
+          jsonResponse({
+            user: activeUser,
+            csrf_token: `session-${activeUser.username}`,
+          }),
+        );
+      }
+      if (path === "/api/auth/logout" && method === "POST") {
+        activeUser = null;
+        return Promise.resolve(jsonResponse(undefined, 204));
+      }
+      if (path === "/api/projects" && method === "POST") return pendingCreate;
+      if (path === "/api/projects") {
+        return Promise.resolve(jsonResponse(activeUser?.id === memberB.id ? [projectB] : []));
+      }
+      if (path === `/api/projects/${projectB.id}/documents`)
+        return Promise.resolve(jsonResponse(bDrafts));
+      if (path === `/api/projects/${projectA.id}/documents`)
+        return Promise.resolve(jsonResponse([]));
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<App />);
+
+    async function signIn(username: string): Promise<void> {
+      fireEvent.change(await screen.findByLabelText("Username"), {
+        target: { value: username },
+      });
+      fireEvent.change(screen.getByLabelText("Password"), {
+        target: { value: "correct passphrase" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      expect(
+        await screen.findByRole("heading", { name: `Welcome, ${username}` }),
+      ).toBeInTheDocument();
+    }
+
+    await signIn(memberA.username);
+    expect(await screen.findByText(/No projects yet\. Create one/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), {
+      target: { value: projectA.name },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([path, options]) => pathOf(path) === "/api/projects" && options?.method === "POST",
+        ),
+      ).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    await signIn(memberB.username);
+    fireEvent.click(await screen.findByRole("button", { name: "Open project Bob private plan" }));
+    const bEditor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.change(bEditor, { target: { value: "# Bob's in-progress edit\n" } });
+
+    await act(async () => {
+      // Deliberately resolve even though the browser request was aborted: a
+      // response already in transit must not cross the account boundary.
+      finishCreate(jsonResponse(projectA, 201));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    const createCall = fetchMock.mock.calls.find(
+      ([path, options]) => pathOf(path) === "/api/projects" && options?.method === "POST",
+    );
+    expect(createCall?.[1]?.signal?.aborted).toBe(true);
+    expect(screen.getByRole("button", { name: "Open project Bob private plan" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Open project Alice confidential plan" }),
+    ).not.toBeInTheDocument();
+    expect(bEditor).toHaveValue("# Bob's in-progress edit\n");
+    expect(screen.getByText("Signed in as bob.")).toBeInTheDocument();
+    expect(screen.queryByText(/Alice confidential plan/)).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([path]) => pathOf(path) === `/api/projects/${projectA.id}/documents`,
+      ),
+    ).toBe(false);
+  });
+
   it("loads a pre-login CSRF token and submits a same-origin login without signup", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = pathOf(input);
@@ -83,7 +376,7 @@ describe("account access", () => {
       password: "correct passphrase",
     });
     expect(loginOptions?.credentials).toBe("same-origin");
-    expect(await screen.findByText("No project metadata is available yet.")).toBeInTheDocument();
+    expect(await screen.findByText(/No projects yet\. Create one/)).toBeInTheDocument();
   });
 
   it("shows an accessible generic sign-in error without losing the form", async () => {
@@ -313,11 +606,11 @@ describe("account access", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Workspace data could not be loaded: Project service is unavailable",
     );
-    expect(screen.queryByText("No project metadata is available yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No projects yet\. Create one/)).not.toBeInTheDocument();
     expect(screen.queryByText("No accounts are available.")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry workspace load" }));
-    expect(await screen.findByText("No project metadata is available yet.")).toBeInTheDocument();
+    expect(await screen.findByText(/No projects yet\. Create one/)).toBeInTheDocument();
     expect(screen.getByText("No accounts are available.")).toBeInTheDocument();
     expect(projectRequests).toBe(2);
   });

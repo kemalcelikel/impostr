@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import io
 import ipaddress
 import json
@@ -157,8 +158,58 @@ class MigrationDiagnosticTests(unittest.TestCase):
             "users": "yes",
         }
 
+    @classmethod
+    def valid_candidate_diagnostic(cls) -> dict[str, object]:
+        diagnostic = cls.valid_diagnostic()
+        diagnostic["image_files"] = {
+            **diagnostic["image_files"],
+            "revision_0003": "present",
+            "revision_0004": "present",
+        }
+        diagnostic["discovered_revisions"] = list(fixture.CANDIDATE_APP_REVISIONS)
+        diagnostic["heads"] = [fixture.CANDIDATE_APP_MIGRATION]
+        diagnostic["projects_name_key"] = "yes"
+        diagnostic["project_documents"] = "yes"
+        diagnostic["project_document_revisions"] = "yes"
+        diagnostic["document_conflict_proposals"] = "yes"
+        return diagnostic
+
     def test_runtime_diagnostic_code_compiles_without_reading_database_settings(self) -> None:
         compile(fixture.MIGRATION_DIAGNOSTIC_PYTHON, "<migration-diagnostic>", "exec")
+
+    def test_candidate_diagnostic_is_separate_and_probes_revision_and_schema(self) -> None:
+        compile(
+            fixture.CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+            "<candidate-migration-diagnostic>",
+            "exec",
+        )
+        self.assertIn(
+            "20260925_0003_project_document_revisions.py",
+            fixture.CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+        )
+        self.assertIn(
+            "20260925_0004_bounded_project_name_keys.py",
+            fixture.CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+        )
+        self.assertIn(
+            'current_revisions == ["20260925_0004"]',
+            fixture.CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+        )
+        self.assertNotIn("revision_0003", fixture.MIGRATION_DIAGNOSTIC_PYTHON)
+
+        parsed_candidate = fixture.parse_migration_diagnostic(
+            json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":")),
+            candidate=True,
+        )
+        self.assertIsNotNone(parsed_candidate)
+        assert parsed_candidate is not None
+        self.assertTrue(fixture.migration_diagnostic_is_complete(parsed_candidate, candidate=True))
+        self.assertIsNone(
+            fixture.parse_migration_diagnostic(
+                json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":"))
+            ),
+            "default committed-HEAD parsing must reject candidate-only evidence",
+        )
 
     def test_only_allowlisted_image_revision_and_database_evidence_is_formatted(self) -> None:
         diagnostic = fixture.parse_migration_diagnostic(
@@ -216,6 +267,35 @@ class MigrationDiagnosticTests(unittest.TestCase):
         oversized = " " * fixture.MAX_MIGRATION_DIAGNOSTIC_BYTES + secret
         self.assertIsNone(fixture.parse_migration_diagnostic(oversized))
 
+    def test_candidate_diagnostics_reject_forks_missing_tables_and_extra_fields(self) -> None:
+        forked = self.valid_candidate_diagnostic()
+        forked["heads"] = ["20260925_0003", "20260925_0004"]
+        parsed_forked = fixture.parse_migration_diagnostic(
+            json.dumps(forked),
+            candidate=True,
+        )
+        self.assertIsNotNone(parsed_forked)
+        assert parsed_forked is not None
+        self.assertFalse(fixture.migration_diagnostic_is_complete(parsed_forked, candidate=True))
+
+        incomplete = self.valid_candidate_diagnostic()
+        incomplete["project_document_revisions"] = "no"
+        parsed_incomplete = fixture.parse_migration_diagnostic(
+            json.dumps(incomplete),
+            candidate=True,
+        )
+        self.assertIsNotNone(parsed_incomplete)
+        assert parsed_incomplete is not None
+        self.assertFalse(
+            fixture.migration_diagnostic_is_complete(parsed_incomplete, candidate=True)
+        )
+
+        extra = self.valid_candidate_diagnostic()
+        extra["database_url"] = secrets.token_urlsafe(32)
+        self.assertIsNone(
+            fixture.parse_migration_diagnostic(json.dumps(extra), candidate=True)
+        )
+
     def test_stderr_classifier_reports_only_fixed_categories(self) -> None:
         secret = secrets.token_urlsafe(24).encode("ascii")
         stderr = b"Traceback (most recent call last):\nRuntimeError: " + secret
@@ -266,6 +346,43 @@ class MigrationDiagnosticTests(unittest.TestCase):
             ["run", "--rm", "api", "alembic", "current"],
         )
         diagnose.assert_called_once_with()
+
+    def test_candidate_migrate_requires_single_head_and_candidate_diagnostics(self) -> None:
+        diagnostic = json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":"))
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/candidate-source"),
+            env_file=Path("/tmp/candidate-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            candidate=True,
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260925_0004 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260925_0004", evidence)
+        self.assertIn("revisions=20260925_0001,20260925_0002,20260925_0003,20260925_0004", evidence)
+        self.assertIn("heads=20260925_0004", evidence)
+        self.assertIn("candidate_schema=projects_name_key:yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(candidate=True)
 
     def test_empty_revision_and_missing_users_are_reported_in_safe_summary(self) -> None:
         diagnostic_data = self.valid_diagnostic()
@@ -524,6 +641,358 @@ class GitArchiveTests(unittest.TestCase):
         self.assertFalse(snapshot.exists())
 
 
+class CandidateSnapshotTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name) / "checkout"
+        self.root.mkdir()
+        self.private_home = Path(self.temporary.name) / "private-home"
+        self.private_home.mkdir(mode=0o700)
+
+    def git(self, *arguments: str) -> str:
+        environment = {
+            "PATH": os.environ.get("PATH", os.defpath),
+            "HOME": str(self.private_home),
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+        }
+        result = subprocess.run(
+            ["git", *arguments],
+            cwd=self.root,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip()
+
+    def initialize_checkout(self) -> str:
+        files = (
+            ("compose.yaml", "services:\n  api: {}\n"),
+            ("api/app/bootstrap_admin.py", "committed bootstrap\n"),
+            ("api/app/admin.py", "committed admin API\n"),
+            ("api/app/auth.py", "committed auth API\n"),
+            ("api/app/main.py", "committed main\n"),
+            ("web/src/App.tsx", "committed real app shell\n"),
+            ("db/Dockerfile", "committed database image\n"),
+            ("PROJECT.md.example", "committed project template\n"),
+            ("AGENTS.md.example", "committed instructions template\n"),
+            ("BACKLOG.md.example", "committed backlog template\n"),
+            (".opencode/private-provider.json", "synthetic-private-fixture-marker"),
+        )
+        for relative, content in files:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            path.chmod(0o644)
+        self.git("init", "-q")
+        self.git("add", "-A")
+        self.git(
+            "-c",
+            "user.name=Fixture Test",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "candidate base",
+        )
+        return self.git("rev-parse", "HEAD")
+
+    def policy(self, base_commit: str, *inputs: tuple[str, str]) -> fixture.CandidatePreviewPolicy:
+        return fixture.CandidatePreviewPolicy(
+            base_commit=base_commit,
+            reviewed_inputs=tuple(inputs),
+            nonruntime_test_changes=(),
+        )
+
+    def test_fixed_allowlist_is_runtime_only_and_rejects_planning_paths(self) -> None:
+        reviewed = {path for path, _status in fixture.CANDIDATE_REVIEWED_RUNTIME_INPUTS}
+        self.assertEqual(
+            reviewed,
+            {
+                ".dockerignore",
+                "api/Dockerfile",
+                "api/app/document_contract.py",
+                "api/app/main.py",
+                "api/app/models.py",
+                "api/app/project_documents.py",
+                "api/app/project_names.py",
+                "api/app/project_templates.py",
+                "api/app/projects.py",
+                "api/app/workspaces.py",
+                "api/migrations/versions/20260925_0003_project_document_revisions.py",
+                "api/migrations/versions/20260925_0004_bounded_project_name_keys.py",
+                "compose.yaml",
+                "web/nginx/default.conf",
+                "web/src/App.tsx",
+                "web/src/ProjectWorkspace.tsx",
+                "web/src/api.ts",
+            },
+        )
+        for forbidden in (
+            "PROJECT.md",
+            "AGENTS.md",
+            "BACKLOG.md",
+            "../PROJECT.md",
+            "api/app/../../PROJECT.md",
+            "/tmp/secret.py",
+            "api/.env.local",
+        ):
+            with self.subTest(forbidden=forbidden), self.assertRaises(fixture.FixtureError):
+                fixture.validate_candidate_reviewed_paths(
+                    (forbidden,),
+                    policy=self.policy(
+                        fixture.CANDIDATE_BASE_COMMIT,
+                        (forbidden, "modified"),
+                    ),
+                )
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_reviewed_paths(
+                ("api/app/main.py",),
+                policy=self.policy(
+                    fixture.CANDIDATE_BASE_COMMIT,
+                    ("api/app/main.py", "modified"),
+                    ("api/app/main.py", "modified"),
+                ),
+            )
+
+    def test_candidate_fingerprint_binds_commit_path_status_mode_and_content_digest(self) -> None:
+        content = b"candidate bytes that do not appear in a fingerprint"
+        record = fixture.CandidateInputRecord(
+            path="api/app/main.py",
+            status="modified",
+            size=len(content),
+            mode=0o644,
+            sha256=hashlib.sha256(content).hexdigest(),
+        )
+        base = "a" * 40
+        fingerprint = fixture._candidate_records_fingerprint(base, (record,))
+        self.assertRegex(fingerprint, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            fingerprint,
+            fixture._candidate_records_fingerprint(base, (record,)),
+        )
+        self.assertNotEqual(
+            fingerprint,
+            fixture._candidate_records_fingerprint("b" * 40, (record,)),
+        )
+        self.assertNotEqual(
+            fingerprint,
+            fixture._candidate_records_fingerprint(
+                base,
+                (
+                    fixture.CandidateInputRecord(
+                        path=record.path,
+                        status="added",
+                        size=record.size,
+                        mode=record.mode,
+                        sha256=record.sha256,
+                    ),
+                ),
+            ),
+        )
+        self.assertNotIn(content.decode(), fingerprint)
+
+    def test_candidate_overlay_is_pinned_and_excludes_unrelated_checkout_inputs(self) -> None:
+        base = self.initialize_checkout()
+        candidate_file = self.root / "api/app/main.py"
+        candidate_file.write_text("candidate main source\n", encoding="utf-8")
+        candidate_file.chmod(0o644)
+        secret = "synthetic-out-of-context-secret-value"
+        (self.root / ".env").write_text(f"DB_PASSWORD={secret}\n", encoding="ascii")
+        (self.root / "PROJECT.md").write_text("unrelated live planning\n", encoding="utf-8")
+        (self.root / "BACKLOG.md").write_text("unrelated live backlog\n", encoding="utf-8")
+        snapshot = Path(self.temporary.name) / "candidate-snapshot"
+        policy = self.policy(base, ("api/app/main.py", "modified"))
+
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        self.assertEqual(candidate.base_commit, base)
+        self.assertRegex(candidate.fingerprint, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            (snapshot / "api/app/main.py").read_text(encoding="utf-8"),
+            "candidate main source\n",
+        )
+        self.assertFalse((snapshot / ".env").exists())
+        self.assertFalse((snapshot / "PROJECT.md").exists())
+        self.assertFalse((snapshot / "BACKLOG.md").exists())
+        self.assertFalse((snapshot / ".opencode").exists())
+        self.assertFalse((snapshot / ".git").exists())
+        self.assertNotIn(secret, candidate.fingerprint)
+
+        fixture.validate_candidate_snapshot_tree(snapshot, candidate)
+        candidate_file.write_text("changed after candidate capture\n", encoding="utf-8")
+        with self.assertRaisesRegex(fixture.FixtureError, "changed during preview"):
+            fixture.validate_candidate_worktree_snapshot(
+                self.root,
+                candidate,
+                private_home=self.private_home,
+                policy=policy,
+            )
+
+    def test_candidate_snapshot_refuses_missing_staged_unexpected_symlink_and_oversized_inputs(
+        self,
+    ) -> None:
+        base = self.initialize_checkout()
+        candidate_file = self.root / "api/app/main.py"
+        policy = self.policy(base, ("api/app/main.py", "modified"))
+        snapshot = Path(self.temporary.name) / "blocked-snapshot"
+
+        with self.assertRaisesRegex(fixture.FixtureError, "missing"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+
+        candidate_file.write_text("working tree candidate\n", encoding="utf-8")
+        candidate_file.chmod(0o644)
+        self.git("add", "api/app/main.py")
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.git("reset", "-q", "HEAD", "--", "api/app/main.py")
+
+        (self.root / "api/app/unreviewed.py").write_text("not allowlisted", encoding="utf-8")
+        with self.assertRaisesRegex(fixture.FixtureError, "unexpected runtime input"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        (self.root / "api/app/unreviewed.py").unlink()
+
+        outside = Path(self.temporary.name) / "outside.py"
+        outside.write_text("outside file", encoding="utf-8")
+        candidate_file.unlink()
+        candidate_file.symlink_to(outside)
+        with self.assertRaises(fixture.FixtureError):
+            fixture._read_candidate_file(self.root, "api/app/main.py", maximum_bytes=4096)
+        candidate_file.unlink()
+        candidate_file.write_text("x" * (fixture.MAX_CANDIDATE_FILE_BYTES + 1), encoding="ascii")
+        candidate_file.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "size limit"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+
+    def test_candidate_snapshot_enforces_a_total_input_size_bound(self) -> None:
+        base = self.initialize_checkout()
+        main = self.root / "api/app/main.py"
+        auth = self.root / "api/app/auth.py"
+        for path, content in ((main, "x" * 8), (auth, "y" * 8)):
+            path.write_text(content, encoding="ascii")
+            path.chmod(0o644)
+        policy = fixture.CandidatePreviewPolicy(
+            base_commit=base,
+            reviewed_inputs=(
+                ("api/app/main.py", "modified"),
+                ("api/app/auth.py", "modified"),
+            ),
+            nonruntime_test_changes=(),
+            max_file_bytes=16,
+            max_total_bytes=12,
+        )
+
+        with self.assertRaisesRegex(fixture.FixtureError, "total size limit"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                Path(self.temporary.name) / "oversized-total",
+                private_home=self.private_home,
+                policy=policy,
+            )
+
+    def test_candidate_snapshot_rejects_literal_secrets_and_stale_fingerprints(self) -> None:
+        base = self.initialize_checkout()
+        candidate_file = self.root / "api/app/main.py"
+        candidate_file.write_text(
+            'DB_PASSWORD = "synthetic-literal-candidate-secret-value"\n',
+            encoding="utf-8",
+        )
+        candidate_file.chmod(0o644)
+        policy = self.policy(base, ("api/app/main.py", "modified"))
+        snapshot = Path(self.temporary.name) / "blocked-secret-snapshot"
+        secret = "synthetic-literal-candidate-secret-value"
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertFalse(snapshot.exists())
+
+        candidate_file.write_text("safe changed code\n", encoding="utf-8")
+        candidate_file.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "fingerprint changed"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                expected_fingerprint="0" * 64,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+
+    def test_candidate_snapshot_rejects_worktree_drift_during_archive(self) -> None:
+        base = self.initialize_checkout()
+        candidate_file = self.root / "api/app/main.py"
+        candidate_file.write_text("captured candidate\n", encoding="utf-8")
+        candidate_file.chmod(0o644)
+        policy = self.policy(base, ("api/app/main.py", "modified"))
+        snapshot = Path(self.temporary.name) / "raced-snapshot"
+        archive_head = fixture.archive_head_snapshot
+
+        def archive_then_change(root: Path, destination: Path, **kwargs: object) -> str:
+            result = archive_head(root, destination, **kwargs)
+            candidate_file.write_text("changed while archiving\n", encoding="utf-8")
+            candidate_file.chmod(0o644)
+            return result
+
+        with patch("local_browser_fixture.archive_head_snapshot", side_effect=archive_then_change):
+            with self.assertRaisesRegex(fixture.FixtureError, "changed during preview"):
+                fixture.archive_candidate_snapshot(
+                    self.root,
+                    snapshot,
+                    private_home=self.private_home,
+                    policy=policy,
+                )
+
+    def test_candidate_root_dockerignore_is_a_closed_reviewed_rule_set(self) -> None:
+        ignore = self.root / ".dockerignore"
+        ignore.write_text("\n".join(fixture.CANDIDATE_DOCKERIGNORE_RULES) + "\n", encoding="utf-8")
+        ignore.chmod(0o644)
+        fixture.validate_candidate_dockerignore(self.root)
+        ignore.write_text(
+            "\n".join((*fixture.CANDIDATE_DOCKERIGNORE_RULES, "!PROJECT.md")) + "\n",
+            encoding="utf-8",
+        )
+        ignore.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "not safely allowlisted"):
+            fixture.validate_candidate_dockerignore(self.root)
+
+
 class ComposeSafetyTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -604,6 +1073,70 @@ class ComposeSafetyTests(unittest.TestCase):
             },
         }
 
+    def valid_candidate_compose_config(self) -> tuple[dict[str, object], Path]:
+        source = self.root / "candidate-source"
+        for directory in (source, source / "api", source / "db", source / "web"):
+            directory.mkdir(parents=True, exist_ok=True)
+        config = self.valid_compose_config()
+        services = config["services"]
+        services["db"]["build"].update(
+            context=str(source / "db"),
+            dockerfile="Dockerfile",
+        )
+        services["db"]["environment"].update(
+            POSTGRES_DB="impostr_review",
+            POSTGRES_USER="review_owner",
+            IMPOSTR_APP_DB_USER="review_app",
+            IMPOSTR_APP_DB_PASSWORD=self.identity.app_password,
+        )
+        services["api"]["build"].update(
+            context=str(source),
+            dockerfile="api/Dockerfile",
+            target="runtime",
+        )
+        services["api"]["environment"].update(
+            DB_HOST="db",
+            DB_PORT="5432",
+            DB_NAME="impostr_review",
+            DB_USER="review_app",
+            IMPOSTR_TEMPLATE_DIR="/app/templates",
+            IMPOSTR_WORKSPACE_ROOT="/workspaces",
+        )
+        services["frontdoor"]["build"].update(
+            context=str(source / "web"),
+            dockerfile="Dockerfile",
+            target="runtime",
+        )
+        services["api-check"] = {
+            "build": {
+                "context": str(source),
+                "dockerfile": "api/Dockerfile",
+                "target": "development",
+            },
+            "ports": [],
+            "networks": {"checks": {}},
+        }
+        services["api-integration-check"] = {
+            "build": {
+                "context": str(source),
+                "dockerfile": "api/Dockerfile",
+                "target": "development",
+            },
+            "ports": [],
+            "networks": {"backend": {}},
+        }
+        services["web-check"] = {
+            "build": {
+                "context": str(source / "web"),
+                "dockerfile": "Dockerfile",
+                "target": "checks",
+            },
+            "ports": [],
+            "networks": {"checks": {}},
+        }
+        config["networks"]["checks"] = {"internal": True}
+        return config, source
+
     def test_compose_contract_accepts_only_loopback_frontdoor_and_owned_volume(self) -> None:
         fixture.validate_compose_config(json.dumps(self.valid_compose_config()), self.identity)
 
@@ -640,6 +1173,79 @@ class ComposeSafetyTests(unittest.TestCase):
         shared_image["services"]["api"]["image"] = "impostr-api:latest"
         with self.assertRaises(fixture.FixtureError):
             fixture.validate_compose_config(json.dumps(shared_image), self.identity)
+
+    def test_candidate_compose_contract_keeps_root_api_context_and_loopback_ownership(self) -> None:
+        config, source = self.valid_candidate_compose_config()
+        fixture.validate_candidate_compose_config(
+            json.dumps(config),
+            self.identity,
+            source,
+        )
+
+        old_api_context = json.loads(json.dumps(config))
+        old_api_context["services"]["api"]["build"]["context"] = str(source / "api")
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(old_api_context),
+                self.identity,
+                source,
+            )
+
+        traversing_dockerfile = json.loads(json.dumps(config))
+        traversing_dockerfile["services"]["api"]["build"]["dockerfile"] = "../Dockerfile"
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(traversing_dockerfile),
+                self.identity,
+                source,
+            )
+
+        public_bind = json.loads(json.dumps(config))
+        public_bind["services"]["frontdoor"]["ports"][0]["host_ip"] = "0.0.0.0"
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(public_bind),
+                self.identity,
+                source,
+            )
+
+        host_context = json.loads(json.dumps(config))
+        host_context["services"]["api"]["build"]["additional_contexts"] = {
+            "host": "/"
+        }
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(host_context),
+                self.identity,
+                source,
+            )
+
+        inherited_env = json.loads(json.dumps(config))
+        inherited_env["services"]["api"]["env_file"] = ["/host/secrets.env"]
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(inherited_env),
+                self.identity,
+                source,
+            )
+
+        overridden_command = json.loads(json.dumps(config))
+        overridden_command["services"]["api"]["command"] = ["sh", "-c", "unsafe"]
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(overridden_command),
+                self.identity,
+                source,
+            )
+
+        unexpected_service = json.loads(json.dumps(config))
+        unexpected_service["services"]["developer-shell"] = {"image": "unsafe:latest"}
+        with self.assertRaises(fixture.FixtureError):
+            fixture.validate_candidate_compose_config(
+                json.dumps(unexpected_service),
+                self.identity,
+                source,
+            )
 
     def test_snapshot_bind_rewrite_changes_only_the_committed_loopback_address(self) -> None:
         source = self.root / "snapshot"
@@ -1782,6 +2388,130 @@ class HiddenBootstrapTests(unittest.TestCase):
                 self.assertNotIn(secret, safe_database_code)
 
 
+class SupervisorPidfdVerificationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.pidfd = 37
+        self.start_time = 12345
+        self.effective_uid = os.geteuid()
+        self.handoff_directory = Path("/fixture-test-handoff")
+
+        patchers = (
+            patch.object(fixture, "APPROVED_HANDOFF_DIRECTORY", self.handoff_directory),
+            patch.object(fixture.os, "pidfd_open", return_value=self.pidfd, create=True),
+            patch.object(fixture.signal, "pidfd_send_signal", create=True),
+            patch.object(fixture, "_proc_start_time", return_value=self.start_time),
+            patch.object(Path, "read_bytes"),
+            patch.object(fixture.select, "select", return_value=([], [], [])),
+            patch.object(fixture.os, "close"),
+        )
+        (
+            self.approved_handoff_patch,
+            self.pidfd_open,
+            self.pidfd_send_signal,
+            self.proc_start_time,
+            self.read_cmdline,
+            self.select_result,
+            self.close_pidfd,
+        ) = tuple(patcher.start() for patcher in patchers)
+        for patcher in patchers:
+            self.addCleanup(patcher.stop)
+
+    def _supervisor_arguments(
+        self,
+        *,
+        script: str | None = None,
+        handoff: str | None = None,
+        lifetime: str | None = None,
+    ) -> list[str]:
+        return [
+            sys.executable,
+            script or str(Path(fixture.__file__).resolve()),
+            "_supervise",
+            "--handoff-dir",
+            handoff or str(self.handoff_directory),
+            "--lifetime-minutes",
+            lifetime or str(fixture.DEFAULT_LIFETIME_MINUTES),
+        ]
+
+    def _verify(self, arguments: list[str], *, record_start_time: int | None = None) -> int | None:
+        self.read_cmdline.return_value = b"\0".join(
+            os.fsencode(argument) for argument in arguments
+        ) + b"\0"
+        return fixture._open_verified_supervisor_pidfd(
+            {
+                "pid": os.getpid(),
+                "start_time": (
+                    self.start_time if record_start_time is None else record_start_time
+                ),
+            }
+        )
+
+    def test_accepts_committed_and_candidate_supervisors_without_closing_pidfd(self) -> None:
+        cases = (
+            ("committed", self._supervisor_arguments()),
+            (
+                "candidate",
+                self._supervisor_arguments()
+                + ["--candidate-fingerprint", "b" * 64],
+            ),
+        )
+        for name, arguments in cases:
+            with self.subTest(name=name):
+                self.close_pidfd.reset_mock()
+                self.assertEqual(self._verify(arguments), self.pidfd)
+                self.close_pidfd.assert_not_called()
+
+    def test_rejects_forged_or_malformed_supervisor_arguments(self) -> None:
+        base = self._supervisor_arguments()
+        fingerprint = "b" * 64
+        wrong_command = list(base)
+        wrong_command[2] = "_guardian"
+        cases = (
+            ("extra argument", base + ["unexpected"]),
+            ("missing fingerprint value", base + ["--candidate-fingerprint"]),
+            ("forged candidate option", base + ["--other-option", fingerprint]),
+            ("uppercase fingerprint", base + ["--candidate-fingerprint", "A" * 64]),
+            ("short fingerprint", base + ["--candidate-fingerprint", "b" * 63]),
+            ("long fingerprint", base + ["--candidate-fingerprint", "b" * 65]),
+            (
+                "path-like fingerprint",
+                base + ["--candidate-fingerprint", "../" + "b" * 61],
+            ),
+            (
+                "forged script path",
+                self._supervisor_arguments(script=f"{Path(fixture.__file__).resolve()}.other"),
+            ),
+            ("forged handoff path", self._supervisor_arguments(handoff="/other-handoff")),
+            (
+                "out-of-range lifetime",
+                self._supervisor_arguments(lifetime=str(fixture.MAX_LIFETIME_MINUTES + 1)),
+            ),
+            ("malformed lifetime", self._supervisor_arguments(lifetime="120x")),
+            ("wrong process mode", wrong_command),
+        )
+
+        for name, arguments in cases:
+            with self.subTest(name=name):
+                self.close_pidfd.reset_mock()
+                with self.assertRaises(fixture.FixtureError):
+                    self._verify(arguments)
+                self.close_pidfd.assert_called_once_with(self.pidfd)
+
+    def test_retains_supervisor_owner_and_start_time_checks(self) -> None:
+        arguments = self._supervisor_arguments()
+
+        self.close_pidfd.reset_mock()
+        with patch.object(fixture.os, "geteuid", return_value=self.effective_uid + 1):
+            with self.assertRaisesRegex(fixture.FixtureError, "could not be verified"):
+                self._verify(arguments)
+        self.close_pidfd.assert_called_once_with(self.pidfd)
+
+        self.close_pidfd.reset_mock()
+        with self.assertRaisesRegex(fixture.FixtureError, "could not be verified"):
+            self._verify(arguments, record_start_time=self.start_time + 1)
+        self.close_pidfd.assert_called_once_with(self.pidfd)
+
+
 class UnattendedLifecycleTests(unittest.TestCase):
     def test_supervisor_survives_parent_pty_stdin_eof_after_handoff_until_signal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2104,6 +2834,34 @@ class PrivateHandoffChannelTests(unittest.TestCase):
         self.assertEqual(status["owned_images"], "not-verified")
         self.assertEqual(status["private_state"], "retained-for-recovery")
         self.assertFalse((self.channel / fixture.MEMBER_HANDOFF_FILE).exists())
+
+
+class CandidateCliTests(unittest.TestCase):
+    def test_candidate_preflight_and_fingerprint_opt_in_are_explicit(self) -> None:
+        fingerprint = "a" * 64
+        self.assertEqual(
+            fixture._parse_args(["candidate-preflight"]).command,
+            "candidate-preflight",
+        )
+        committed_start = fixture._parse_args(["start"])
+        self.assertIsNone(committed_start.candidate_fingerprint)
+        committed_launch = fixture._parse_args(["launch"])
+        self.assertIsNone(committed_launch.candidate_fingerprint)
+
+        candidate_start = fixture._parse_args(
+            ["start", "--candidate-fingerprint", fingerprint]
+        )
+        candidate_launch = fixture._parse_args(
+            ["launch", "--candidate-fingerprint", fingerprint]
+        )
+        self.assertEqual(candidate_start.candidate_fingerprint, fingerprint)
+        self.assertEqual(candidate_launch.candidate_fingerprint, fingerprint)
+
+    def test_candidate_fingerprint_rejects_malformed_values(self) -> None:
+        for value in ("A" * 64, "0" * 63, "0" * 65, "../" + "0" * 61):
+            with self.subTest(value=value), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    fixture._parse_args(["launch", "--candidate-fingerprint", value])
 
 
 class PtyGuardianTests(unittest.TestCase):

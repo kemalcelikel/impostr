@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.models import AuditEvent, User, WebSession
+from app.models import (
+    AuditEvent,
+    Project,
+    ProjectDocument,
+    ProjectDocumentRevision,
+    User,
+    WebSession,
+)
 from app.passwords import token_hash, verify_password
 
 ORIGIN = "http://127.0.0.1:8080"
@@ -29,8 +38,13 @@ def login(client: TestClient, username: str, password: str) -> str:
     return result.json()["csrf_token"]
 
 
-def fail_commit(monkeypatch: pytest.MonkeyPatch, *, number: int = 1) -> None:
-    """Fail a single requested commit, leaving earlier rate-limit writes intact."""
+def fail_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    number: int = 1,
+    after_commit: bool = False,
+) -> None:
+    """Fail one commit, optionally after it may already have reached the database."""
     original = Session.commit
     count = 0
 
@@ -38,6 +52,8 @@ def fail_commit(monkeypatch: pytest.MonkeyPatch, *, number: int = 1) -> None:
         nonlocal count
         count += 1
         if count == number:
+            if after_commit:
+                original(db)
             raise OperationalError("COMMIT", {}, Exception("injected failure"))
         original(db)
 
@@ -174,3 +190,100 @@ def test_failed_privileged_read_audit_never_returns_private_data(
     assert "Secret" not in result.text
     with Session(engine) as db:
         assert db.scalar(select(AuditEvent).where(AuditEvent.action.like("admin.%.read"))) is None
+
+
+@pytest.mark.parametrize("commit_was_durable", [False, True], ids=["rolled-back", "uncertain"])
+def test_failed_project_create_commit_leaves_no_workspace_orphan(
+    client, engine, account_factory, workspace_root, monkeypatch, commit_was_durable
+) -> None:
+    account_factory("member", "correct horse battery")
+    csrf = login(client, "member", "correct horse battery")
+    name = "Commit boundary project"
+    fail_commit(monkeypatch, number=2, after_commit=commit_was_durable)
+
+    result = client.post(
+        "/api/projects",
+        json={"name": name},
+        headers=headers(csrf),
+    )
+
+    assert_unavailable(result)
+    assert not workspace_root.exists()
+    with Session(engine) as db:
+        project = db.scalar(select(Project).where(Project.name == name))
+        assert (project is not None) is commit_was_durable
+
+    if commit_was_durable:
+        assert project is not None
+        assert not (workspace_root / str(project.id)).exists()
+        materialized = client.get(f"/api/projects/{project.id}/documents")
+        assert materialized.status_code == 200
+        assert sorted(path.name for path in (workspace_root / str(project.id)).iterdir()) == [
+            "AGENTS.md",
+            "BACKLOG.md",
+            "PROJECT.md",
+        ]
+    else:
+        assert client.get("/api/projects").json() == []
+
+
+@pytest.mark.parametrize("commit_was_durable", [False, True], ids=["rolled-back", "uncertain"])
+def test_failed_document_commit_discards_cache_until_database_head_is_reloaded(
+    client,
+    engine,
+    account_factory,
+    workspace_root,
+    monkeypatch,
+    commit_was_durable,
+) -> None:
+    account_factory("member", "correct horse battery")
+    csrf = login(client, "member", "correct horse battery")
+    mutation_headers = headers(csrf)
+    created = client.post(
+        "/api/projects",
+        json={"name": "Document commit boundary"},
+        headers=mutation_headers,
+    )
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+    initial = client.get(f"/api/projects/{project_id}/documents/project")
+    assert initial.status_code == 200
+    initial_content = initial.json()["content"]
+    workspace_directory = workspace_root / project_id
+    assert (workspace_directory / "PROJECT.md").read_text(encoding="utf-8") == initial_content
+
+    attempted_content = "# New content whose commit result is uncertain\n"
+    fail_commit(monkeypatch, number=2, after_commit=commit_was_durable)
+    result = client.put(
+        f"/api/projects/{project_id}/documents/project",
+        json={"expected_revision": 1, "content": attempted_content},
+        headers=mutation_headers,
+    )
+
+    assert_unavailable(result)
+    # A failed or uncertain commit invalidates the cache rather than leaving a
+    # mirror that could disagree with the authoritative database head.
+    assert not workspace_directory.exists()
+    expected_content = attempted_content if commit_was_durable else initial_content
+    expected_revision = 2 if commit_was_durable else 1
+    with Session(engine) as db:
+        document = db.scalar(
+            select(ProjectDocument).where(
+                ProjectDocument.project_id == uuid.UUID(project_id),
+                ProjectDocument.kind == "project",
+            )
+        )
+        assert document is not None and document.head_revision_number == expected_revision
+        revisions = list(
+            db.scalars(
+                select(ProjectDocumentRevision).where(
+                    ProjectDocumentRevision.document_id == document.id
+                )
+            ).all()
+        )
+        assert len(revisions) == expected_revision
+
+    latest = client.get(f"/api/projects/{project_id}/documents/project")
+    assert latest.status_code == 200
+    assert latest.json()["content"] == expected_content
+    assert (workspace_directory / "PROJECT.md").read_text(encoding="utf-8") == expected_content

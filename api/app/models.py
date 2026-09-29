@@ -17,6 +17,7 @@ from sqlalchemy import (
     LargeBinary,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
     func,
     text,
@@ -25,6 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
 from app.db import Base
+from app.project_names import project_name_key
 
 
 class User(Base):
@@ -109,11 +111,105 @@ class Project(Base):
     __table_args__ = (
         CheckConstraint("length(name) BETWEEN 1 AND 120", name="ck_projects_name_length"),
         Index("ix_projects_owner_created", "owner_user_id", "created_at"),
+        Index("uq_projects_owner_name_key", "owner_user_id", "name_key", unique=True),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    name_key: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default=lambda context: project_name_key(str(context.get_current_parameters()["name"])),
+    )
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProjectDocument(Base):
+    __tablename__ = "project_documents"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('project', 'agents', 'backlog')", name="ck_project_documents_kind"
+        ),
+        CheckConstraint(
+            "head_revision_number >= 1", name="ck_project_documents_head_revision_positive"
+        ),
+        UniqueConstraint("project_id", "kind", name="uq_project_documents_project_kind"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    head_revision_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProjectDocumentRevision(Base):
+    __tablename__ = "project_document_revisions"
+    __table_args__ = (
+        CheckConstraint("revision_number >= 1", name="ck_document_revisions_number_positive"),
+        CheckConstraint("origin IN ('template', 'human')", name="ck_document_revisions_origin"),
+        CheckConstraint("length(content_sha256) = 64", name="ck_document_revisions_hash_length"),
+        CheckConstraint(
+            "(template_source IS NULL AND template_sha256 IS NULL) OR "
+            "(template_source IS NOT NULL AND template_sha256 IS NOT NULL)",
+            name="ck_document_revisions_template_provenance_pair",
+        ),
+        UniqueConstraint("document_id", "revision_number", name="uq_document_revisions_number"),
+        Index("ix_document_revisions_author_created", "author_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("project_documents.id", ondelete="CASCADE"), nullable=False
+    )
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    template_source: Mapped[str | None] = mapped_column(String(128))
+    template_sha256: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class DocumentConflictProposal(Base):
+    __tablename__ = "document_conflict_proposals"
+    __table_args__ = (
+        CheckConstraint(
+            "expected_revision_number >= 1", name="ck_conflict_proposals_expected_positive"
+        ),
+        CheckConstraint(
+            "observed_revision_number >= 1", name="ck_conflict_proposals_observed_positive"
+        ),
+        CheckConstraint("length(content_sha256) = 64", name="ck_conflict_proposals_hash_length"),
+        Index("ix_conflict_proposals_document_created", "document_id", "created_at"),
+        Index("ix_conflict_proposals_author_created", "author_user_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("project_documents.id", ondelete="CASCADE"), nullable=False
+    )
+    expected_revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    observed_revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    author_user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
