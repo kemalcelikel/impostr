@@ -362,3 +362,154 @@ GitHub branch push/PR tooling and auth.
 **Documentation impact:** Release summary and outstanding owner merge action.
 **Open decisions:** GitHub CLI/auth are verified for read access here; branch
 push/PR-write access remains to be proven at delivery without bypasses.
+
+---
+
+## [x] IMP-013 — Human-only first-stage document review and pair approval
+
+Type: feature
+**Depends on:** IMP-004
+**Scope:** Extract the direct PROJECT.md/AGENTS.md review, edit,
+diff and atomic human pair approval from IMP-006. No OpenCode session, model
+credential or agent proposal may be assumed; this is a partial product slice,
+not a chat-enabled first release.
+
+### Done looks like
+- Authorized creator/admin can compare saved versions, edit both drafts, and
+  approve exactly the current pair after starter validation; stale saves or
+  approvals fail without losing either edit, and later changes invalidate approval.
+- Accessible desktop/narrow review and conflict states work without agent chat.
+  IMP-006 is narrowed to chat integration; pair approval is not delivered or
+  counted twice.
+
+### Verification
+- Authorization, stale-version and atomic approval tests plus rendered keyboard,
+  viewport and conflict review. No model or live-session claim.
+
+**Documentation impact:** Explain partial human-only workflow and later chat gate.
+**Decision:** Owner approved this extraction and IMP-006/007/009 dependency
+changes on 2026-09-25. This is a verifiable intermediate slice, not the complete
+chat-enabled first release; do not mark IMP-006 delivered from this item's work.
+**Blocker (2026-09-29):** Independent full-diff re-review still NEEDS WORK: a
+required decision wrapped in paired custom HTML can approve `TBD`, and a pair
+refresh racing history can regress the clean editor's saved head. Existing
+uncommitted implementation, migration, fixture and tests are preserved; reported
+API 63/10 skipped, isolated PostgreSQL 10, web 47 and toolkit 117/1 skipped
+passed at different repair checkpoints, not final acceptance. The last repair
+changed candidate inputs; fresh preflight, authenticated rendered review, docs,
+final gates and commit remain pending. Stop dependent work pending owner decision.
+**Local human-only recovery proposal (not requeued):** Reuse IMP-013 and its
+preserved partial work; no model credential, relay or product-agent integration
+is needed. Regression-test rejection of undecided required decisions inside
+paired custom HTML and the reverse-order history/pair-refresh response race
+without regressing legitimate markup, immutable revisions or unsaved edits.
+Obtain independent full-diff re-review, then fingerprint and review the exact
+final candidate through normal synthetic Member sign-in and rendered viewports;
+finish affected docs and actual API/PostgreSQL/web/toolkit gates before a
+verified commit. Keep `[!]` until the owner explicitly approves another bounded
+attempt; do not start IMP-007/014 or count passing intermediate checks as done.
+**Bounded recovery blocker (2026-09-29):** Focused custom-HTML TBD and pair-refresh/history race repairs and regressions remain uncommitted. Independent full-diff review NEEDS WORK: four-space-indented code can satisfy required approval decisions, and a delayed stale-approval conflict response can regress a head already advanced by history. Developer-reported API 63 passed/10 skipped with static checks and web 49 passed with checks are not final acceptance. Per the owner stop rule, no further repair, fresh candidate preflight/authenticated rendered review, docs, isolated PostgreSQL or toolkit/final coordinator gates were attempted. Preserve the existing partial work and all prior attempts; keep dependents blocked pending owner decision.
+**Owner-authorized bounded continuation (2026-09-29; one attempt, no runner requeue):**
+Preserve the same IMP-013 ID, uncommitted implementation and all failed-review
+evidence. Repair and regression-test both new review findings: four-space-indented
+Markdown code must not satisfy required decisions in either document (while real
+prose, lists and tables still can), and a delayed stale-approval `409` must not
+move any visible saved head behind a revision already found by history. Preserve
+the original stale pair for comparison, unsaved editor text, explicit reapply,
+authorization and atomic approval semantics. Obtain independent review of the
+whole baseline-to-result diff before further acceptance work. If it passes,
+preflight and authenticate the exact final candidate for rendered review, then
+finish affected docs and actual API, isolated PostgreSQL, web and toolkit gates
+before any verified commit/outcome. Any failed gate stops this attempt with a
+new checkpoint; prior passing checkpoints are not final evidence. No IMP-002,
+chat, host-secret setup, dependent work, push or PR. Keep `[!]` while this
+manual recovery is in progress; the coordinator, not a developer subagent, owns
+status and delivery after all required gates pass. Do not start another root
+runner against this partial checkout.
+**Continuation blocker (2026-09-29):** Focused indented-code and delayed-409 repairs with regressions remain uncommitted. Independent full-diff review NEEDS WORK: HTML comment-only sections/fields can still satisfy required decisions, and a later saved-pair refresh replaces the original submitted stale pair in the conflict comparison. Developer-reported API 64 passed/10 PostgreSQL-only skipped with static checks and web 51 with checks passed, but are not final acceptance. Stopped before fresh preflight, authenticated rendered review, affected docs, isolated PostgreSQL, toolkit and coordinator final gates. Preserve all partial work and prior attempts; IMP-013 and dependents remain blocked pending owner decision.
+**Owner-directed immediate recovery (2026-09-29; same ID, manual continuation):**
+Prioritize finishing IMP-013 on this host without another owner-approval round
+for each ordinary, in-scope review defect. Before patching individual examples,
+establish one reviewable contract and regression matrix: only visible, substantive
+Markdown decisions may satisfy required sections/fields (not fenced/indented
+code, HTML comments, markup-only or undecided values); genuine visible prose,
+lists, tables and legitimate markup must remain usable. Keep the originally
+submitted stale pair immutable for comparison, advance current saved heads
+monotonically across history, pair refresh and approval responses, and reset
+review confirmation when the latest comparison target changes; never erase
+unsaved text or silently rebase a save. Repair and independently re-review the
+whole diff against that contract. Correctable in-scope NEEDS WORK findings may
+be repaired and re-reviewed in this same authorized continuation, rather than
+stopping for another owner permission; stop for an unresolved product decision,
+unavailable capability, unsafe access or an acceptance gate that cannot pass.
+After APPROVED review, rerun exact-candidate preflight and authenticated rendered
+review, affected docs and actual API/isolated PostgreSQL/web/toolkit/final gates.
+The owner requested speed and offered to accept risk, but no specific change to
+approval/version safety requirements was agreed: do not bypass validation,
+conflict protection or failed gates, or claim an unsafe implementation complete.
+Preserve the `[!]` checkpoint and all partial work while recovering; no root
+runner, unrelated IMP-002 work, dependent tasks, push or PR. Only the coordinator
+records a verified IMP-013 outcome after its actual acceptance passes.
+**Interrupted continuation checkpoint (2026-09-29):** Independent review then
+found that `opacity:0` and `font-size:0` could conceal text counted as required
+decisions. The follow-up repair handoff was cancelled; the current dirty tree
+contains HTML-scanner/style tests, but there is no evidence that this snapshot
+passed review or any final gate. Fresh candidate preflight, authenticated
+rendered review, docs, isolated PostgreSQL and toolkit remain outstanding.
+**Owner-approved fail-closed evidence boundary (2026-09-29; not a requeue):**
+The required-decision check is a bounded Markdown evidence rule, not an HTML/CSS
+visibility detector. Save raw HTML in drafts unchanged, but text inside *any*
+raw HTML element, including an unstyled paired custom tag, never supplies a
+required PROJECT.md or AGENTS.md decision. Supported Markdown-native headings,
+prose, lists and table data, including ordinary inline formatting and link
+labels, may supply evidence; code examples, comments, attributes, image alt
+text, reference definitions, undecided values and ambiguous constructs do not.
+An explicit undecided required value still blocks approval. This supersedes the
+earlier expectation that text inside legitimate raw HTML could satisfy a
+decision; revise those positive tests rather than adding more CSS synonyms.
+Before further review, test a compact positive/negative matrix in both documents
+and verify that raw HTML alone fails approval while substantive Markdown outside
+it remains eligible. Keep approval, current approval status, immutable revisions
+and stale-conflict behavior aligned; independently review the whole resulting
+diff before candidate/browser/docs/isolated-PostgreSQL/toolkit/final gates.
+The interrupted local checkout contains unverified scanner and style/class tests;
+do not treat those edits or earlier test counts as accepted or discard them
+without inspecting the diff. Existing IMP-013 `[!]`, attempts and dependency
+blocks remain; the prior owner-directed manual continuation may proceed under
+this now-settled boundary, not through an automatic root-runner requeue.
+**Verified local checkpoint (2026-09-29):** The existing dirty implementation now
+follows the bounded Markdown rule; independent full-diff code and final-evidence
+reviews returned APPROVED. Exact-candidate fingerprint `9afbbc5e…859b6` passed
+fresh `0005` preflight, normal synthetic Member rendered review at 1440/1024/768/
+375 px, real two-tab stale-save conflict review, and owned cleanup. Final isolated
+PostgreSQL migration and 10 tests, API 81 passed/10 profile-skipped plus static
+checks, web 60 plus static/build, and toolkit 116 passed/1 gated skip all passed;
+affected operator docs were updated. No commit was requested in this continuation,
+so this verified candidate is still uncommitted and IMP-013 stays `[!]` pending
+explicit local delivery authorization. Do not start dependents; no push or PR.
+**Owner local-delivery authorization (2026-09-29; outcome still pending):** The
+runner/coordinator may commit the verified IMP-013 implementation, migration,
+tests, fixture, affected local-development docs and narrowly relevant planning/
+outcome hunks on the existing `feature/impostr-v1` branch. First inspect the
+current diff and evidence against the exact reviewed candidate; if runtime
+inputs changed or a gate cannot be substantiated, stop rather than commit from
+stale evidence. Exclude unrelated dirty planning edits, `.opencode` logs,
+browser state and credentials. Record `[x]` only as part of a successfully
+verified local delivery commit, preserving the earlier blocker/attempt history;
+if commit fails, leave `[!]` and report it. After the verified local commit, the
+runner may continue dependency-eligible work under the existing single-branch
+batch rules. This authorizes no push, PR, merge or first-release claim. A
+planning note alone does not complete IMP-013 or make dependents eligible.
+**Verified local delivery (2026-09-29):** Commit `888e53c` on
+`feature/impostr-v1` contains the exact reviewed approval API/migration/tests,
+candidate fixture, responsive UI, operator docs and bounded Markdown contract.
+The pre-commit IMP-013 candidate fingerprint matched the reviewed
+`9afbbc5e3083f3dde00822e27bfc198fea8511da2454f7e312da723d638859b6`;
+the commit's app/docs paths have no post-commit worktree changes. Independent
+full-diff and final evidence reviews APPROVED. Fresh migration `0005`, 10 isolated
+PostgreSQL tests, API 81 passed/10 profile skips plus checks, web 60 plus checks,
+toolkit 116/1 gated skip, normal synthetic Member rendered review at
+1440/1024/768/375, two-tab stale-save conflict and owned cleanup passed. Earlier
+failed attempts and blockers above remain history, not current defects. This is
+local human-only approval, not chat, exports, agent isolation or release readiness;
+no push/PR/merge.
