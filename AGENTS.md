@@ -160,8 +160,15 @@ deployment. Use the local-only setup instructions and do not infer production or
 release readiness from passing container checks. The installed
 `ui-ux-pro-max` and `ui-styling` skills are optional design aids; the `ui-designer`
 may use them without reinstalling them. Browser tools are available, but no
-automated application browser-test command or checked-in/reusable test credentials
-have been established.
+generally available product/CI browser-test command or checked-in/reusable test
+credentials have been established. The IMP-015 operator-only fixture commands
+and private, short-lived Member handoff are verified in `docs/local-development.md`.
+Two fresh committed-app runs passed normal browser sign-in, same-page
+`ui-designer` rendered review, Member/admin 403 and expired/revoked-session 401
+checks, and post-handoff account/session and owned-resource cleanup. The toolkit
+suite passed 82 tests with one gated live-Docker skip; the SIGKILL recovery test
+passed separately. The shared browser-tool server is not OS-confined; this local
+synthetic review does not verify IMP-004 or agent-runtime isolation.
 
 ## Implementation and review boundaries
 

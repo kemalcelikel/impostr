@@ -122,7 +122,100 @@ skipped 3 PostgreSQL-only tests, and passed Ruff, format, and mypy. Separate
 PostgreSQL migration and 3 integration tests passed. The web gate passed 6 tests
 plus lint, format, typecheck, and build; the toolkit suite passed 6 tests. Browser
 checks at 1440, 1024, 768, and 375 px found no horizontal overflow and confirmed
-keyboard focus.
+keyboard focus. The latest toolkit run passed 82 tests with one gated live-Docker
+test skipped; the separately exercised live recovery test is described below.
+
+## Disposable authenticated browser review (operator-only)
+
+This is a maintainer/operator check for the approved local checkout, not a general
+product setup, CI service, or unattended global fixture. It requires Docker with a
+working local Unix socket and the owner-approved handoff directory
+`/tmp/opencode/impostr-review-handoff` already available to the operator and
+permitted file tools. The directory must be owned by the current user and mode
+`0700`; the fixture creates handoff files as mode `0600`. If tool permissions for
+this channel change, first prove a harmless marker can be written and read through
+the permitted tools. If that proof is denied, stop before launching or creating
+credentials; do not move the file or use another tool to bypass the denial.
+
+From the repository root, start the fixture with the approved 30-minute lifetime:
+
+```sh
+python3 scripts/local_browser_fixture.py launch --handoff-dir /tmp/opencode/impostr-review-handoff --lifetime-minutes 30
+```
+
+On success, the launcher prints the run's temporary loopback browser origin and
+the private handoff-file location. Use the permitted `Read` tool to read
+`member-login.json`; enter that generated, short-lived synthetic Member login in
+the application's normal sign-in form in the shared Playwright page. Keep that
+same authenticated page open for `ui-designer`'s rendered review. The generated
+Member usernames are compact, validator-compatible synthetic identifiers, not
+real-person accounts. The fixture creates a fresh disposable app/database and
+does not use a test-only sign-in bypass. Do not copy login values, session data,
+or the temporary origin into Git, issues, or public logs; keep browser/tool logs
+private and untracked. Never use owner-created or other real-user logins, or
+owner/admin/database/provider/host credentials or sessions.
+
+After the review, stop the fixture and read its sanitized cleanup record through
+the permitted `Read` tool:
+
+```sh
+python3 scripts/local_browser_fixture.py stop
+```
+
+Read `/tmp/opencode/impostr-review-handoff/cleanup-status.json`. Verified cleanup
+has a stopped phase, the generated login removed, owned Compose resources and
+images removed, private fixture state removed, and recovery either not needed or
+completed. The cleanup record contains status values only, not credentials. A
+zero exit from `stop` with that verified status indicates normal completion; a
+nonzero exit means setup or review failed, even when cleanup succeeded. Two fresh
+runs of this fixture completed normal browser sign-in and rendered review;
+`ui-designer` returned PASS. Its checks included Member denial of an admin-only
+request (HTTP 403), expired/revoked session denial (HTTP 401), and post-handoff
+account/session and owned-resource cleanup.
+
+If launch fails, it exits nonzero and reports that setup failed or no safe browser
+handoff was produced; do not continue to the browser. Read the sanitized cleanup
+status rather than relying on process exit or raw logs. `stop` may also exit
+nonzero when setup/review failed even if owned cleanup was verified; that does not
+mean the review passed. If owned teardown is still unverified after the supervisor
+has stopped, retry its ownership-checked recovery:
+
+```sh
+python3 scripts/local_browser_fixture.py recover
+```
+
+Recovery succeeds only when the fixture's registered resources and private state
+can be verified as removed. If a supervisor or guardian is still active, use
+`stop` first. If Docker is unavailable or the local engine is recovering, retain
+the private recovery state and retry after the engine is available. If the status
+is `manual-required`, ownership cannot be verified: do not run broad Docker
+cleanup or delete the private recovery state; request operator-assisted recovery.
+The launcher also refuses to replace an existing login or prior run with
+unverified cleanup. The requested lifetime is bounded (5–240 minutes) and the
+fixture performs automatic teardown at its limit.
+
+The fixture archives committed `HEAD` for the app snapshot, not dirty working-tree
+changes. Uncommitted IMP-004 code is therefore not included. Keep its partial work
+and unrelated planning changes untouched. The normal browser page is served only
+on loopback, but the shared Playwright tool server is **not OS-confined** and may
+have access to Docker, host secrets, or another stack. This is an accepted residual
+host risk for this local synthetic review, not a security control; do not claim a
+proven denial, intentionally use those capabilities, or extend this exception to
+product-agent isolation or shared-server readiness.
+
+The separately gated live SIGKILL recovery test is run from the repository root
+with Docker available and an appropriate container image already cached. It does
+not pull an image; if none is cached, the test skips. The test starts two isolated
+throwaway Compose projects, simulates an abrupt supervisor-child `SIGKILL`, and
+checks recovery removes only the fixture-owned resources while preserving the
+other test project:
+
+```sh
+IMPOSTR_FIXTURE_LIVE_RECOVERY=1 PYTHONPATH=scripts python3 -m unittest test_local_browser_fixture.RecoveryOwnershipTests.test_live_abrupt_failure_recovery_preserves_an_unrelated_compose_project
+```
+
+The default toolkit command remains `python3 -m unittest discover -s scripts -p 'test_*.py'`;
+it skips this live test unless `IMPOSTR_FIXTURE_LIVE_RECOVERY=1` is set.
 
 The local `.env` generation helper was tested by the developer from an initially
 absent file; no `.env` was committed. The optional `curl` health probe was run by
