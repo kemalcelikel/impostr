@@ -197,7 +197,7 @@ approved replacements with shared #11–13 budget, not a reset. Superseded by IM
 and IMP-021 after verified source preparation below. This is not completion: ten
 failed attempts and partial work remain history; never mark `[x]` from splitting.
 
-## [!] IMP-020 — Verify inert three-document manifest persistence
+## [x] IMP-020 — Verify inert three-document manifest persistence
 
 **Depends on:** IMP-013
 **Scope:** Verify preserved manifest ORM/migration without registering final-approval,
@@ -294,6 +294,23 @@ preserving all other code. No application changes, DB/app tests or new snapshots
 were made; #11–13 remain unused. Existing source artifacts and code are preserved;
 IMP-021 remains dependency-blocked. Affected-docs assessment found no delivered
 schema behavior to document yet. No push/PR, merge, deployment or runner restart.
+
+**Verified repair/delivery:** Owner requested checking/fixing the stopped runner.
+The coordinator delegated the narrow forward route deferral plus persistence checks;
+no history rewrite or discarded code. Local commit `d556043` removes only final-router
+activation, adds inert HTTP and PostgreSQL schema/preservation regressions, and records
+operating limits. The preserved approval module/UI remain for their owning items.
+#11 consumed for persistence/test hardening; #12–13 remain for enforcement.
+Failing-before HTTP returned 200 instead of 404; repaired candidate passed 110 focused
+API tests plus Ruff/format/mypy, fresh PostgreSQL migration, 11 existing integration
+tests and 2 schema/preservation/constraint tests with owned cleanup. Independent
+in-repo review APPROVED; coordinator reverified exact current-source mapping
+`8bd133696732496c567093e11a57bd2dab2de61ade1dde22d69b9873c7de4529` using
+`check_current.py verify` (helper SHA-256
+`731ff1767dbd95da32f48125eebe03518ca9a6cebe1be580f158fbd3d401e2c9`).
+Legacy templates are harness-only, not restored or integrated. Initial schema setup
+needed the generated disposable owner role; final owned check passed without widening
+app-role grants. Historical runner blocker above is resolved, not erased. No push/restart.
 
 ## [ ] IMP-021 — Enforce valid approval and immutable three-file downloads
 
