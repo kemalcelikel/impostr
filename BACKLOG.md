@@ -442,7 +442,7 @@ no remaining defect but was INCOMPLETE without rendering. Owner approved profile
 extension and up to three additional substantive attempts; profile not yet built.
 Keep ready but waiting. No push/PR, runner restart or chat claim.
 
-## [ ] IMP-022 — Integrate the simplified nested project templates
+## [!] IMP-022 — Integrate the simplified nested project templates
 
 **Depends on:** IMP-004, IMP-007, IMP-013
 **Scope:** Adopt owner-selected `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example`
@@ -467,6 +467,14 @@ restart preservation. Independent profile/build-boundary review; focused Python/
 checks on owned synthetic storage. Draft only: owner deferred execution for approval
 work first. Root deletion breaks fresh API builds; path redirection alone is insufficient.
 Coordinate with IMP-020/021 without expanding its budget/permissions or restoring roots.
+
+**Execution blocker (2026-09-30):** Runner claim does not override the explicit owner
+deferral above and in AGENTS.md. Read-only reconciliation at `4b72ead` confirms discovery,
+Docker packaging, approval profiles and snapshot inventories still use legacy inputs;
+IMP-022 is not already delivered. Owner must explicitly authorize template integration
+despite the unfinished approval work (IMP-020 blocked, IMP-021 waiting). No application
+changes, build/DB checks or recovery attempts; existing code and runner logs preserved.
+Only backlog/session bookkeeping is delivered locally; no push/PR or runner restart.
 
 ## [ ] IMP-016 — Prove private HTTPS LAN access
 
