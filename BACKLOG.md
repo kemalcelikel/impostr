@@ -449,7 +449,7 @@ skipped, web 60, toolkit 116/1 skipped plus checks, synthetic Member viewport/tw
 conflict review and owned cleanup passed. Failed recoveries and settled evidence-rule
 decisions remain in history. Human-only intermediate slice, not IMP-006 chat or release.
 
-## [ ] IMP-014 — Human-only collapsible backlog planning layout
+## [!] IMP-014 — Human-only collapsible backlog planning layout
 
 **Depends on:** IMP-007, IMP-013, IMP-021
 **Scope:** Direct task rail, title/body/dependency edits, draft/ready toggles and
@@ -482,6 +482,21 @@ useful docs and verified local commit before `[x]`.
 no remaining defect but was INCOMPLETE without rendering. Owner approved profile
 extension and up to three additional substantive attempts; profile not yet built.
 Keep ready but waiting. No push/PR, runner restart or chat claim.
+
+**Execution blocker (2026-10-01):** Reconciled actual committed approval base at
+`3ab5aee` on `feature/impostr-v1`; no unresolved dirty application changes exist.
+Developer inspection and independent reviewer confirm every existing snapshot
+requires the deleted root templates, and API packaging still copies them. The
+approved UI/fixture inventory cannot supply those missing inputs. Older candidate
+bases and API-only harness templates are not authorized IMP-014 browser evidence.
+Owner must authorize a narrow browser-harness input exception or IMP-022 integration
+before a usable exact-input profile can be built. No application/profile changes,
+Docker setup, credentials, preflight or rendering; 0 of 3 additional substantive
+attempts used. Coordinator fixture tests: 122 run, 120 passed, 1 skipped, 1 archive
+error. Developer web checks could not run without installed vitest/eslint/prettier;
+no dependencies installed. Existing docs already state the template/build and
+rendered-acceptance limits; no delivered behavior to document. Partial committed UI
+and runner changes preserved; local outcome bookkeeping only, no push/PR/restart.
 
 ## [!] IMP-022 — Integrate the simplified nested project templates
 
