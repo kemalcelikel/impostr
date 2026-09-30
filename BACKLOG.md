@@ -476,7 +476,7 @@ despite the unfinished approval work (IMP-020 blocked, IMP-021 waiting). No appl
 changes, build/DB checks or recovery attempts; existing code and runner logs preserved.
 Only backlog/session bookkeeping is delivered locally; no push/PR or runner restart.
 
-## [ ] IMP-016 — Prove private HTTPS LAN access
+## [!] IMP-016 — Prove private HTTPS LAN access
 
 **Depends on:** IMP-001, IMP-003
 **Scope:** One-owner phone/other-PC access through operator-managed private HTTPS;
@@ -489,6 +489,15 @@ logout work; unapproved origins/HTTP/privileged ingress fail and loopback dev re
 Test real-device positive/negative access, phone layout and eventual chat streaming;
 document actual setup/revocation. Draft scope approved, provisioning deferred. No
 verified origin/certificate/proxy/firewall route or network-change authorization.
+
+**Execution blocker (2026-09-30):** At `00673df`, read-only reconciliation confirms
+the front door remains loopback HTTP, with no delivered private HTTPS/device proof.
+Runner assignment does not authorize the expressly deferred provisioning. Operator
+must choose and provision/authorize the origin, certificate, proxy trust and network
+restrictions, and provide a real test device before execution. Existing local docs
+already state this gate; no setup/revocation procedure is invented. No application,
+network or credential changes, live tests or substantive attempts; local outcome
+bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
 ## [ ] IMP-017 — Ingest and privately store project attachments
 
