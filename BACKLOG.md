@@ -35,9 +35,9 @@ new push or merge is authorized by this document edit.
   Local commits are not merged release or ordinary-worktree build readiness.
 - IMP-014 has partial UI/tests and is now eligible after verified approval; it needs its own
   exact-candidate authenticated rendered review. Existing pass counts are not acceptance.
-- Chat is blocked by IMP-002 isolation/relay proof. Media/private HTTPS work remains
-  draft. Fresh worktree API builds are broken by root-template deletion; IMP-022
-  is blocked pending its explicit integration scope. No chat or release-readiness claim is valid.
+- Chat is blocked by IMP-002 isolation/relay proof. Media/private HTTPS work retains
+  its documented blockers. IMP-022 now repairs ordinary worktree template builds;
+  no chat or release-readiness claim follows from this compatibility repair.
 
 **Continuation after stopped-runner repair:** IMP-020/021 are verified local work;
 IMP-014 is the sole eligible task. At the next owner-started runner, `overnight`
@@ -449,7 +449,7 @@ skipped, web 60, toolkit 116/1 skipped plus checks, synthetic Member viewport/tw
 conflict review and owned cleanup passed. Failed recoveries and settled evidence-rule
 decisions remain in history. Human-only intermediate slice, not IMP-006 chat or release.
 
-## [!] IMP-014 — Human-only collapsible backlog planning layout
+## [ ] IMP-014 — Human-only collapsible backlog planning layout
 
 **Depends on:** IMP-007, IMP-013, IMP-021
 **Scope:** Direct task rail, title/body/dependency edits, draft/ready toggles and
@@ -498,7 +498,17 @@ no dependencies installed. Existing docs already state the template/build and
 rendered-acceptance limits; no delivered behavior to document. Partial committed UI
 and runner changes preserved; local outcome bookkeeping only, no push/PR/restart.
 
-## [!] IMP-022 — Integrate the simplified nested project templates
+**Blocker resolution:** Owner directed fixing consumers to use the replacement
+examples, not restoring old roots or adding a browser-harness exception. IMP-022
+verified integration in `9759af6` resolves missing template/archive inputs. IMP-014
+is requeued for its original approved profile/rendered work; all 3 additional
+substantive attempts remain unused. Reconcile the actual latest committed base,
+including new profile/task-section modules and nested template/build inputs, before
+preflight. Do not reuse old fingerprints or claim prior partial UI accepted. `overnight`
+resumes sole coordination at the next owner-started run; no interactive implementation
+will run concurrently. No automatic restart.
+
+## [x] IMP-022 — Integrate the simplified nested project templates
 
 **Depends on:** IMP-004, IMP-007, IMP-013
 **Scope:** Adopt owner-selected `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example`
@@ -531,6 +541,22 @@ IMP-022 is not already delivered. Owner must explicitly authorize template integ
 despite the unfinished approval work (IMP-020 blocked, IMP-021 waiting). No application
 changes, build/DB checks or recovery attempts; existing code and runner logs preserved.
 Only backlog/session bookkeeping is delivered locally; no push/PR or runner restart.
+
+**Verified consumer repair:** Owner subsequently directed fixing whatever needs the
+replacement examples, authorizing this integration. Local commit `9759af6` implements
+exact nested trio discovery/packaging, frozen immutable legacy/simplified provenance
+profiles, coherent compact task extraction and fixture archives. Existing seeds/history/
+approvals are preserved; unknown/mixed/partial provenance fails closed. No root restore
+or weakened approval evidence. Three bounded substantive passes used for section
+boundaries, copied-guidance evidence, and applicability/workflow/archive coherence;
+IMP-020/021 budgets unaffected. Independent baseline-to-result review APPROVED.
+Ordinary runtime/development Docker builds passed; coordinator reran exact source/image
+mapping for 38 runtime/62 development files, nested-only inputs and locks/config/parser.
+Focused API 442 passed, final affected checks 121 passed plus Ruff/format/mypy; fresh
+owned PostgreSQL migration `0006` and 3 concurrency checks passed with cleanup. Toolkit
+128 passed/1 gated skip; coordinator fixture recheck 123 run/1 skipped passed. A redundant
+186-test run timed out and is not passing command evidence. IMP-014 still needs new exact
+candidate proof/authenticated rendering. No push/PR, deployment or runner restart.
 
 ## [!] IMP-016 — Prove private HTTPS LAN access
 
