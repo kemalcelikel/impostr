@@ -33,11 +33,20 @@ new push or merge is authorized by this document edit.
 - Approval/download API is locally verified through IMP-020/021 after the preserved
   ten failed attempts. #11 persistence and #12 enforcement passed; #13 was not needed.
   Local commits are not merged release or ordinary-worktree build readiness.
-- IMP-014 has partial UI/tests but awaits a verified approval commit and its own
+- IMP-014 has partial UI/tests and is now eligible after verified approval; it needs its own
   exact-candidate authenticated rendered review. Existing pass counts are not acceptance.
 - Chat is blocked by IMP-002 isolation/relay proof. Media/private HTTPS work remains
   draft. Fresh worktree API builds are broken by root-template deletion; IMP-022
-  is deferred. No chat, approved downloads or release-readiness claim is valid.
+  is blocked pending its explicit integration scope. No chat or release-readiness claim is valid.
+
+**Continuation after stopped-runner repair:** IMP-020/021 are verified local work;
+IMP-014 is the sole eligible task. At the next owner-started runner, `overnight`
+resumes sole coordination; interactive tech-lead will not implement concurrently.
+Use committed approval base `72e37e9` (or verify any later changed head). Build/review
+the exact IMP-014 candidate profile first; no earlier fingerprints, API-only harness
+templates or committed-but-unaccepted UI alone establish its preview/rendered safety.
+Other blockers retain their recorded unmet prerequisites. No automatic restart,
+new template integration, network provisioning or attachment limits are implied.
 
 ## [x] IMP-001 — Bootstrap app and database baseline
 

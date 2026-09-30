@@ -11,6 +11,11 @@ summaries below are historical; the owner committed that partial material in `e2
 which was not acceptance. Local bounded test-harness templates do not fix ordinary
 worktree builds. Runner is stopped; interactive coordinator owns this repair and
 must hand back coordination before any later owner-started runner.
+**Continuation handoff:** Approval code `2e7a0e9` and outcome `72e37e9` are committed;
+IMP-014 is now the sole eligible item. For the next owner-started root batch,
+`overnight` resumes sole coordination without a concurrent interactive implementation.
+Start IMP-014 with actual committed-base/profile reconciliation and fresh candidate
+proof/rendered checks; previous fingerprints and API-only harnesses are not its gates.
 
 **Current task authority and runner handoff:** Use the current `BACKLOG.md` for
 scope/readiness/dependencies and the latest checkpoint; `docs/backlog-history.md`
