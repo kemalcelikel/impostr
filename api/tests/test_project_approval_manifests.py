@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from legacy_templates import legacy_templates
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -27,6 +28,16 @@ from app.models import (
 )
 from app.project_templates import ProjectTemplate
 from app.rate_limit import RateLimitDecision
+from app.template_profiles import SUPPORTED_STARTERS
+
+
+@pytest.fixture(autouse=True)
+def frozen_legacy_client(client, monkeypatch):
+    client.app.state.project_templates = legacy_templates()
+    # Synthetic starters in this existing evidence matrix are explicit test-only
+    # supported versions. Production recognizes only the two frozen real tuples.
+    monkeypatch.setitem(SUPPORTED_STARTERS, "legacy", SUPPORTED_STARTERS["legacy"])
+
 
 PUBLIC_ORIGIN = "http://127.0.0.1:8080"
 STARTER_BACKLOG = """# Backlog: <PROJECT_NAME>
@@ -100,12 +111,7 @@ WAITING_STARTER_BACKLOG = """# Backlog: Waiting task starter
 
 
 def _root_starter_backlog() -> str:
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "BACKLOG.md.example"
-        if candidate.is_file():
-            return candidate.read_text(encoding="utf-8")
-    # The check image keeps the same pinned template under its runtime directory.
-    return Path("/app/templates/BACKLOG.md.example").read_text(encoding="utf-8")
+    return legacy_templates()["backlog"].content
 
 
 ROOT_STARTER_BACKLOG = _root_starter_backlog()
@@ -201,6 +207,10 @@ def _set_backlog_template(client: TestClient, content: str) -> None:
         sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
     )
     client.app.state.project_templates = templates
+    SUPPORTED_STARTERS["legacy"] = (
+        *SUPPORTED_STARTERS["legacy"][:2],
+        (templates["backlog"].source, templates["backlog"].sha256),
+    )
 
 
 def _create_project(client: TestClient, name: str) -> str:
@@ -2224,7 +2234,7 @@ def test_manifest_commit_failure_is_atomic_and_safe_to_retry(
         )
     assert len(persisted) == len(events) == int(commit_was_durable)
 
-    monkeypatch.undo()
+    monkeypatch.setattr(Session, "commit", original_commit)
     retried = _approve_manifest(
         client,
         project_id,

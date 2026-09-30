@@ -229,6 +229,9 @@ APP_SNAPSHOT_FILES = frozenset(
         "BACKLOG.md.example",
     }
 )
+LEGACY_TEMPLATE_PATHS = ("PROJECT.md.example", "AGENTS.md.example", "BACKLOG.md.example")
+NESTED_TEMPLATE_PATHS = tuple(f"overnight-agent/{name}" for name in LEGACY_TEMPLATE_PATHS)
+SNAPSHOT_TEMPLATE_FILES = frozenset((*LEGACY_TEMPLATE_PATHS, *NESTED_TEMPLATE_PATHS))
 # IMP-007's development Docker target copies the committed compatibility oracle
 # from the root build context. It is archived only as explicit candidate support;
 # the committed-HEAD browser fixture does not add scripts to its snapshot.
@@ -429,6 +432,7 @@ CANDIDATE_STATUS_PATHS = (
     "PROJECT.md.example",
     "AGENTS.md.example",
     "BACKLOG.md.example",
+    *NESTED_TEMPLATE_PATHS,
 )
 # Watch all app/build inputs plus the host fixture directory. Live planning files,
 # runner logs, and other paths outside those scopes are neither read nor archived.
@@ -1829,7 +1833,7 @@ def _git_environment(home: Path) -> dict[str, str]:
 
 
 def _is_candidate_build_scope(path: str) -> bool:
-    return path in {
+    return path in SNAPSHOT_TEMPLATE_FILES or path in {
         ".dockerignore",
         "compose.yaml",
         "PROJECT.md.example",
@@ -2638,7 +2642,7 @@ def _tracked_secret_path(path: str) -> bool:
 
 
 def _is_app_snapshot_path(path: str) -> bool:
-    return path in (APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES) or any(
+    return path in (APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES | SNAPSHOT_TEMPLATE_FILES) or any(
         path.startswith(f"{directory}/") for directory in ("db", "api", "web")
     )
 
@@ -2742,6 +2746,15 @@ def archive_head_snapshot(
         if tree.returncode != 0:
             raise FixtureError("The committed source tree could not be inspected.")
         tracked_paths = tree.stdout.decode("utf-8", "surrogateescape").split("\0")
+        selected_templates = select_snapshot_templates(tracked_paths)
+        selected_support = tuple(additional_paths)
+        if selected_templates == NESTED_TEMPLATE_PATHS:
+            # Replacement consumers use a root build context. Preserve its exact
+            # committed narrow boundary along with the selected input inventory.
+            if ".dockerignore" not in tracked_paths:
+                raise FixtureError("The nested-template snapshot lacks its build boundary.")
+            if ".dockerignore" not in selected_support:
+                selected_support = (*selected_support, ".dockerignore")
         if any(
             path and _is_app_snapshot_path(path) and _tracked_secret_path(path)
             for path in tracked_paths
@@ -2754,8 +2767,9 @@ def archive_head_snapshot(
                 "archive",
                 "--format=tar",
                 commit,
-                *APP_SNAPSHOT_PATHS,
-                *additional_paths,
+                *APP_SNAPSHOT_PATHS[:4],
+                *selected_templates,
+                *selected_support,
             ],
             cwd=repository_root,
             env=git_env,
@@ -2776,10 +2790,8 @@ def archive_head_snapshot(
             destination / "api" / "app" / "auth.py",
             destination / "web" / "src" / "App.tsx",
             destination / "db" / "Dockerfile",
-            destination / "PROJECT.md.example",
-            destination / "AGENTS.md.example",
-            destination / "BACKLOG.md.example",
-            *(destination / path for path in additional_paths),
+            *(destination / path for path in selected_templates),
+            *(destination / path for path in selected_support),
         )
         if not all(path.is_file() for path in required):
             raise FixtureError("The committed snapshot is missing the IMP-003 app surface.")
@@ -2788,6 +2800,25 @@ def archive_head_snapshot(
         raise
     except (OSError, subprocess.SubprocessError):
         raise FixtureError("The committed source snapshot could not be prepared.") from None
+
+
+def select_snapshot_templates(tracked_paths: Sequence[str]) -> tuple[str, ...]:
+    """Archive one complete input bundle, never synthesize missing starter bytes.
+
+    Historical bases contain both distribution and root examples. Their existing
+    candidate policies remain legacy; replacement-only commits select the nested
+    trio. A partial root bundle cannot silently switch to another profile.
+    """
+    paths = set(tracked_paths)
+    legacy = paths & set(LEGACY_TEMPLATE_PATHS)
+    nested = paths & set(NESTED_TEMPLATE_PATHS)
+    if legacy:
+        if legacy != set(LEGACY_TEMPLATE_PATHS):
+            raise FixtureError("The committed snapshot has an incomplete template bundle.")
+        return LEGACY_TEMPLATE_PATHS
+    if nested == set(NESTED_TEMPLATE_PATHS):
+        return NESTED_TEMPLATE_PATHS
+    raise FixtureError("The committed snapshot has an incomplete template bundle.")
 
 
 def create_compose_env(path: Path, identity: RunIdentity) -> None:
@@ -4829,6 +4860,10 @@ class FixtureSupervisor:
             "agents": ("AGENTS.md", "AGENTS.md.example"),
             "backlog": ("BACKLOG.md", "BACKLOG.md.example"),
         }
+        if not all((self.source_dir / path).is_file() for path in LEGACY_TEMPLATE_PATHS):
+            # Old candidate policies cannot certify replacement inputs. The later
+            # exact IMP-014 profile must explicitly authorize the new inventory.
+            raise FixtureError("This candidate profile requires its reviewed legacy templates.")
         observed_kinds: set[str] = set()
         for document in document_response.payload:
             if not isinstance(document, dict):

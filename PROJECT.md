@@ -92,11 +92,12 @@ slice.
   boundary between baseline checks and candidate review are in
   `docs/local-development.md`.
 - `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example` are the selected canonical
-  **input templates** for future Impostr-created projects. This is not integrated:
-  API packaging, discovery, tests and browser snapshots still expect deleted root
-  inputs; approval requires their legacy structure. IMP-022 must establish trusted
-  legacy/new profiles and exact seed bytes without rewriting existing projects or
-  weakening required-decision evidence. A path-only change is insufficient. The root helper is
+   **input templates** for new Impostr-created projects. IMP-022 integrates exact
+   nested discovery/packaging and coherent fixture inventories. Approval selects
+   frozen legacy/simplified profiles from the immutable three-file starter provenance,
+   never submitted headings or the installed bundle; unknown/mixed provenance fails
+   closed. Existing starters/history/approvals are not rewritten; partially seeded
+   projects remain explicitly incomplete rather than mixing versions. The root helper is
   the compatibility reference for exported backlog syntax. These root planning
   files describe Impostr itself and are not the templates for user projects.
 - OpenCode agents are installed for the current CLI environment (including

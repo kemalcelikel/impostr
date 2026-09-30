@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import record_audit
 from app.dependencies import CurrentActor, DbSession, SettingsDependency, load_active_actor
-from app.document_contract import MAX_REVISION_NUMBER, TEMPLATE_SOURCES
+from app.document_contract import DOCUMENT_FILENAMES, MAX_DOCUMENT_BYTES, MAX_REVISION_NUMBER
 from app.models import (
     Project,
     ProjectDocument,
@@ -33,6 +33,7 @@ from app.project_documents import (
     _read_revision,
 )
 from app.rate_limit import consume_rate_bucket
+from app.template_profiles import TemplateProfile, resolve_template_profile, starter_identity
 
 router = APIRouter(
     prefix="/projects/{project_id}/document-pair-approval",
@@ -134,6 +135,72 @@ _REQUIRED_PROJECT_FIELDS = (
     "Primary users",
     "Usage context",
     "Product outcomes",
+)
+_SIMPLIFIED_SECTIONS = {
+    "project": (
+        "Purpose and scope",
+        "Important behavior",
+        "Stack and architecture",
+        "Contracts and constraints",
+        "Decisions still needed",
+        "Completion",
+    ),
+    "agents": (
+        "Project context",
+        "Commands",
+        "Testing and review",
+        "Execution and Git",
+        "Completion and communication",
+    ),
+}
+# These are the actual labeled decisions in the simplified PROJECT starter.
+# None is an explicit applicability answer; an empty/hidden/TBD value is not.
+_SIMPLIFIED_FIELDS = {
+    "Purpose and scope": ("In scope", "Later/out of scope"),
+    "Important behavior": ("Domain terms and examples", "Important data/access rules"),
+    "Stack and architecture": (
+        "Runtime/framework/package manager",
+        "Storage/services",
+        "Structure/data flow",
+        "Existing implementation vs planned changes",
+    ),
+    "Contracts and constraints": (
+        "Important API/schema/file-format contracts",
+        "Cross-service dependencies/compatibility",
+        "UI direction/components/devices",
+        "Security/data/operating limits",
+        "Migration/performance/deployment requirements",
+    ),
+}
+_SIMPLIFIED_AGENT_FIELDS = {
+    "Project context": (
+        "Important contract/design references",
+        "Coding conventions and protected/generated paths",
+        "Dependency/migration rules",
+        "Environment limits",
+    ),
+    "Commands": (
+        "UI URL/login/representative viewport",
+        "Essential task-level gates",
+        "CI/release-only checks",
+    ),
+    "Execution and Git": ("Git workflow",),
+}
+_APPLICABILITY_FIELDS = frozenset(
+    {
+        "Later/out of scope",
+        "Domain terms and examples",
+        "Storage/services",
+        "Important API/schema/file-format contracts",
+        "Cross-service dependencies/compatibility",
+        "UI direction/components/devices",
+        "Migration/performance/deployment requirements",
+        "Important contract/design references",
+        "Dependency/migration rules",
+        "UI URL/login/representative viewport",
+        "Essential task-level gates",
+        "CI/release-only checks",
+    }
 )
 
 
@@ -613,6 +680,8 @@ def _markdown_lines(content: str) -> list[tuple[str, bool]]:
     inside a list they may be child items or continuation text, whereas outside
     (or four further columns inside) they are illustrative code.
     """
+    if not content:
+        return []
     result: list[tuple[str, bool]] = []
     fence: tuple[str, int] | None = None
     fence_quote_depth = 0
@@ -952,16 +1021,9 @@ def _file_validation_errors(
     kind: PairKind,
     content: str,
     template_revision: ProjectDocumentRevision,
+    profile: TemplateProfile = "legacy",
 ) -> list[str]:
-    expected_source = TEMPLATE_SOURCES[kind]
-    source_digest = hashlib.sha256(template_revision.content.encode("utf-8")).hexdigest()
-    if (
-        template_revision.revision_number != 1
-        or template_revision.origin != "template"
-        or template_revision.template_source != expected_source
-        or template_revision.template_sha256 != source_digest
-        or template_revision.content_sha256 != source_digest
-    ):
+    if starter_identity(template_revision) is None:
         return ["The original starter-template provenance could not be verified."]
 
     canonical_content = content.replace("\r\n", "\n").replace("\r", "\n")
@@ -975,6 +1037,11 @@ def _file_validation_errors(
     placeholders = set(_PLACEHOLDER_PATTERN.findall(template_revision.content))
     if _unresolved_angle_marker(content, placeholders):
         errors.append("Replace unresolved document placeholders before approving this pair.")
+    if profile == "simplified":
+        # Removing angle brackets or replacing underscores with spaces does not
+        # turn a starter's question/prompt into a project-specific answer.
+        if _retained_starter_prompt(content, placeholders):
+            errors.append("Replace retained starter prompts with project-specific decisions.")
 
     if _contains_starter_checklist(content, template_revision.content):
         errors.append("Remove the starter checklist before approving this pair.")
@@ -1010,22 +1077,73 @@ def _file_validation_errors(
     content_sections = _sections(canonical_content)
     template_headings = {name for name, level, _ in template_sections if level == 2}
     content_headings = {name for name, level, _ in content_sections if level == 2}
-    if any(section not in template_headings for section in _REQUIRED_SECTIONS[kind]):
+    required_sections = (
+        _SIMPLIFIED_SECTIONS[kind] if profile == "simplified" else _REQUIRED_SECTIONS[kind]
+    )
+    if any(section not in template_headings for section in required_sections):
         errors.append("The saved starter does not define the required review sections.")
-    missing_sections = [
-        section for section in _REQUIRED_SECTIONS[kind] if section not in content_headings
-    ]
+    missing_sections = [section for section in required_sections if section not in content_headings]
     if missing_sections:
         errors.append("Add project-specific sections for: " + ", ".join(missing_sections) + ".")
-    for section in _REQUIRED_SECTIONS[kind]:
+    for section in required_sections:
         if section not in content_headings:
             continue
-        has_decision, undecided_value = _section_decisions(content_sections, section, level=2)
+        decision_sections = content_sections
+        if profile == "simplified" and not (
+            kind == "agents" and section in {"Testing and review", "Completion and communication"}
+        ):
+            # Generic starter explanation/policy may be retained in AGENTS, but
+            # cannot by itself complete a required project-specific decision.
+            starter_words = " ".join(
+                _visible_markdown_text(line)[0]
+                for name, _depth, lines in template_sections
+                if name == section
+                for line in lines
+            )
+            starter_words = " ".join(re.findall(r"[a-z0-9]+", starter_words.casefold()))
+            decision_sections = [
+                (
+                    name,
+                    depth,
+                    [
+                        line
+                        for line in lines
+                        if _table_cells(line) is not None
+                        or not _copied_starter_line(line, starter_words)
+                    ],
+                )
+                for name, depth, lines in content_sections
+            ]
+        if profile == "simplified" and kind == "agents" and section == "Commands":
+            # A command working directory of '.' is a real path, not markup-only
+            # evidence. This applicability exception is confined to that column.
+            decision_sections = [
+                (
+                    name,
+                    depth,
+                    [
+                        re.sub(r"^(\|[^|]+\|)\s*\.\s*\|", r"\1 project root |", line)
+                        for line in lines
+                    ],
+                )
+                for name, depth, lines in decision_sections
+            ]
+        has_decision, undecided_value = _section_decisions(decision_sections, section, level=2)
         if undecided_value:
             errors.append(f"Resolve undecided decisions under {section}.")
         if section != "Scope" and not has_decision:
             errors.append(f"Add a project-specific decision under {section}.")
-    if kind == "project":
+    if profile == "simplified":
+        errors.extend(_simplified_validation_errors(kind, content_sections, template_sections))
+        if kind == "project":
+            questions = _section_lines(content_sections, "Decisions still needed", level=2)
+            if any(
+                (visible := _visible_markdown_text(line)[0]).strip().endswith("?")
+                or re.match(r"^(?:open|assumption)\s*:", visible.strip(), re.I)
+                for line in questions
+            ):
+                errors.append("Resolve consequential open questions under Decisions still needed.")
+    elif kind == "project":
         purpose_lines = _section_lines(content_sections, "Purpose and users", level=2)
         fields = _project_field_values(purpose_lines)
         starter_fields = dict(_FIELD.findall(canonical_template))
@@ -1045,6 +1163,97 @@ def _file_validation_errors(
             present = any(name == section and level == 3 for name, level, _ in scope_children)
             if not present or not has_decision or undecided_value:
                 errors.append(f"Describe what is {section.lower()} for this project.")
+    return errors
+
+
+def _retained_starter_prompt(content: str, placeholders: set[str]) -> bool:
+    submitted = " ".join(re.findall(r"[a-z0-9]+", content.casefold()))
+    return any(
+        (prompt := " ".join(re.findall(r"[a-z0-9]+", token.casefold())))
+        and len(prompt.split()) >= 3
+        and prompt in submitted
+        for token in placeholders
+    )
+
+
+def _copied_starter_line(line: str, starter_words: str) -> bool:
+    words = " ".join(re.findall(r"[a-z0-9]+", _visible_markdown_text(line)[0].casefold()))
+    return len(words.split()) >= 4 and words in starter_words
+
+
+def _simplified_validation_errors(
+    kind: PairKind, sections: list[ReviewSection], starter_sections: list[ReviewSection]
+) -> list[str]:
+    errors: list[str] = []
+    fields_by_section = _SIMPLIFIED_FIELDS if kind == "project" else _SIMPLIFIED_AGENT_FIELDS
+    for section, labels in fields_by_section.items():
+        lines = _section_lines(sections, section, level=2)
+        fields: dict[str, list[str]] = {}
+        prose: list[str] = []
+        for line in lines:
+            visible, ambiguous = _visible_markdown_text(_strip_list_prefix(line))
+            field = _LABELED_VALUE.fullmatch(visible) if not ambiguous else None
+            if field is not None and field.group(1) in labels:
+                fields.setdefault(field.group(1), []).append(field.group(2))
+            else:
+                prose.append(line)
+        for label in labels:
+            values = fields.get(label, [])
+            if (
+                len(values) != 1
+                or _undecided_text(values[0])
+                or (
+                    label not in _APPLICABILITY_FIELDS
+                    and values[0].casefold().strip(" .") == "none"
+                )
+            ):
+                errors.append(f"Fill the {label} decision for this project.")
+        if (
+            kind == "project"
+            and section == "Purpose and scope"
+            and not _decision_evidence(prose)[0]
+        ):
+            errors.append("Describe this project's purpose and intended users.")
+        if kind == "project" and section == "Important behavior":
+            starter_words = " ".join(
+                re.findall(
+                    r"[a-z0-9]+",
+                    " ".join(_section_lines(starter_sections, section, level=2)).casefold(),
+                )
+            )
+            behavior_lines = [
+                line
+                for line in prose
+                if _table_cells(line) is not None or not _copied_starter_line(line, starter_words)
+            ]
+            has_behavior, undecided = _decision_evidence(behavior_lines)
+            if not has_behavior or undecided:
+                errors.append("Describe an actual workflow and result under Important behavior.")
+    # The Commands table is usable only with actual data rows, not its header
+    # or a paragraph copied from the starter. Existing Markdown evidence rules
+    # reject unresolved cells, HTML, examples and ambiguous table shapes.
+    if kind == "agents":
+        lines = _section_lines(sections, "Commands", level=2)
+        command_rows = []
+        index = 0
+        while index < len(lines):
+            table = _table_block(lines, index)
+            if table is None:
+                index += 1
+                continue
+            header, rows, index = table
+            if header == ["Purpose", "Directory", "Command", "When to use"]:
+                command_rows.extend(rows)
+        if not command_rows or any(
+            malformed
+            or len(cells) != 4
+            or any(
+                _undecided_text(cell) and not (column == 1 and cell == ".")
+                for column, cell in enumerate(cells)
+            )
+            for cells, malformed in command_rows
+        ):
+            errors.append("Define actual command-table decisions for this project.")
     return errors
 
 
@@ -1322,17 +1531,47 @@ def _pair_validation_errors(
     revisions: dict[PairKind, ProjectDocumentRevision],
 ) -> dict[str, list[str]]:
     errors: dict[str, list[str]] = {}
-    for kind in PAIR_KINDS:
-        try:
-            template_revision = _read_revision(db, documents[kind], 1)
-        except HTTPException:
-            errors[TEMPLATE_SOURCES[kind].removesuffix(".example")] = [
+    project_ids = {document.project_id for document in documents.values()}
+    resolved = (
+        resolve_template_profile(db, next(iter(project_ids))) if len(project_ids) == 1 else None
+    )
+    if resolved is None:
+        return {
+            DOCUMENT_FILENAMES[kind]: [
                 "The original starter-template provenance could not be verified."
             ]
+            for kind in PAIR_KINDS
+        }
+    profile, seeds = resolved
+    for kind in PAIR_KINDS:
+        template_revision = seeds[kind]
+        if (
+            template_revision.document_id != documents[kind].id
+            or revisions[kind].document_id != documents[kind].id
+        ):
+            errors[DOCUMENT_FILENAMES[kind]] = ["The saved document ownership is inconsistent."]
             continue
-        file_errors = _file_validation_errors(kind, revisions[kind].content, template_revision)
+        revision = revisions[kind]
+        try:
+            raw = revision.content.encode("utf-8", errors="strict")
+        except UnicodeEncodeError:
+            raw = b""
+        if (
+            not raw
+            or len(raw) > MAX_DOCUMENT_BYTES
+            or b"\x00" in raw
+            or revision.origin not in {"template", "human"}
+            or hashlib.sha256(raw).hexdigest() != revision.content_sha256
+        ):
+            errors[DOCUMENT_FILENAMES[kind]] = [
+                "The saved document integrity could not be verified."
+            ]
+            continue
+        file_errors = _file_validation_errors(
+            kind, revisions[kind].content, template_revision, profile
+        )
         if file_errors:
-            errors[TEMPLATE_SOURCES[kind].removesuffix(".example")] = file_errors
+            errors[DOCUMENT_FILENAMES[kind]] = file_errors
     return errors
 
 

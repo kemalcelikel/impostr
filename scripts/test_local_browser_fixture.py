@@ -837,6 +837,25 @@ class MigrationDiagnosticTests(unittest.TestCase):
         self.assertIn("catalog_current=table-absent users=no", message)
 
 class GitArchiveTests(unittest.TestCase):
+    def test_snapshot_template_selection_requires_coherent_inventory(self) -> None:
+        self.assertEqual(
+            fixture.select_snapshot_templates(fixture.NESTED_TEMPLATE_PATHS),
+            fixture.NESTED_TEMPLATE_PATHS,
+        )
+        self.assertEqual(
+            fixture.select_snapshot_templates(
+                (*fixture.LEGACY_TEMPLATE_PATHS, *fixture.NESTED_TEMPLATE_PATHS)
+            ),
+            fixture.LEGACY_TEMPLATE_PATHS,
+        )
+        for paths in (
+            (),
+            fixture.NESTED_TEMPLATE_PATHS[:2],
+            (*fixture.LEGACY_TEMPLATE_PATHS[:1], *fixture.NESTED_TEMPLATE_PATHS),
+        ):
+            with self.subTest(paths=paths), self.assertRaises(fixture.FixtureError):
+                fixture.select_snapshot_templates(paths)
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -1012,9 +1031,18 @@ class GitArchiveTests(unittest.TestCase):
                 "20260925_0003_project_document_revisions.py",
                 "20260925_0004_bounded_project_name_keys.py",
                 "20260929_0005_document_pair_approvals.py",
+                "20260930_0006_project_approval_manifests.py",
             },
         )
         self.assertEqual(stat.S_IMODE(snapshot.stat().st_mode), 0o700)
+        for relative in fixture.NESTED_TEMPLATE_PATHS:
+            self.assertEqual(
+                (snapshot / relative).read_bytes(),
+                (repository_root / relative).read_bytes(),
+            )
+        self.assertFalse((snapshot / "overnight-agent" / "opencode.json").exists())
+        self.assertFalse((snapshot / "PROJECT.md.example").exists())
+        self.assertTrue((snapshot / ".dockerignore").is_file())
         for directory in (
             snapshot / "api",
             snapshot / "api" / "migrations",

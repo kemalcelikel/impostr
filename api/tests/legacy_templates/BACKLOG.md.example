@@ -1,0 +1,140 @@
+# Backlog: <PROJECT_NAME>
+
+> STARTER TEMPLATE — copy into an application repository as `BACKLOG.md`.
+> Replace placeholders and remove setup notes. Example entries are `[-]` so an
+> unattended runner cannot treat unfinished templates as approved ready work.
+
+## How to create and maintain this backlog
+
+1. Start from PROJECT.md and the agreed product/architecture decisions. The owner
+   and interactive `tech-lead` can draft/revise future work; use `architect` for
+   complex slicing.
+2. Give each item a permanent unique ID, concrete scope, acceptance criteria, and
+   explicit dependencies. Order by priority, with prerequisites ahead of consumers.
+3. Keep generated/draft/deferred items `[-]`. Resolve implementation-defining
+   questions before promoting work to `[ ]`, or make a separate bounded decision
+   task with a verifiable deliverable. Do not queue dependent code on an assumption.
+4. The owner approves readiness with `tech-lead`. Runner claims only selected `[ ]`
+   items as `[~]`. Never run two claimers against the same file or edit another run's
+   active items.
+5. Overnight updates outcomes directly for its assigned IDs. `[x]` requires the
+   full definition of done. If delivery requires a commit, verify that it succeeded
+   before marking done. The agent owns this judgment and the status update.
+6. Review blocked/partial work before requeueing. Preserve attempt counts and
+   resume locations; do not automatically reset `[!]` or recreate the task under
+   a new ID to evade its budget.
+
+Canonical instructions/contracts: `PROJECT.md`, `AGENTS.md`, `<OTHER_REFS_OR_NONE>`.
+Execution/commit/review policies live in AGENTS.md; do not duplicate them per item.
+
+## Sprint context — optional
+
+When AGENTS.md selects `sprint-workflow`, name the sprint in this file (for example
+`# Sprint v29`) and fill the following metadata. Remove this section for other flows.
+
+- Sprint branch: `<ACTIVE_SPRINT_BRANCH>`
+- Version control: `<PROVIDER, E.G. BITBUCKET CLOUD>`
+
+For sprint work, add `Type: feature` or `Type: bug`, `Branch: <name>`, and
+`PR: <URL-or-pending>` to each item as applicable. The coordinator manages those fields;
+developer may propose a descriptive branch name. The shared skill defines PR targets,
+so they need not be repeated here. `[x]` means submitted work is complete; check actual
+PR merges separately before dependent work or final sprint verification.
+
+## Status contract
+
+| Marker | Meaning | Owner of transition |
+|---|---|---|
+| `[ ]` | Approved and ready; prerequisites resolved or explicitly scheduled | Project owner with tech-lead |
+| `[~]` | Claimed by a named run; final gates may still be pending | Runner, or explicitly authorized manual coordinator |
+| `[x]` | Complete under the project's verification/delivery rules | Assigned coordinator |
+| `[!]` | Blocked/incomplete; requires an explicit recovery decision | Assigned coordinator; owner approves requeue |
+| `[-]` | Draft, deferred, or intentionally skipped; never automatically selected | Project owner with tech-lead |
+
+Use exactly `## [state] ID — Title` for task headings; ordinary subsections must
+not imitate task headings. Existing unique-title backlogs may be handled as a
+legacy input, but stable IDs make recovery easier. The supplied helper selects
+dependency-eligible ready headings in file order. Declare dependencies as comma-
+separated task IDs in a `Depends on:` line; overnight verifies actual integration.
+Fenced examples are ignored; duplicate IDs/titles and invalid markers are rejected.
+The helper validates positive batch sizes and writes status changes atomically.
+
+`[x]` on a work branch does not mean merged, deployed, or present in another
+checkout. The backlog inside the designated project/sandbox checkout is authoritative
+for that run. Dependency code must actually exist in its baseline or be verified
+earlier in the batch. Reconcile other checkouts deliberately by ID during review.
+
+## Execution metadata
+
+- Run ID and execution branch/worktree: `<SUPPLIED_AT_LAUNCH>`.
+- Recovery state: `.opencode/progress.md` (coordinator-owned, normally uncommitted).
+- Final report: one summary in DONE.md per batch, matching the existing runner.
+- Batch selection: `<ASSIGNED_IDS_OR_RUNNER_POLICY>`.
+- A coherent documentation batch: `<RELATED_ITEMS_OR_FEATURE_BOUNDARY>`.
+- Retry/deadline policy: `<FINITE_LIMITS_OR_LINK_TO_AGENTS_MD>`.
+
+The runner resets unfinished `[~]` items to `[ ]`; it does not remove partial code
+or clear previous progress notes. On resumption, the agent inspects Git history,
+the current changes, and those notes before deciding what remains to be done.
+It performs verification, commits when authorized, and updates this file directly.
+For sprint-workflow, the runner stops after one task. Record the final outcome and
+PR URL in a task-branch commit/push so a human merge brings them into the sprint;
+fetch and reconcile this file on the sprint branch before a later runner invocation.
+The runner accepts uncommitted files; it does not require a cleanup commit before
+a run. Preserve partial task-branch work rather than switching away from it to
+start a new sprint task.
+Tech-lead may publish owner-approved PROJECT.md, AGENTS.md, and future BACKLOG.md
+planning changes directly to an existing sprint branch between runs. It does not
+rewrite completed outcomes or change a running item's status.
+
+Do not add repetitive status essays. For blocked work, add one short `Blocked:`
+line and link the checkpoint. Commit IDs and detailed verification belong in the
+checkpoint; avoid inserting a commit's own hash into the file it will commit.
+
+---
+
+## [-] TASK-001 — `<First independently verifiable outcome>`
+
+**Depends on:** None
+**Scope:** `<REPOSITORY_MODULES_OR_PATHS_AND_NON_GOALS>`
+**Required capabilities:** `<SKILLS_SERVICES_FIXTURES_ACCESS_OR_NONE>`
+
+Replace this paragraph with the behavior to deliver and a link to the canonical
+contract. Identify actual constraints and decisions; avoid repeating the entire
+product specification.
+
+### Done looks like
+
+- `<OBSERVABLE_ACCEPTANCE_CRITERION>`.
+- `<RELEVANT_FAILURE_SECURITY_OR_COMPATIBILITY_CRITERION>`.
+
+### Verification
+
+- `<FOCUSED_TEST_OR_CHECK_AND_EXPECTED_RESULT>`.
+- `<RELEVANT_INTEGRATION_UI_SECURITY_EVIDENCE_OR_NA>`.
+
+**Documentation impact:** `<AFFECTED_GUIDE_CONTRACT_OR_NONE; FINAL_BATCH_PASS>`
+**Open decisions:** `<NONE_FOR_READY_IMPLEMENTATION_OR_LINK_TO_DECISION_TASK>`
+
+---
+
+## [-] TASK-002 — `<Outcome depending on TASK-001>`
+
+**Depends on:** TASK-001
+**Scope:** `<REPOSITORY_MODULES_OR_PATHS_AND_NON_GOALS>`
+**Required capabilities:** `<CAPABILITIES_OR_NONE>`
+
+Replace this paragraph with how this extends or consumes the first task's
+deliverable. State the contract explicitly enough to prevent divergent
+cross-module implementations.
+
+### Done looks like
+
+- `<OBSERVABLE_ACCEPTANCE_CRITERION>`.
+
+### Verification
+
+- `<CHECK_COVERING_THE_DEPENDENCY_INTERACTION>`.
+
+**Documentation impact:** `<SAME_BATCH_AS_TASK-001_OR_A_DISTINCT_NEED>`
+**Open decisions:** `<NONE_OR_UNRESOLVED_DECISION>`

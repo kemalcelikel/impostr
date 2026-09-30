@@ -11,9 +11,9 @@ DOCUMENT_FILENAMES: dict[DocumentKind, str] = {
     "backlog": "BACKLOG.md",
 }
 TEMPLATE_SOURCES: dict[DocumentKind, str] = {
-    "project": "PROJECT.md.example",
-    "agents": "AGENTS.md.example",
-    "backlog": "BACKLOG.md.example",
+    "project": "overnight-agent/PROJECT.md.example",
+    "agents": "overnight-agent/AGENTS.md.example",
+    "backlog": "overnight-agent/BACKLOG.md.example",
 }
 
 # nginx permits a 1 MiB JSON request; the document itself is bounded well below it.

@@ -15,7 +15,7 @@ RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock \
 COPY api/alembic.ini ./alembic.ini
 COPY api/app ./app
 COPY api/migrations ./migrations
-COPY PROJECT.md.example AGENTS.md.example BACKLOG.md.example ./templates/
+COPY overnight-agent/PROJECT.md.example overnight-agent/AGENTS.md.example overnight-agent/BACKLOG.md.example ./templates/overnight-agent/
 
 USER 10001:10001
 EXPOSE 8000

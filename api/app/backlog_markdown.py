@@ -8,6 +8,8 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from app.task_sections import extract_task_sections
+
 TaskStatus = Literal["-", " ", "~", "x", "!"]
 PLANNING_STATUSES = frozenset({"-", " "})
 EXECUTION_STATUSES = frozenset({"~", "x", "!"})
@@ -171,54 +173,9 @@ def _task_body_end(
 
 
 def _section_content(body: str, names: frozenset[str]) -> str | None:
-    lines = body.splitlines(keepends=True)
-    headings: list[tuple[int, int, int, str]] = []
-    offset = 0
-    fence: tuple[str, int] | None = None
-    for raw_line in lines:
-        text = raw_line.rstrip("\r\n")
-        if fence is not None:
-            marker, minimum_length = fence
-            if re.fullmatch(
-                r" {0,3}" + re.escape(marker) + "{" + str(minimum_length) + r",}\s*",
-                text,
-            ):
-                fence = None
-        else:
-            opening = _FENCE_OPEN_PATTERN.match(text)
-            if opening:
-                fence = (opening.group(1)[0], len(opening.group(1)))
-            else:
-                match = re.match(r"^( {0,3})(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$", text)
-                if match:
-                    headings.append(
-                        (
-                            offset,
-                            offset + len(raw_line),
-                            len(match.group(2)),
-                            match.group(3).strip(),
-                        )
-                    )
-        offset += len(raw_line)
-
-    selected_index: int | None = None
-    selected_level: int | None = None
-    value_start: int | None = None
-    for index, (_start, end, level, title) in enumerate(headings):
-        if title.casefold() in names:
-            selected_index = index
-            selected_level = level
-            value_start = end
-            break
-    if selected_index is None or selected_level is None or value_start is None:
-        return None
-
-    value_end = len(body)
-    for next_start, _next_end, next_level, _ in headings[selected_index + 1 :]:
-        if next_level <= selected_level:
-            value_end = next_start
-            break
-    return body[value_start:value_end].strip()
+    sections = extract_task_sections(body)
+    selected = sections.verification if "verification" in names else sections.acceptance
+    return selected[0] if selected else None
 
 
 def _metadata_lines(

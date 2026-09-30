@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.document_contract import DOCUMENT_KINDS, MAX_DOCUMENT_BYTES, TEMPLATE_SOURCES, DocumentKind
+from app.template_profiles import SUPPORTED_STARTERS
 
 
 class TemplateBundleError(RuntimeError):
@@ -27,10 +28,13 @@ def default_template_root() -> Path:
     configured = os.environ.get("IMPOSTR_TEMPLATE_DIR")
     if configured:
         return Path(configured)
-    # In a source checkout, the canonical examples live at the repository root.
+    # Both checkout and image preserve the canonical nested source paths.
     source_root = Path(__file__).resolve().parents[2]
     if all((source_root / source).is_file() for source in TEMPLATE_SOURCES.values()):
         return source_root
+    checkout_root = source_root.parent
+    if all((checkout_root / source).is_file() for source in TEMPLATE_SOURCES.values()):
+        return checkout_root
     packaged_root = Path("/app/templates")
     if packaged_root.is_dir():
         return packaged_root
@@ -43,6 +47,8 @@ def load_project_templates(root: Path) -> dict[DocumentKind, ProjectTemplate]:
         for kind in DOCUMENT_KINDS:
             source = TEMPLATE_SOURCES[kind]
             path = root / source
+            if root.is_symlink() or path.parent.is_symlink():
+                raise TemplateBundleError("The packaged project templates are invalid.")
             file_info = path.stat(follow_symlinks=False)
             if not stat.S_ISREG(file_info.st_mode) or file_info.st_size > MAX_DOCUMENT_BYTES:
                 raise TemplateBundleError("The packaged project templates are invalid.")
@@ -58,4 +64,7 @@ def load_project_templates(root: Path) -> dict[DocumentKind, ProjectTemplate]:
             )
     except (OSError, UnicodeDecodeError) as exc:
         raise TemplateBundleError("The packaged project templates are unavailable.") from exc
+    identity = tuple((templates[kind].source, templates[kind].sha256) for kind in DOCUMENT_KINDS)
+    if identity != SUPPORTED_STARTERS["simplified"]:
+        raise TemplateBundleError("The packaged project template version is not supported.")
     return templates

@@ -179,17 +179,19 @@ def add_template_documents(
     *,
     created_at: datetime | None = None,
 ) -> dict[DocumentKind, ProjectDocumentRevision]:
-    """Insert missing template heads and their immutable revision-one snapshots."""
+    """Initialize an unseeded project with one complete immutable starter bundle."""
     timestamp = created_at or datetime.now(UTC)
     existing = set(
         db.scalars(
             select(ProjectDocument.kind).where(ProjectDocument.project_id == project_id)
         ).all()
     )
+    # Never complete a partial historical bundle with the installed replacement.
+    # Leave it explicitly incomplete for operator recovery; existing bytes stay intact.
+    if existing:
+        return {}
     inserted: dict[DocumentKind, ProjectDocumentRevision] = {}
     for kind in DOCUMENT_KINDS:
-        if kind in existing:
-            continue
         template = templates[kind]
         document = ProjectDocument(
             project_id=project_id,

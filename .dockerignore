@@ -1,5 +1,5 @@
 # The API image needs only its runtime sources, migrations, lockfiles, tests, and
-# the three canonical root examples. Everything else (especially credentials and
+# the three canonical nested examples. Everything else (especially credentials and
 # live planning/runner data) stays outside the build context.
 **
 !api/
@@ -17,9 +17,10 @@
 # API tests compare backlog parsing with the repository's compatibility helper.
 !scripts/
 !scripts/backlog.py
-!PROJECT.md.example
-!AGENTS.md.example
-!BACKLOG.md.example
+!overnight-agent/
+!overnight-agent/PROJECT.md.example
+!overnight-agent/AGENTS.md.example
+!overnight-agent/BACKLOG.md.example
 api/**/__pycache__/
 api/**/.pytest_cache/
 api/**/.mypy_cache/

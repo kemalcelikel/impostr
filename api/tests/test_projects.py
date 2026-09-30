@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app import project_documents as project_documents_module
 from app import projects as projects_module
 from app.config import AppSettings
+from app.document_contract import TEMPLATE_SOURCES
 from app.main import create_app
 from app.models import (
     AuditEvent,
@@ -117,7 +118,7 @@ def test_project_routes_require_a_live_authenticated_session(client: TestClient)
     assert client.get(f"/api/projects/{uuid.uuid4()}").status_code == 401
 
 
-def test_project_creation_seeds_hashed_root_templates_and_private_workspace(
+def test_project_creation_seeds_hashed_nested_templates_and_private_workspace(
     client: TestClient,
     settings: AppSettings,
     account_factory,
@@ -158,11 +159,7 @@ def test_project_creation_seeds_hashed_root_templates_and_private_workspace(
     documents = client.get(f"/api/projects/{project_id}/documents")
     assert documents.status_code == 200
     by_kind = {document["kind"]: document for document in documents.json()}
-    expected = {
-        "project": "PROJECT.md.example",
-        "agents": "AGENTS.md.example",
-        "backlog": "BACKLOG.md.example",
-    }
+    expected = TEMPLATE_SOURCES
     repository_root = default_template_root()
     assert set(by_kind) == set(expected)
     for kind, source in expected.items():

@@ -36,6 +36,27 @@ not the denied temporary marker or snapshot content.
 
 ## Human-only final approval and downloads (IMP-021)
 
+### Selected template compatibility (IMP-022)
+
+The API and browser-fixture archive now consume exactly
+`overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example`. Canonical output filenames
+remain PROJECT.md, AGENTS.md and BACKLOG.md. Ordinary runtime/development API builds
+work with those inputs; historical root-template test harnesses are no longer needed
+for this repaired build. Earlier build-blocker statements below are historical.
+
+New project seeds record exact nested source paths/raw-byte digests. Frozen supported
+legacy/simplified three-file provenance tuples select approval validation; editing
+headings or changing installed templates cannot change an existing project's profile.
+Unsupported/mixed provenance fails closed. Startup does not complete partial seeds
+using a different bundle. Existing immutable history and approvals are not rewritten.
+Changing a canonical example's bytes requires explicit supported-version compatibility
+work; it is not a free-form runtime template override.
+
+Compact scope prose, `Acceptance:` and inline `Verification:` are interpreted
+consistently by task editing and approval, without borrowing metadata or hidden
+examples. Fresh IMP-014 candidate proof/rendering is still required; repairing fixture
+inputs does not certify an old candidate profile or a rendered UI.
+
 Final approval requires the current approved PROJECT.md/AGENTS.md pair and exact
 current BACKLOG.md revision with substantive task evidence. A ready task marker is
 not final approval or proof that its dependencies are complete. Metadata-only or

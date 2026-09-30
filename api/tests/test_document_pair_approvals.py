@@ -5,7 +5,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from legacy_templates import legacy_templates
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,12 @@ from app.config import AppSettings
 from app.main import create_app
 from app.models import AuditEvent, ProjectDocumentPairApproval, ProjectDocumentRevision, User
 from app.project_templates import ProjectTemplate
+
+
+@pytest.fixture(autouse=True)
+def frozen_legacy_client(client):
+    client.app.state.project_templates = legacy_templates()
+
 
 PUBLIC_ORIGIN = "http://127.0.0.1:8080"
 

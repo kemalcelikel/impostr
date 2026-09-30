@@ -2,6 +2,14 @@
 
 ## Sources and current state
 
+**Latest template consumer repair:** Owner directed fixing consumers of the replacement
+examples, authorizing existing IMP-022 integration after its prior deferral. Nested
+trio discovery/build/profile validation and fixture archive compatibility now passed
+focused checks, ordinary runtime/development builds, exact image mapping and independent
+review; consult current BACKLOG.md for delivery. Earlier root-template/build blockers
+are historical, not instructions to restore roots/use browser-harness exceptions.
+IMP-014 still requires a new exact committed-base profile/preflight/rendered review.
+
 **Latest verified recovery:** After the stopped runner, owner requested repair.
 IMP-020 persistence was verified/committed in `d556043` (outcome `24fbd39`); #11
 consumed. IMP-021's #12 checkbox-evidence repair passed independent combined review,

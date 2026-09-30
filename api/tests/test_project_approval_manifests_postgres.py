@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -12,10 +11,14 @@ from threading import Barrier, Event
 
 import pytest
 from fastapi.testclient import TestClient
+from legacy_templates import legacy_templates
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
+from test_template_profiles import AGENTS as SIMPLIFIED_AGENTS
+from test_template_profiles import BACKLOG as SIMPLIFIED_BACKLOG
+from test_template_profiles import PROJECT as SIMPLIFIED_PROJECT
 
 from app import project_approval_manifests as manifest_module
 from app import project_documents as document_module
@@ -31,7 +34,6 @@ from app.models import (
     WebSession,
 )
 from app.passwords import hash_password
-from app.project_templates import ProjectTemplate
 from app.rate_limit import rate_limit_key
 
 pytestmark = pytest.mark.skipif(
@@ -129,14 +131,7 @@ def _headers(client: TestClient, settings: AppSettings) -> dict[str, str]:
 
 
 def _set_backlog_template(app) -> None:
-    templates = dict(app.state.project_templates)
-    templates["backlog"] = ProjectTemplate(
-        kind="backlog",
-        source="BACKLOG.md.example",
-        content=STARTER_BACKLOG,
-        sha256=hashlib.sha256(STARTER_BACKLOG.encode("utf-8")).hexdigest(),
-    )
-    app.state.project_templates = templates
+    app.state.project_templates = legacy_templates()
 
 
 def _save(
@@ -183,8 +178,10 @@ def _approve_manifest(
     )
 
 
+@pytest.mark.parametrize("profile", ["legacy", "simplified"])
 def test_postgres_manifest_creation_is_idempotent_and_serializes_a_backlog_save_race(
     monkeypatch: pytest.MonkeyPatch,
+    profile: str,
 ) -> None:
     """Ordered head locks serialize duplicate approval and later same-byte saves."""
     engine = _engine()
@@ -237,7 +234,8 @@ def test_postgres_manifest_creation_is_idempotent_and_serializes_a_backlog_save_
 
         app = create_app(engine, settings, workspace_root=workspace_root)
         with TestClient(app) as owner_tab, TestClient(app) as admin_tab:
-            _set_backlog_template(app)
+            if profile == "legacy":
+                _set_backlog_template(app)
             _login(owner_tab, owner_name, password, settings)
             _login(admin_tab, admin_name, password, settings)
             created = owner_tab.post(
@@ -249,9 +247,9 @@ def test_postgres_manifest_creation_is_idempotent_and_serializes_a_backlog_save_
             project_id = uuid.UUID(created.json()["id"])
             project_ids.append(project_id)
             for kind, content in (
-                ("project", PROJECT_TEXT),
-                ("agents", AGENTS_TEXT),
-                ("backlog", VALID_BACKLOG),
+                ("project", PROJECT_TEXT if profile == "legacy" else SIMPLIFIED_PROJECT),
+                ("agents", AGENTS_TEXT if profile == "legacy" else SIMPLIFIED_AGENTS),
+                ("backlog", VALID_BACKLOG if profile == "legacy" else SIMPLIFIED_BACKLOG),
             ):
                 saved = _save(owner_tab, settings, project_id, kind, 1, content)
                 assert saved.status_code == 200 and saved.json()["revision_number"] == 2
@@ -294,9 +292,12 @@ def test_postgres_manifest_creation_is_idempotent_and_serializes_a_backlog_save_
             assert first_manifests[0].actor_user_id in {owner_id, admin_id}
             assert first_events[0].actor_user_id == first_manifests[0].actor_user_id
 
-            new_backlog = VALID_BACKLOG.replace(
-                "# Backlog: PostgreSQL approval race",
-                "# Backlog: PostgreSQL lock ordering",
+            new_backlog = (
+                VALID_BACKLOG.replace(
+                    "# Backlog: PostgreSQL approval race", "# Backlog: PostgreSQL lock ordering"
+                )
+                if profile == "legacy"
+                else SIMPLIFIED_BACKLOG.replace("Fieldnotes", "PostgreSQL lock ordering", 1)
             )
             changed = _save(owner_tab, settings, project_id, "backlog", 2, new_backlog)
             assert changed.status_code == 200 and changed.json()["revision_number"] == 3

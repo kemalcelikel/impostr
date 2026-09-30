@@ -28,7 +28,6 @@ from app.document_contract import (
     DOCUMENT_KINDS,
     MAX_DOCUMENT_BYTES,
     MAX_REVISION_NUMBER,
-    TEMPLATE_SOURCES,
     DocumentKind,
 )
 from app.document_pair_approvals import (
@@ -37,6 +36,7 @@ from app.document_pair_approvals import (
     RevisionReference,
     _markdown_lines,
     _pair_validation_errors,
+    _retained_starter_prompt,
     _table_block,
     _table_cells,
     _table_separator,
@@ -54,24 +54,14 @@ from app.models import (
 )
 from app.project_documents import _get_project_and_actor, _read_revision
 from app.rate_limit import consume_rate_bucket
+from app.task_sections import extract_task_sections
+from app.template_profiles import TemplateProfile, resolve_template_profile
 
 router = APIRouter(prefix="/projects/{project_id}/final-approval", tags=["final approval"])
 _TODO_PLACEHOLDER = re.compile(r"(?<![\w])(?:TODO|TBD|TBC|TBA)(?![\w])", re.IGNORECASE)
 _MARKDOWN_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _MARKDOWN_H2 = re.compile(r"^ {0,3}##[ \t]+(.+?)[ \t]*#*[ \t]*$")
 _SECTION_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$")
-_TASK_METADATA_NAMES = frozenset(
-    {
-        "depends on",
-        "scope",
-        "required capabilities",
-        "documentation impact",
-        "open decisions",
-        "type",
-        "branch",
-        "pr",
-    }
-)
 _UNDECIDED_HEADING_WORD = re.compile(
     r"(?<!\w)(?:unknown|undecided|unresolved|unspecified|pending)(?!\w)",
     re.IGNORECASE,
@@ -79,10 +69,6 @@ _UNDECIDED_HEADING_WORD = re.compile(
 _HEADING_COMPOUND_WORD = re.compile(r"\b\w+(?:-\w+)+\b")
 _UNDECIDED_HEADING_STATUS = re.compile(
     _UNDECIDED_HEADING_WORD.pattern + r"(?=[ \t]*(?:$|[^\w\s]))",
-    re.IGNORECASE,
-)
-_SCOPE_FIELD = re.compile(
-    r"^[ \t]*(?:[-*+][ \t]+)?(?:\*\*)?Scope:(?:\*\*)?[ \t]*(.*?)[ \t]*$",
     re.IGNORECASE,
 )
 _LIST_ITEM = re.compile(r"^\s*(?:\d+[.)]|[-*+])\s+")
@@ -320,49 +306,6 @@ def _strip_checkbox_prefix(line: str) -> str:
     return re.sub(r"^\[[ xX]\][ \t]+", "", line)
 
 
-def _is_task_metadata_field(line: str) -> bool:
-    # Inspect the visible label, not a particular placement of emphasis around
-    # its colon. The caller has already masked examples/HTML and stripped list
-    # framing. Only canonical labels end Scope; API: / Export: prose stays usable.
-    # Decode before splitting: the colon can itself be inside a code span or
-    # emphasized label. Splitting first would leave an unmatched Markdown opener.
-    visible, ambiguous = _visible_markdown_text(_strip_checkbox_prefix(line))
-    if ambiguous:
-        return False
-    label, separator, _value = visible.partition(":")
-    return bool(separator) and " ".join(label.split()).casefold() in _TASK_METADATA_NAMES
-
-
-def _scope_values(body: str) -> list[str]:
-    lines = _markdown_lines(body)
-    fields = [
-        (index, match)
-        for index, (line, _heading) in enumerate(lines)
-        if (match := _SCOPE_FIELD.fullmatch(line)) is not None
-    ]
-    if len(fields) != 1:
-        # The caller rejects missing/duplicate fields by count, so no potentially
-        # overlapping continuation needs to be assembled for malformed input.
-        return [match.group(1) for _index, match in fields]
-
-    index, match = fields[0]
-    end = len(lines)
-    for candidate, (line, heading_allowed) in enumerate(lines[index + 1 :], start=index + 1):
-        heading = _SECTION_HEADING.fullmatch(line) if heading_allowed else None
-        if (
-            heading is not None and len(line.lstrip().split(maxsplit=1)[0]) <= 3
-        ) or _is_task_metadata_field(line):
-            # Scope is an inline field: collect its paragraph/list continuation,
-            # including colon-labeled prose, but never borrow a known task
-            # metadata field or the next task-level Markdown section.
-            end = candidate
-            break
-
-    value_lines = [match.group(1)]
-    value_lines.extend(line for line, _heading in lines[index + 1 : end])
-    return ["\n".join(value_lines)]
-
-
 def _has_substantive_text(value: str | None) -> bool:
     if value is None or not value.strip():
         return False
@@ -455,58 +398,6 @@ def _undecided_heading(line: str) -> bool:
     )
 
 
-def _ready_section_counts(interval: str) -> tuple[int, int]:
-    """Count visible required-section headings across a task's whole raw interval.
-
-    The task model exposes only the first Done looks like/Acceptance and
-    Verification section, and its editable body can end before a later non-task
-    H2. Approval must not ignore another visible section in that preserved
-    interval or treat fenced/HTML/indented examples as section boundaries.
-    """
-    acceptance = verification = 0
-    for line, _heading_allowed in _markdown_lines(interval):
-        heading = _SECTION_HEADING.fullmatch(line)
-        if heading is None:
-            continue
-        title = heading.group(1).strip().casefold()
-        if title in {"done looks like", "acceptance"}:
-            acceptance += 1
-        elif title == "verification":
-            verification += 1
-    return acceptance, verification
-
-
-def _visible_task_section(body: str, names: frozenset[str]) -> str | None:
-    """Extract one visible task section without treating examples as boundaries."""
-    lines = _markdown_lines(body)
-    selected_index: int | None = None
-    selected_level: int | None = None
-    for index, (line, _heading_allowed) in enumerate(lines):
-        heading = _SECTION_HEADING.fullmatch(line)
-        if heading is None or heading.group(1).strip().casefold() not in names:
-            continue
-        selected_index = index
-        selected_level = len(line.lstrip().split(maxsplit=1)[0])
-        break
-
-    if selected_index is None or selected_level is None:
-        return None
-
-    end = len(lines)
-    for index, (line, _heading_allowed) in enumerate(
-        lines[selected_index + 1 :], start=selected_index + 1
-    ):
-        heading = _SECTION_HEADING.fullmatch(line)
-        if (
-            heading is not None and len(line.lstrip().split(maxsplit=1)[0]) <= selected_level
-        ) or _is_task_metadata_field(line):
-            # Canonical metadata and its continuation are outside the required
-            # section's evidence, just as they are outside the Scope field.
-            end = index
-            break
-    return "\n".join(line for line, _heading_allowed in lines[selected_index + 1 : end]).strip()
-
-
 def _has_unresolved_task_notes(interval: str) -> bool:
     """Check explicit open decisions even beyond the editable body at a non-task H2.
 
@@ -534,7 +425,9 @@ def _has_unresolved_task_notes(interval: str) -> bool:
     return False
 
 
-def _ready_task_validation_errors(parsed_backlog: ParsedBacklog) -> list[str]:
+def _ready_task_validation_errors(
+    parsed_backlog: ParsedBacklog, profile: TemplateProfile = "legacy"
+) -> list[str]:
     """Require project-specific execution detail only for owner-ready tasks."""
     errors: list[str] = []
     # Keep planning/parser eligibility aligned with the root helper. Approval
@@ -542,22 +435,21 @@ def _ready_task_validation_errors(parsed_backlog: ParsedBacklog) -> list[str]:
     for task in parsed_backlog.tasks:
         if not task.ready:
             continue
-        scope_values = _scope_values(task.body)
+        sections = extract_task_sections(task.body, introductory_scope=profile == "simplified")
+        scope_values = sections.scope
         if len(scope_values) != 1 or not _has_substantive_text(scope_values[0]):
             errors.append(f"Ready task {task.id} must define substantive Scope information.")
         interval = parsed_backlog.content[task.body_start : task.raw_end]
-        acceptance_count, verification_count = _ready_section_counts(interval)
+        interval_sections = extract_task_sections(interval)
+        acceptance_count = len(interval_sections.acceptance)
+        verification_count = len(interval_sections.verification)
         if acceptance_count > 1:
             errors.append(f"Ready task {task.id} has duplicate acceptance sections.")
-        elif not _has_substantive_text(
-            _visible_task_section(task.body, frozenset({"done looks like", "acceptance"}))
-        ):
+        elif not _has_substantive_text(sections.acceptance[0] if sections.acceptance else None):
             errors.append(f"Ready task {task.id} must include substantive acceptance criteria.")
         if verification_count > 1:
             errors.append(f"Ready task {task.id} has duplicate verification sections.")
-        elif not _has_substantive_text(
-            _visible_task_section(task.body, frozenset({"verification"}))
-        ):
+        elif not _has_substantive_text(sections.verification[0] if sections.verification else None):
             errors.append(f"Ready task {task.id} must include substantive verification steps.")
         if _has_unresolved_task_notes(interval):
             errors.append(f"Ready task {task.id} must resolve unresolved task notes.")
@@ -574,20 +466,10 @@ def _backlog_validation_errors(
     except HTTPException:
         return ["The original backlog starter-template provenance could not be verified."]
 
-    expected_source = TEMPLATE_SOURCES["backlog"]
-    try:
-        template_bytes = template_revision.content.encode("utf-8", errors="strict")
-    except UnicodeEncodeError:
+    resolved = resolve_template_profile(db, document.project_id)
+    if resolved is None or resolved[1]["backlog"].id != template_revision.id:
         return ["The original backlog starter-template provenance could not be verified."]
-    template_digest = hashlib.sha256(template_bytes).hexdigest()
-    if (
-        template_revision.revision_number != 1
-        or template_revision.origin != "template"
-        or template_revision.template_source != expected_source
-        or template_revision.template_sha256 != template_digest
-        or template_revision.content_sha256 != template_digest
-    ):
-        return ["The original backlog starter-template provenance could not be verified."]
+    profile, _seeds = resolved
 
     errors = _revision_integrity_errors(revision)
     try:
@@ -617,6 +499,8 @@ def _backlog_validation_errors(
         errors.append("Remove retained starter guidance before approving this backlog.")
 
     placeholders = set(_PLACEHOLDER_PATTERN.findall(template_revision.content))
+    if profile == "simplified" and _retained_starter_prompt(revision.content, placeholders):
+        errors.append("Replace retained backlog starter prompts with project-specific decisions.")
     if _unresolved_angle_marker(revision.content, placeholders):
         errors.append("Replace unresolved backlog placeholders before approving this snapshot.")
     if _TODO_PLACEHOLDER.search(revision.content):
@@ -632,7 +516,7 @@ def _backlog_validation_errors(
     else:
         if not parsed.tasks:
             errors.append("Add at least one valid task before approving this backlog.")
-        errors.extend(_ready_task_validation_errors(parsed))
+        errors.extend(_ready_task_validation_errors(parsed, profile))
     return errors
 
 
@@ -662,7 +546,7 @@ def _approval_state(
     for kind in PAIR_KINDS:
         integrity_errors = _revision_integrity_errors(revisions[kind])
         if integrity_errors:
-            filename = TEMPLATE_SOURCES[kind].removesuffix(".example")
+            filename = DOCUMENT_FILENAMES[kind]
             pair_errors.setdefault(filename, []).extend(integrity_errors)
 
     backlog_errors = _backlog_validation_errors(db, documents["backlog"], revisions["backlog"])

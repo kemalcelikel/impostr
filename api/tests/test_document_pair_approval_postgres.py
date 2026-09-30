@@ -11,6 +11,7 @@ from threading import Barrier, Event
 
 import pytest
 from fastapi.testclient import TestClient
+from legacy_templates import legacy_templates
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -180,6 +181,7 @@ def test_postgres_pair_approval_serializes_duplicate_actions_and_save_races(
 
         app = create_app(engine, settings, workspace_root=workspace_root)
         with TestClient(app) as owner_tab, TestClient(app) as admin_tab:
+            app.state.project_templates = legacy_templates()
             _login(owner_tab, owner_name, password, settings)
             _login(admin_tab, admin_name, password, settings)
             created = owner_tab.post(
