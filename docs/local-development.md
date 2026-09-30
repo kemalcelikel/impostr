@@ -10,6 +10,30 @@ shared-server release. Candidate review evidence applies only to the exact
 reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
 delivered release. Consult `BACKLOG.md` for task outcomes.
 
+## Manifest persistence verification (IMP-020)
+
+Migration `20260930_0006`, following `20260929_0005`, adds the three-document
+manifest table and pair-snapshot constraint without backfilling approvals or changing
+existing pair approvals/document history. Final approval/status/download routes are
+deliberately unregistered until IMP-021 passes integrated enforcement verification.
+Persistence is not approved-download delivery.
+
+Fresh owned PostgreSQL checks verified upgrade, populated-0005 preservation, pair
+snapshot foreign-key/uniqueness failures and disposable downgrade/re-upgrade. A
+downgrade removes final manifests; use it only on disposable verification storage,
+not as a promised preservation/recovery operation for real approved handoffs.
+
+For this checkout's bounded verification, the operator helper
+`/tmp/opencode/impostr-imp020-prereq-20260930/check_current.py` provides `verify`,
+`check` and `pg`. It pins current API/Compose/DB inputs, uses generated disposable
+database credentials, publishes no ports and verifies owned cleanup. Three immutable
+legacy template files from the archived `e2cabfd` baseline are **test-harness-only**
+inputs. Deleted root templates remain deleted: a passing bounded check does not mean
+the ordinary worktree build works or that simplified templates were integrated.
+The helper/source map is local evidence, not a reusable unpinned setup command;
+refresh exact inputs before checking changed code. Reviewer uses in-repo material,
+not the denied temporary marker or snapshot content.
+
 ## Prerequisites and pinned runtimes
 
 - Docker Engine with Compose v2 (`docker compose`); observed verification host:

@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from app.config import AppSettings
 from app.main import create_app
 from app.models import (
+    AuditEvent,
     BootstrapState,
+    DocumentConflictProposal,
     Project,
     ProjectApprovalManifest,
     ProjectDocument,
@@ -30,6 +32,62 @@ def _alembic_config() -> Config:
     config = Config(str(api_directory / "alembic.ini"))
     config.set_main_option("script_location", str(api_directory / "migrations"))
     return config
+
+
+def test_manifest_persistence_does_not_expose_final_approval_routes(
+    client: TestClient, engine, account_factory
+) -> None:
+    account_factory("inert-owner", "inert manifest test passphrase")
+    csrf = client.get("/api/auth/csrf").json()["csrf_token"]
+    origin = "http://127.0.0.1:8080"
+    login = client.post(
+        "/api/auth/login",
+        json={"username": "inert-owner", "password": "inert manifest test passphrase"},
+        headers={"Origin": origin, "X-CSRF-Token": csrf},
+    )
+    assert login.status_code == 200
+    headers = {"Origin": origin, "X-CSRF-Token": client.cookies.get("impostr_csrf", "")}
+    created = client.post("/api/projects", json={"name": "Inert manifest"}, headers=headers)
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+    with Session(engine) as db:
+        heads_before = db.execute(
+            select(ProjectDocument.id, ProjectDocument.head_revision_number)
+        ).all()
+        revisions_before = db.execute(select(ProjectDocumentRevision.id)).all()
+
+    path = f"/api/projects/{project_id}/final-approval"
+    assert client.get(path).status_code == 404
+    assert (
+        client.post(
+            path,
+            json={
+                "expected_pair_approval_id": str(uuid.uuid4()),
+                "expected_backlog_revision": 1,
+            },
+            headers=headers,
+        ).status_code
+        == 404
+    )
+    for kind in ("project", "agents", "backlog"):
+        assert client.get(f"{path}/files/{kind}").status_code == 404
+
+    with Session(engine) as db:
+        assert db.scalar(select(ProjectApprovalManifest.id)) is None
+        assert (
+            db.scalar(
+                select(AuditEvent.id).where(
+                    AuditEvent.action == "project.approval_manifest.approved"
+                )
+            )
+            is None
+        )
+        assert db.scalar(select(DocumentConflictProposal.id)) is None
+        assert (
+            db.execute(select(ProjectDocument.id, ProjectDocument.head_revision_number)).all()
+            == heads_before
+        )
+        assert db.execute(select(ProjectDocumentRevision.id)).all() == revisions_before
 
 
 def test_identity_and_private_metadata_migration_upgrades_and_downgrades(
