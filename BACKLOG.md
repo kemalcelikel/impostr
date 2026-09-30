@@ -499,7 +499,7 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [ ] IMP-017 — Ingest and privately store project attachments
+## [!] IMP-017 — Ingest and privately store project attachments
 
 **Depends on:** IMP-004
 **Scope:** Private project PNG/JPEG, UTF-8 text/Markdown, selectable-text PDF and
@@ -515,6 +515,17 @@ scanned-PDF or DOCX-image understanding. Test cross-project/session denial, spoo
 exhaustion/failure cleanup, retention/deletion/restore; independently review lifecycle.
 Draft scope/retention approved; numeric file/turn/page/pixel/storage caps and processing
 boundary must be measured/chosen before readiness. Upload success is not model proof.
+
+**Execution blocker (2026-09-30):** At `a35a676`, developer read-only reconciliation
+confirms committed IMP-004, but no attachment intake/lifecycle, measured approved
+file/turn/page/pixel/storage caps or restricted networkless resource-bounded extractor.
+Runner assignment does not waive this explicit readiness prerequisite. Owner must
+approve measurement/design work and the resulting limits and processing boundary
+before execution; existing Markdown/cache limits and internal Compose networking
+are not attachment evidence. Existing project/local docs already state the planned
+boundary; no caps, parser, storage or recovery procedure is invented. No application,
+dependency or live-test changes or substantive implementation attempts; preserve all
+existing code/logs. Local outcome bookkeeping only, no push/PR or runner restart.
 
 ## [ ] IMP-018 — Attach verified media to planning chat
 
