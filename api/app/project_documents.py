@@ -16,6 +16,7 @@ from sqlalchemy import Engine, and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.audit import record_audit
+from app.backlog_markdown import BacklogValidationError, validate_backlog_write
 from app.dependencies import CurrentActor, DbSession, SettingsDependency, load_active_actor
 from app.document_contract import (
     DOCUMENT_FILENAMES,
@@ -435,6 +436,28 @@ def save_project_document(
     active_user = load_active_actor(db, actor, for_update=True)
     document = _load_document(db, project_id, kind, for_update=True)
     observed = _read_revision(db, document, document.head_revision_number)
+    if kind == "backlog":
+        expected_revision = db.scalar(
+            select(ProjectDocumentRevision).where(
+                ProjectDocumentRevision.document_id == document.id,
+                ProjectDocumentRevision.revision_number == payload.expected_revision,
+            )
+        )
+        previous_content = (
+            expected_revision.content if expected_revision is not None else observed.content
+        )
+        try:
+            validate_backlog_write(
+                previous_content,
+                payload.content,
+                current_content=observed.content,
+            )
+        except BacklogValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
     if payload.expected_revision != document.head_revision_number:
         proposal = DocumentConflictProposal(
             document_id=document.id,

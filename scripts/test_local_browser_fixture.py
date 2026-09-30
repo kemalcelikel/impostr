@@ -716,6 +716,46 @@ class MigrationDiagnosticTests(unittest.TestCase):
         )
         diagnose.assert_called_once_with(imp013_candidate=True)
 
+    def test_imp007_migrate_reuses_the_pinned_0005_schema_not_the_imp004_profile(self) -> None:
+        diagnostic = json.dumps(
+            self.valid_imp013_candidate_diagnostic(),
+            separators=(",", ":"),
+        )
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/imp007-candidate-source"),
+            env_file=Path("/tmp/imp007-candidate-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            candidate=True,
+            imp007_candidate=True,
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260929_0005 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260929_0005", evidence)
+        self.assertIn("0005:present", evidence)
+        self.assertIn("project_document_pair_approvals=yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(imp013_candidate=True)
+
     def test_candidate_migrate_requires_single_head_and_candidate_diagnostics(self) -> None:
         diagnostic = json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":"))
         compose = fixture.ComposeController(
@@ -971,6 +1011,7 @@ class GitArchiveTests(unittest.TestCase):
                 "20260925_0002_identity_and_project_metadata.py",
                 "20260925_0003_project_document_revisions.py",
                 "20260925_0004_bounded_project_name_keys.py",
+                "20260929_0005_document_pair_approvals.py",
             },
         )
         self.assertEqual(stat.S_IMODE(snapshot.stat().st_mode), 0o700)
@@ -1138,6 +1179,58 @@ class CandidateSnapshotTests(unittest.TestCase):
             candidate_file.chmod(0o644)
         return base, policy
 
+    def initialize_imp007_checkout(self) -> str:
+        self.initialize_checkout()
+        baseline_files = (
+            ("api/Dockerfile", "committed API build definition\n"),
+            ("api/app/project_documents.py", "committed project document API\n"),
+            ("scripts/backlog.py", "committed root compatibility oracle\n"),
+        )
+        for relative, content in baseline_files:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            path.chmod(0o644)
+        self.git("add", "api/Dockerfile", "api/app/project_documents.py", "scripts/backlog.py")
+        self.git(
+            "-c",
+            "user.name=Fixture Test",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "IMP-007 candidate fixture base",
+        )
+        return self.git("rev-parse", "HEAD")
+
+    def imp007_policy(self, base_commit: str) -> fixture.CandidatePreviewPolicy:
+        return replace(
+            fixture.IMP007_CANDIDATE_PREVIEW_POLICY,
+            base_commit=base_commit,
+        )
+
+    def write_imp007_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
+        base = self.initialize_imp007_checkout()
+        policy = self.imp007_policy(base)
+        for relative, status in (
+            *policy.reviewed_inputs,
+            *policy.nonruntime_test_changes,
+            *policy.harness_changes,
+        ):
+            candidate_file = self.root / relative
+            candidate_file.parent.mkdir(parents=True, exist_ok=True)
+            if status == "added":
+                self.assertFalse(candidate_file.exists(), f"{relative} must be absent from base")
+            else:
+                self.assertTrue(candidate_file.is_file(), f"{relative} must exist in base")
+            if relative == ".dockerignore":
+                content = "\n".join(fixture.IMP007_CANDIDATE_DOCKERIGNORE_RULES) + "\n"
+            else:
+                content = f"candidate source for {relative}\n"
+            candidate_file.write_text(content, encoding="utf-8")
+            candidate_file.chmod(0o644)
+        return base, policy
+
     def test_fixed_allowlist_is_runtime_only_and_rejects_planning_paths(self) -> None:
         reviewed = {path for path, _status in fixture.CANDIDATE_REVIEWED_RUNTIME_INPUTS}
         self.assertEqual(
@@ -1237,6 +1330,62 @@ class CandidateSnapshotTests(unittest.TestCase):
             policy.allowed_test_literal_digests,
             fixture.IMP013_CANDIDATE_TEST_LITERAL_DIGESTS,
         )
+
+    def test_imp007_policy_is_a_separate_exact_profile_over_the_approved_base(self) -> None:
+        policy = fixture.IMP007_CANDIDATE_PREVIEW_POLICY
+        self.assertEqual(policy.base_commit, "31d0f8f97bcf857b28d4e3f0c7bf51db8f7bf759")
+        self.assertEqual(
+            set(policy.reviewed_inputs),
+            {
+                (".dockerignore", "modified"),
+                ("api/Dockerfile", "modified"),
+                ("api/app/main.py", "modified"),
+                ("api/app/project_documents.py", "modified"),
+                ("api/app/backlog_markdown.py", "added"),
+                ("api/app/backlog_tasks.py", "added"),
+                ("web/src/ProjectWorkspace.tsx", "modified"),
+            },
+        )
+        self.assertEqual(
+            set(policy.nonruntime_test_changes),
+            {
+                ("api/tests/test_backlog_markdown.py", "added"),
+                ("api/tests/test_backlog_tasks.py", "added"),
+                ("api/tests/test_backlog_tasks_postgres.py", "added"),
+                ("web/src/ProjectWorkspace.test.tsx", "modified"),
+            },
+        )
+        self.assertEqual(
+            set(policy.harness_changes),
+            {
+                ("scripts/local_browser_fixture.py", "modified"),
+                ("scripts/test_local_browser_fixture.py", "modified"),
+            },
+        )
+        self.assertTrue(policy.strict_scope)
+        self.assertTrue(policy.fingerprint_test_changes)
+        self.assertTrue(policy.fingerprint_harness_changes)
+        self.assertEqual(policy.max_file_bytes, 512 * 1024)
+        self.assertEqual(policy.max_total_bytes, 2 * 1024 * 1024)
+        self.assertEqual(policy.allowed_input_modes, frozenset({0o644, 0o664}))
+        self.assertEqual(policy.status_paths, (*fixture.CANDIDATE_STATUS_PATHS, "scripts"))
+        self.assertEqual(policy.committed_support_paths, (".dockerignore", "scripts/backlog.py"))
+        self.assertEqual(
+            policy.allowed_test_literal_digests,
+            fixture.IMP007_CANDIDATE_TEST_LITERAL_DIGESTS,
+        )
+        self.assertNotIn("scripts/backlog.py", dict(policy.reviewed_inputs))
+        self.assertNotIn("PROJECT.md", policy.status_paths or ())
+
+        for unapproved in ("scripts/backlog.py", "PROJECT.md"):
+            with self.subTest(unapproved=unapproved), self.assertRaises(fixture.FixtureError):
+                fixture.validate_candidate_reviewed_paths(
+                    (unapproved,),
+                    policy=replace(
+                        policy,
+                        reviewed_inputs=((unapproved, "modified"),),
+                    ),
+                )
 
     def test_candidate_fingerprint_binds_commit_path_status_mode_and_content_digest(self) -> None:
         content = b"candidate bytes that do not appear in a fingerprint"
@@ -1833,6 +1982,412 @@ class CandidateSnapshotTests(unittest.TestCase):
                 policy=bounded_policy,
             )
         self.assertFalse(snapshot.exists())
+
+    def test_imp007_snapshot_fingerprints_exact_inputs_and_archives_only_runtime_support(
+        self,
+    ) -> None:
+        base, policy = self.write_imp007_candidate()
+        snapshot = Path(self.temporary.name) / "imp007-candidate-snapshot"
+        (self.root / "PROJECT.md").write_text("unrelated live planning\n", encoding="utf-8")
+        (self.root / ".opencode" / "progress.md").write_text(
+            "unrelated local runner state\n",
+            encoding="utf-8",
+        )
+
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        expected_paths = (
+            {path for path, _status in policy.reviewed_inputs}
+            | {path for path, _status in policy.nonruntime_test_changes}
+            | {path for path, _status in policy.harness_changes}
+        )
+        self.assertEqual(candidate.base_commit, base)
+        self.assertEqual({record.path for record in candidate.records}, expected_paths)
+        self.assertEqual(
+            set(candidate.runtime_paths),
+            {path for path, _status in policy.reviewed_inputs},
+        )
+        self.assertRegex(candidate.fingerprint, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            candidate.support_file_digests,
+            (
+                (
+                    ".dockerignore",
+                    hashlib.sha256((snapshot / ".dockerignore").read_bytes()).hexdigest(),
+                ),
+                (
+                    "scripts/backlog.py",
+                    hashlib.sha256(b"committed root compatibility oracle\n").hexdigest(),
+                ),
+            ),
+        )
+        self.assertEqual(
+            (snapshot / "scripts/backlog.py").read_bytes(),
+            b"committed root compatibility oracle\n",
+        )
+        self.assertFalse((snapshot / "api/tests/test_backlog_markdown.py").exists())
+        self.assertFalse((snapshot / "api/tests/test_backlog_tasks.py").exists())
+        self.assertFalse((snapshot / "api/tests/test_backlog_tasks_postgres.py").exists())
+        self.assertEqual(
+            (snapshot / "web/src/ProjectWorkspace.test.tsx").read_text(encoding="utf-8"),
+            "committed workspace tests\n",
+        )
+        self.assertFalse((snapshot / "scripts/local_browser_fixture.py").exists())
+        self.assertFalse((snapshot / "scripts/test_local_browser_fixture.py").exists())
+        self.assertFalse((snapshot / "PROJECT.md").exists())
+        self.assertFalse((snapshot / ".opencode").exists())
+        fixture.validate_candidate_dockerignore(snapshot, imp007=True)
+        with self.assertRaisesRegex(fixture.FixtureError, "not safely allowlisted"):
+            fixture.validate_candidate_dockerignore(snapshot)
+        fixture.validate_candidate_snapshot_tree(snapshot, candidate)
+        fixture.validate_candidate_worktree_snapshot(
+            self.root,
+            candidate,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+    def test_imp007_snapshot_rejects_unreviewed_or_missing_scoped_inputs(self) -> None:
+        _base, policy = self.write_imp007_candidate()
+        snapshot = Path(self.temporary.name) / "imp007-unreviewed-snapshot"
+
+        for relative in (
+            "api/app/unreviewed_backlog.py",
+            "api/tests/test_backlog_extra.py",
+            "scripts/backlog.py",
+            "scripts/unreviewed_fixture.py",
+            "PROJECT.md.example",
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            original = path.read_bytes() if path.exists() else None
+            path.write_text("unreviewed scoped candidate input\n", encoding="utf-8")
+            path.chmod(0o644)
+            with self.subTest(path=relative), self.assertRaisesRegex(
+                fixture.FixtureError,
+                "unexpected scoped input",
+            ):
+                fixture.archive_candidate_snapshot(
+                    self.root,
+                    snapshot,
+                    private_home=self.private_home,
+                    policy=policy,
+                )
+            self.assertFalse(snapshot.exists())
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+                path.chmod(0o644)
+
+        missing = self.root / "api/app/backlog_tasks.py"
+        missing.unlink()
+        with self.assertRaisesRegex(fixture.FixtureError, "reviewed candidate input is missing"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+
+    def test_imp007_snapshot_keeps_symlink_mode_size_and_runtime_secret_guards(self) -> None:
+        _base, policy = self.write_imp007_candidate()
+        snapshot = Path(self.temporary.name) / "imp007-unsafe-snapshot"
+        runtime_file = self.root / "api/app/backlog_tasks.py"
+        original = runtime_file.read_bytes()
+        external = Path(self.temporary.name) / "outside-backlog.py"
+        external.write_bytes(b"outside candidate bytes\n")
+
+        runtime_file.unlink()
+        runtime_file.symlink_to(external)
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+        runtime_file.unlink()
+        runtime_file.write_bytes(original)
+        runtime_file.chmod(0o644)
+
+        runtime_file.chmod(0o600)
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+        runtime_file.chmod(0o644)
+
+        secret = "synthetic-imp007-candidate-secret"
+        runtime_file.write_text(f'DB_PASSWORD = "{secret}"\n', encoding="utf-8")
+        runtime_file.chmod(0o644)
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertNotIn(secret, str(caught.exception))
+        self.assertFalse(snapshot.exists())
+
+        runtime_file.write_bytes(b"x" * (fixture.MAX_CANDIDATE_FILE_BYTES + 1))
+        runtime_file.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "size limit"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertFalse(snapshot.exists())
+
+    def test_imp007_fingerprint_rechecks_nonruntime_tests_and_fixture_harness(self) -> None:
+        _base, policy = self.write_imp007_candidate()
+        snapshot = Path(self.temporary.name) / "imp007-drift-snapshot"
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        for relative in (
+            "api/tests/test_backlog_tasks.py",
+            "scripts/local_browser_fixture.py",
+        ):
+            changed = self.root / relative
+            original = changed.read_bytes()
+            changed.write_bytes(original + b"\n# changed after preflight\n")
+            changed.chmod(0o644)
+            with self.subTest(path=relative), self.assertRaisesRegex(
+                fixture.FixtureError,
+                "changed during preview",
+            ):
+                fixture.validate_candidate_worktree_snapshot(
+                    self.root,
+                    candidate,
+                    private_home=self.private_home,
+                    policy=policy,
+                )
+
+            stale_snapshot = Path(self.temporary.name) / f"imp007-stale-{Path(relative).name}"
+            with self.assertRaisesRegex(fixture.FixtureError, "fingerprint changed"):
+                fixture.archive_candidate_snapshot(
+                    self.root,
+                    stale_snapshot,
+                    private_home=self.private_home,
+                    expected_fingerprint=candidate.fingerprint,
+                    policy=policy,
+                )
+            self.assertFalse(stale_snapshot.exists())
+            changed.write_bytes(original)
+            changed.chmod(0o644)
+
+    def test_imp007_test_secret_exceptions_are_exact_and_do_not_reflect_literals(self) -> None:
+        policy = fixture.IMP007_CANDIDATE_PREVIEW_POLICY
+        allowed_literals = frozenset(policy.allowed_test_literal_digests)
+        repository_root = Path(fixture.__file__).resolve().parent.parent
+        for relative in {path for path, _name, _digest in policy.allowed_test_literal_digests}:
+            fixture._reject_candidate_test_secrets(
+                relative,
+                (repository_root / relative).read_bytes(),
+                allowed_literal_digests=allowed_literals,
+            )
+
+        relative = "api/tests/test_backlog_tasks_postgres.py"
+        synthetic_literal = "synthetic-unapproved-test-password"
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture._reject_candidate_test_secrets(
+                relative,
+                f'password = "{synthetic_literal}"\n'.encode("utf-8"),
+                allowed_literal_digests=allowed_literals,
+            )
+        self.assertNotIn(synthetic_literal, str(caught.exception))
+
+        token = "ghp_" + "A" * 30
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture._reject_candidate_test_secrets(
+                relative,
+                f'password = "{token}"\n'.encode("utf-8"),
+                allowed_literal_digests=allowed_literals,
+            )
+        self.assertNotIn(token, str(caught.exception))
+
+
+class Imp007BacklogPreflightTests(unittest.TestCase):
+    @staticmethod
+    def _fixtures() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
+        content = "## [-] TASK-001 — Synthetic draft\n**Depends on:** None\n"
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        document = {
+            "kind": "backlog",
+            "revision_number": 1,
+            "content": content,
+            "content_sha256": digest,
+        }
+        view = {
+            "revision_number": 1,
+            "content": content,
+            "content_sha256": digest,
+            "tasks": [
+                {
+                    "id": "TASK-001",
+                    "status": "-",
+                    "ready": False,
+                    "eligible": False,
+                    "waiting_on": [],
+                }
+            ],
+            "summary": {
+                "draft_count": 1,
+                "ready_count": 0,
+                "eligible_count": 0,
+                "waiting_count": 0,
+            },
+        }
+        return document, view, {"detail": "Not found"}
+
+    def test_preflight_requires_revision_bound_view_and_foreign_read_write_denials(self) -> None:
+        project_id = str(uuid.uuid4())
+        document, view, not_found = self._fixtures()
+        task_path = f"/api/projects/{project_id}/backlog/tasks"
+
+        class FakeClient:
+            def __init__(self, *, owner: bool, foreign_write_status: int = 404) -> None:
+                self.owner = owner
+                self.csrf_token = "synthetic-csrf-token"
+                self.foreign_write_status = foreign_write_status
+                self.calls: list[tuple[str, str, object | None, str | None]] = []
+
+            def request(
+                self,
+                method: str,
+                path: str,
+                *,
+                body: object | None = None,
+                csrf_token: str | None = None,
+            ) -> fixture.ApiResponse:
+                self.calls.append((method, path, body, csrf_token))
+                if self.owner:
+                    return fixture.ApiResponse(200, view, {})
+                status = self.foreign_write_status if method == "PUT" else 404
+                return fixture.ApiResponse(status, not_found, {})
+
+        owner = FakeClient(owner=True)
+        other = FakeClient(owner=False)
+        supervisor = fixture.FixtureSupervisor(
+            Path("/fixture-test"),
+            output=io.StringIO(),
+            input_stream=io.StringIO(),
+            candidate_preflight=True,
+            candidate_variant="imp007",
+        )
+
+        supervisor._verify_candidate_backlog_tasks(
+            owner,
+            other,
+            project_id=project_id,
+            documents=[document],
+        )
+
+        self.assertEqual(owner.calls, [("GET", task_path, None, None)])
+        self.assertEqual(
+            other.calls,
+            [
+                ("GET", task_path, None, None),
+                (
+                    "PUT",
+                    f"{task_path}/TASK-001",
+                    {
+                        "expected_revision": 1,
+                        "status": "-",
+                        "title": "Denied foreign task edit",
+                        "body": "**Depends on:** None\n",
+                    },
+                    "synthetic-csrf-token",
+                ),
+            ],
+        )
+
+    def test_preflight_fails_if_a_foreign_member_can_read_or_edit_tasks(self) -> None:
+        project_id = str(uuid.uuid4())
+        document, view, not_found = self._fixtures()
+
+        class FakeClient:
+            def __init__(
+                self,
+                *,
+                owner: bool,
+                foreign_read_status: int = 404,
+                foreign_write_status: int = 404,
+                foreign_read_leak: bool = False,
+                foreign_write_leak: bool = False,
+            ):
+                self.owner = owner
+                self.csrf_token = "synthetic-csrf-token"
+                self.foreign_read_status = foreign_read_status
+                self.foreign_write_status = foreign_write_status
+                self.foreign_read_leak = foreign_read_leak
+                self.foreign_write_leak = foreign_write_leak
+
+            def request(
+                self,
+                method: str,
+                path: str,
+                *,
+                body: object | None = None,
+                csrf_token: str | None = None,
+            ) -> fixture.ApiResponse:
+                if self.owner:
+                    return fixture.ApiResponse(200, view, {})
+                status = self.foreign_write_status if method == "PUT" else self.foreign_read_status
+                leaks_data = (
+                    self.foreign_write_leak
+                    if method == "PUT"
+                    else self.foreign_read_leak
+                )
+                payload = view if status == 200 or leaks_data else not_found
+                return fixture.ApiResponse(status, payload, {})
+
+        supervisor = fixture.FixtureSupervisor(
+            Path("/fixture-test"),
+            output=io.StringIO(),
+            input_stream=io.StringIO(),
+            candidate_preflight=True,
+            candidate_variant="imp007",
+        )
+        for kwargs, expected_message in (
+            ({"foreign_read_status": 200}, "read a foreign backlog task view"),
+            (
+                {"foreign_read_status": 404, "foreign_read_leak": True},
+                "read a foreign backlog task view",
+            ),
+            ({"foreign_write_status": 200}, "edited a foreign backlog task"),
+            (
+                {"foreign_write_status": 404, "foreign_write_leak": True},
+                "edited a foreign backlog task",
+            ),
+        ):
+            with self.subTest(expected_message=expected_message):
+                with self.assertRaisesRegex(fixture.FixtureError, expected_message):
+                    supervisor._verify_candidate_backlog_tasks(
+                        FakeClient(owner=True),
+                        FakeClient(owner=False, **kwargs),
+                        project_id=project_id,
+                        documents=[document],
+                    )
 
 
 class ComposeSafetyTests(unittest.TestCase):
@@ -3349,6 +3904,15 @@ class SupervisorPidfdVerificationTests(unittest.TestCase):
                 self.assertEqual(self._verify(arguments), self.pidfd)
                 self.close_pidfd.assert_not_called()
 
+    def test_accepts_imp007_only_with_its_distinct_sha256_supervisor_argument(self) -> None:
+        arguments = self._supervisor_arguments() + [
+            "--imp007-candidate-fingerprint",
+            "d" * 64,
+        ]
+
+        self.assertEqual(self._verify(arguments), self.pidfd)
+        self.close_pidfd.assert_not_called()
+
     def test_rejects_forged_or_malformed_supervisor_arguments(self) -> None:
         base = self._supervisor_arguments()
         fingerprint = "b" * 64
@@ -3772,6 +4336,68 @@ class CandidateCliTests(unittest.TestCase):
                     fingerprint,
                 ]
             )
+
+    def test_imp007_uses_a_separate_preflight_and_private_launch_fingerprint(self) -> None:
+        fingerprint = "d" * 64
+        self.assertEqual(
+            fixture._parse_args(["imp007-candidate-preflight"]).command,
+            "imp007-candidate-preflight",
+        )
+        launch = fixture._parse_args(
+            ["launch", "--imp007-candidate-fingerprint", fingerprint]
+        )
+        self.assertEqual(launch.imp007_candidate_fingerprint, fingerprint)
+        self.assertEqual(fixture._candidate_selection(launch), (fingerprint, "imp007"))
+        supervisor = fixture.FixtureSupervisor(
+            Path("/fixture-test"),
+            candidate_fingerprint=fingerprint,
+            candidate_variant="imp007",
+        )
+        self.assertIs(supervisor._candidate_policy(), fixture.IMP007_CANDIDATE_PREVIEW_POLICY)
+        with self.assertRaisesRegex(fixture.FixtureError, "explicit opt-in"):
+            fixture.FixtureSupervisor(Path("/fixture-test"), candidate_variant="imp007")
+
+        guardian = fixture._parse_args(
+            [
+                "_guardian",
+                "--handoff-dir",
+                "/tmp/review-handoff",
+                "--lifetime-minutes",
+                "30",
+                "--lock-fd",
+                "9",
+                "--imp007-candidate-fingerprint",
+                fingerprint,
+            ]
+        )
+        self.assertEqual(fixture._candidate_selection(guardian), (fingerprint, "imp007"))
+        supervisor = fixture._parse_args(
+            [
+                "_supervise",
+                "--handoff-dir",
+                "/tmp/review-handoff",
+                "--lifetime-minutes",
+                "30",
+                "--imp007-candidate-fingerprint",
+                fingerprint,
+            ]
+        )
+        self.assertEqual(fixture._candidate_selection(supervisor), (fingerprint, "imp007"))
+
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture._parse_args(["start", "--imp007-candidate-fingerprint", fingerprint])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture._parse_args(
+                [
+                    "launch",
+                    "--candidate-fingerprint",
+                    fingerprint,
+                    "--imp007-candidate-fingerprint",
+                    fingerprint,
+                ]
+            )
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            fixture._parse_args(["launch", "--imp007-candidate-fingerprint", "A" * 64])
 
     def test_candidate_fingerprint_rejects_malformed_values(self) -> None:
         for value in ("A" * 64, "0" * 63, "0" * 65, "../" + "0" * 61):

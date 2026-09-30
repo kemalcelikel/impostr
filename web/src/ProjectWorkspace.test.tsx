@@ -200,6 +200,56 @@ afterEach(() => {
 });
 
 describe("private project drafts", () => {
+  it.each([
+    { draftCount: 1, message: "1 draft task is not ready." },
+    { draftCount: 2, message: "2 draft tasks are not ready." },
+  ])(
+    "explains owner task readiness and backlog approval (draft count: $draftCount)",
+    async ({ draftCount, message }) => {
+      const backlogContent = "# Saved plan\n\n## [x] TASK-001 — Complete\n\n**Depends on:** None\n";
+      const backlog = makeDocument("backlog", backlogContent, 3);
+      const taskSnapshot = {
+        revision_number: 3,
+        content: backlogContent,
+        content_sha256: backlog.content_sha256,
+        tasks: [],
+        summary: { draft_count: draftCount, ready_count: 2, eligible_count: 1, waiting_count: 1 },
+      };
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const path = pathOf(input);
+        if (path.endsWith("/documents"))
+          return Promise.resolve(
+            jsonResponse([initialDocuments.project, initialDocuments.agents, backlog]),
+          );
+        if (path.endsWith("/backlog/tasks")) return Promise.resolve(jsonResponse(taskSnapshot));
+        if (path.includes("/document-pair-approval"))
+          return Promise.resolve(jsonResponse(makeApprovalStatus()));
+        return Promise.reject(new Error(`Unexpected request ${path}`));
+      });
+      renderWorkspace(fetchMock);
+
+      fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+      await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      fireEvent.click(screen.getByRole("tab", { name: "Backlog" }));
+
+      const summary = await screen.findByRole("region", { name: "Saved task status" });
+      expect(summary).toHaveTextContent("BACKLOG.md revision 3");
+      expect(
+        within(summary).getByText(
+          "Read-only summary for BACKLOG.md revision 3. Ready means the owner marked a task as ready; it does not mean this backlog revision is approved. Dependency-eligible means every prerequisite is complete.",
+        ),
+      ).toBeInTheDocument();
+      expect(summary).toHaveTextContent(message);
+      expect(summary).toHaveTextContent("Ready2");
+      expect(summary).toHaveTextContent("Dependency-eligible1");
+      expect(summary).toHaveTextContent("Waiting on prerequisites1");
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/projects/${project.id}/backlog/tasks`,
+        expect.objectContaining({ method: "GET" }),
+      );
+    },
+  );
+
   it.each(["dirty", "saving"])(
     "keeps the open %s draft when a project create response arrives late",
     async (state) => {
@@ -3059,6 +3109,10 @@ describe("private project drafts", () => {
         documents = { ...documents, backlog: makeDocument("backlog", payload.content, 2) };
         return Promise.resolve(jsonResponse(documents.backlog));
       }
+      if (path.endsWith("/backlog/tasks"))
+        return Promise.resolve(
+          jsonResponse({ detail: "The test backlog is intentionally invalid." }, 422),
+        );
       if (path.includes("/document-pair-approval")) {
         if (init?.method === "POST")
           return Promise.resolve(jsonResponse({ detail: "Newer pair", latest: currentPair }, 409));

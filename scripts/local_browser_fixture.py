@@ -64,6 +64,7 @@ IMP013_CANDIDATE_APP_REVISIONS = (
     *CANDIDATE_APP_REVISIONS,
     IMP013_CANDIDATE_APP_MIGRATION,
 )
+IMP007_CANDIDATE_BASE_COMMIT = "31d0f8f97bcf857b28d4e3f0c7bf51db8f7bf759"
 COMMITTED_APP_MIGRATION_FILES_0004 = (
     (
         "20260925_0001_initial_baseline.py",
@@ -228,6 +229,10 @@ APP_SNAPSHOT_FILES = frozenset(
         "BACKLOG.md.example",
     }
 )
+# IMP-007's development Docker target copies the committed compatibility oracle
+# from the root build context. It is archived only as explicit candidate support;
+# the committed-HEAD browser fixture does not add scripts to its snapshot.
+APP_SNAPSHOT_SUPPORT_FILES = frozenset({"scripts/backlog.py"})
 CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
     (".dockerignore", "added"),
     ("api/Dockerfile", "modified"),
@@ -367,6 +372,54 @@ IMP013_CANDIDATE_TEST_LITERAL_DIGESTS = (
         "d9819f97c00543ed0a6ea4c55d883b9bfd888f0cfc230a6cdcc62aca3082ea09",
     ),
 )
+IMP007_CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
+    (".dockerignore", "modified"),
+    ("api/Dockerfile", "modified"),
+    ("api/app/main.py", "modified"),
+    ("api/app/project_documents.py", "modified"),
+    ("api/app/backlog_markdown.py", "added"),
+    ("api/app/backlog_tasks.py", "added"),
+    ("web/src/ProjectWorkspace.tsx", "modified"),
+)
+IMP007_CANDIDATE_NONRUNTIME_TEST_CHANGES = (
+    ("api/tests/test_backlog_markdown.py", "added"),
+    ("api/tests/test_backlog_tasks.py", "added"),
+    ("api/tests/test_backlog_tasks_postgres.py", "added"),
+    ("web/src/ProjectWorkspace.test.tsx", "modified"),
+)
+IMP007_CANDIDATE_HARNESS_CHANGES = (
+    ("scripts/local_browser_fixture.py", "modified"),
+    ("scripts/test_local_browser_fixture.py", "modified"),
+)
+IMP007_CANDIDATE_TEST_LITERAL_DIGESTS = (
+    # Exact synthetic test credentials in the modified test-only inputs. The
+    # path/name/digest tuple is the only exception to the normal literal scan.
+    (
+        "api/tests/test_backlog_tasks_postgres.py",
+        "password",
+        "4f87006ce7b78efcba4a92b7c8cdee5ab925677decaba504e153b36d95731737",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "e4eada162d4496107d413f4af9c90e0d53512bf874548c68abddc947edfabd23",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "c1497906d2da8b30fc3e4e89cae4537a8a8c01fe46fadf5d7a3a60eb084f7acf",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "41b10626ff104fc15c3c463d0c75cdbb952000f8a69e703f4b5e5851d24032cf",
+    ),
+    (
+        "web/src/ProjectWorkspace.test.tsx",
+        "csrftoken",
+        "d9819f97c00543ed0a6ea4c55d883b9bfd888f0cfc230a6cdcc62aca3082ea09",
+    ),
+)
 CANDIDATE_STATUS_PATHS = (
     ".dockerignore",
     "compose.yaml",
@@ -380,6 +433,7 @@ CANDIDATE_STATUS_PATHS = (
 # Watch all app/build inputs plus the host fixture directory. Live planning files,
 # runner logs, and other paths outside those scopes are neither read nor archived.
 IMP013_CANDIDATE_STATUS_PATHS = (*CANDIDATE_STATUS_PATHS, "scripts")
+IMP007_CANDIDATE_STATUS_PATHS = (*CANDIDATE_STATUS_PATHS, "scripts")
 CANDIDATE_DOCKERIGNORE_RULES = (
     "**",
     "!api/",
@@ -394,6 +448,33 @@ CANDIDATE_DOCKERIGNORE_RULES = (
     "!api/migrations/**",
     "!api/tests/",
     "!api/tests/**",
+    "!PROJECT.md.example",
+    "!AGENTS.md.example",
+    "!BACKLOG.md.example",
+    "api/**/__pycache__/",
+    "api/**/.pytest_cache/",
+    "api/**/.mypy_cache/",
+    "api/**/.ruff_cache/",
+    "api/**/*.pyc",
+    "api/**/.env",
+    "api/**/.env.*",
+)
+IMP007_CANDIDATE_DOCKERIGNORE_RULES = (
+    "**",
+    "!api/",
+    "!api/Dockerfile",
+    "!api/requirements.lock",
+    "!api/requirements-dev.lock",
+    "!api/pyproject.toml",
+    "!api/alembic.ini",
+    "!api/app/",
+    "!api/app/**",
+    "!api/migrations/",
+    "!api/migrations/**",
+    "!api/tests/",
+    "!api/tests/**",
+    "!scripts/",
+    "!scripts/backlog.py",
     "!PROJECT.md.example",
     "!AGENTS.md.example",
     "!BACKLOG.md.example",
@@ -503,6 +584,19 @@ IMP013_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
     fingerprint_harness_changes=True,
     allowed_test_literal_digests=IMP013_CANDIDATE_TEST_LITERAL_DIGESTS,
     committed_support_paths=(".dockerignore",),
+)
+IMP007_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=IMP007_CANDIDATE_BASE_COMMIT,
+    reviewed_inputs=IMP007_CANDIDATE_REVIEWED_RUNTIME_INPUTS,
+    nonruntime_test_changes=IMP007_CANDIDATE_NONRUNTIME_TEST_CHANGES,
+    fingerprint_test_changes=True,
+    strict_scope=True,
+    status_paths=IMP007_CANDIDATE_STATUS_PATHS,
+    allowed_input_modes=frozenset({0o644, 0o664}),
+    harness_changes=IMP007_CANDIDATE_HARNESS_CHANGES,
+    fingerprint_harness_changes=True,
+    allowed_test_literal_digests=IMP007_CANDIDATE_TEST_LITERAL_DIGESTS,
+    committed_support_paths=(".dockerignore", "scripts/backlog.py"),
 )
 
 
@@ -2094,9 +2188,16 @@ def _reject_candidate_test_secrets(
     )
 
 
-def _reject_candidate_harness_secrets(path: str, content: bytes) -> None:
+def _reject_candidate_harness_secrets(
+    path: str,
+    content: bytes,
+    *,
+    allowed_paths: frozenset[str] | None = None,
+) -> None:
     """Keep host-only fixture code text-only and free of known provider tokens."""
-    if path not in dict(IMP013_CANDIDATE_HARNESS_CHANGES):
+    if allowed_paths is None:
+        allowed_paths = frozenset(dict(IMP013_CANDIDATE_HARNESS_CHANGES))
+    if path not in allowed_paths:
         raise FixtureError("A candidate fixture-harness path is not allowlisted.")
     if _CANDIDATE_TOKEN_VALUE.search(content):
         raise FixtureError("A candidate fixture harness appears to contain credential material.")
@@ -2236,7 +2337,11 @@ def _collect_candidate_worktree_inputs(
                 allowed_literal_digests=frozenset(allowed_test_literals),
             )
         else:
-            _reject_candidate_harness_secrets(path, content)
+            _reject_candidate_harness_secrets(
+                path,
+                content,
+                allowed_paths=frozenset(harness),
+            )
         total_bytes += len(content)
         if total_bytes > policy.max_total_bytes:
             raise FixtureError("Candidate preview inputs exceed the total size limit.")
@@ -2500,8 +2605,8 @@ def archive_candidate_snapshot(
     return candidate
 
 
-def validate_candidate_dockerignore(source_dir: Path) -> None:
-    """Keep a root-context build limited to reviewed API inputs and templates."""
+def validate_candidate_dockerignore(source_dir: Path, *, imp007: bool = False) -> None:
+    """Keep each candidate's root-context build limited to its reviewed inputs."""
     try:
         raw = _read_candidate_file(
             source_dir,
@@ -2515,7 +2620,10 @@ def validate_candidate_dockerignore(source_dir: Path) -> None:
         )
     except UnicodeDecodeError:
         raise FixtureError("The candidate root build ignore file is invalid.") from None
-    if rules != CANDIDATE_DOCKERIGNORE_RULES:
+    expected_rules = (
+        IMP007_CANDIDATE_DOCKERIGNORE_RULES if imp007 else CANDIDATE_DOCKERIGNORE_RULES
+    )
+    if rules != expected_rules:
         raise FixtureError("The candidate root build context is not safely allowlisted.")
 
 
@@ -2530,7 +2638,7 @@ def _tracked_secret_path(path: str) -> bool:
 
 
 def _is_app_snapshot_path(path: str) -> bool:
-    return path in APP_SNAPSHOT_FILES or any(
+    return path in (APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES) or any(
         path.startswith(f"{directory}/") for directory in ("db", "api", "web")
     )
 
@@ -2594,8 +2702,9 @@ def archive_head_snapshot(
     additional_paths: Sequence[str] = (),
 ) -> str:
     """Create an isolated source tree from one resolved HEAD commit, never the worktree."""
+    allowed_support_files = APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES
     if len(set(additional_paths)) != len(additional_paths) or any(
-        path not in APP_SNAPSHOT_FILES for path in additional_paths
+        path not in allowed_support_files for path in additional_paths
     ):
         raise FixtureError("The committed snapshot has an unreviewed support path.")
     git_env = _git_environment(private_home)
@@ -3185,10 +3294,14 @@ class ComposeController:
         project_name: str,
         candidate: bool = False,
         approval_candidate: bool = False,
+        imp007_candidate: bool = False,
         committed_migration_profile: str | None = None,
     ) -> None:
-        if approval_candidate and not candidate:
-            raise FixtureError("The IMP-013 migration profile requires a candidate snapshot.")
+        if approval_candidate and imp007_candidate:
+            raise FixtureError("A candidate snapshot cannot select two migration profiles.")
+        if (approval_candidate or imp007_candidate) and not candidate:
+            profile = "IMP-013" if approval_candidate else "IMP-007"
+            raise FixtureError(f"The {profile} migration profile requires a candidate snapshot.")
         if candidate and committed_migration_profile is not None:
             raise FixtureError("A candidate snapshot cannot select a committed migration profile.")
         if not candidate and committed_migration_profile not in {None, "imp004", "imp013"}:
@@ -3200,6 +3313,7 @@ class ComposeController:
         self.compose_file = source_dir / "compose.yaml"
         self.candidate = candidate
         self.approval_candidate = approval_candidate
+        self.imp007_candidate = imp007_candidate
         self.committed_migration_profile = committed_migration_profile
 
     def command(self, arguments: Sequence[str]) -> list[str]:
@@ -3377,19 +3491,22 @@ class ComposeController:
     def migrate(self) -> str:
         if self.approval_candidate:
             migration_profile = "imp013"
+        elif self.imp007_candidate:
+            migration_profile = "imp007"
         elif self.candidate:
             migration_profile = "imp004"
         else:
             migration_profile = self.committed_migration_profile
-        if migration_profile not in {"imp004", "imp013"}:
+        if migration_profile not in {"imp004", "imp007", "imp013"}:
             raise FixtureError("The committed app migration profile was not verified.")
+        schema_0005_profile = migration_profile in {"imp007", "imp013"}
 
         self.invoke(
             ["run", "--rm", "api", "alembic", "upgrade", "head"],
             label="fresh database migration",
             timeout=300,
         )
-        if migration_profile == "imp013":
+        if schema_0005_profile:
             diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic(
                 imp013_candidate=True,
             )
@@ -3400,7 +3517,7 @@ class ComposeController:
         diagnostic = parse_migration_diagnostic(
             diagnostic_output,
             candidate=migration_profile == "imp004",
-            imp013_candidate=migration_profile == "imp013",
+            imp013_candidate=schema_0005_profile,
         )
         if diagnostic is None:
             raise FixtureError(
@@ -3410,7 +3527,7 @@ class ComposeController:
         diagnostic_summary = format_migration_diagnostic(
             diagnostic,
             candidate=migration_profile == "imp004",
-            imp013_candidate=migration_profile == "imp013",
+            imp013_candidate=schema_0005_profile,
         )
         current = self.invoke(
             ["run", "--rm", "api", "alembic", "current"],
@@ -3420,7 +3537,7 @@ class ComposeController:
         )
         expected_migration = (
             IMP013_CANDIDATE_APP_MIGRATION
-            if migration_profile == "imp013"
+            if schema_0005_profile
             else EXPECTED_APP_MIGRATION
         )
         status = migration_revision_status(current, expected_revision=expected_migration)
@@ -3430,7 +3547,7 @@ class ComposeController:
             or not migration_diagnostic_is_complete(
                 diagnostic,
                 candidate=migration_profile == "imp004",
-                imp013_candidate=migration_profile == "imp013",
+                imp013_candidate=schema_0005_profile,
             )
         ):
             expected_label = "candidate" if self.candidate else "committed"
@@ -3441,7 +3558,11 @@ class ComposeController:
             )
         reported_current = (
             IMP013_CANDIDATE_APP_MIGRATION
-            if self.approval_candidate or self.committed_migration_profile == "imp013"
+            if (
+                self.approval_candidate
+                or self.imp007_candidate
+                or self.committed_migration_profile == "imp013"
+            )
             else CANDIDATE_APP_MIGRATION
             if self.candidate
             else status
@@ -4296,7 +4417,7 @@ class FixtureSupervisor:
             r"[0-9a-f]{64}", candidate_fingerprint
         ) is None:
             raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
-        if candidate_variant not in {"imp004", "imp013"}:
+        if candidate_variant not in {"imp004", "imp007", "imp013"}:
             raise FixtureError("The candidate review scope is invalid.")
         self.candidate_preflight = candidate_preflight
         self.candidate_fingerprint = candidate_fingerprint
@@ -4306,6 +4427,8 @@ class FixtureSupervisor:
             raise FixtureError("Candidate preflight computes its own fingerprint.")
         if candidate_variant == "imp013" and not self.candidate_mode:
             raise FixtureError("The IMP-013 candidate scope requires explicit opt-in.")
+        if candidate_variant == "imp007" and not self.candidate_mode:
+            raise FixtureError("The IMP-007 candidate scope requires explicit opt-in.")
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -4417,7 +4540,10 @@ class FixtureSupervisor:
             )
             commit = self.candidate_snapshot.base_commit
             validate_candidate_snapshot_tree(self.source_dir, self.candidate_snapshot)
-            validate_candidate_dockerignore(self.source_dir)
+            validate_candidate_dockerignore(
+                self.source_dir,
+                imp007=self.candidate_variant == "imp007",
+            )
             set_candidate_snapshot_loopback_host(self.source_dir, host)
             set_candidate_snapshot_review_images(self.source_dir, self.identity.project_name)
             self.candidate_snapshot.prepared_compose_sha256 = hashlib.sha256(
@@ -4447,6 +4573,7 @@ class FixtureSupervisor:
             project_name=self.identity.project_name,
             candidate=self.candidate_mode,
             approval_candidate=self.candidate_variant == "imp013",
+            imp007_candidate=self.candidate_variant == "imp007",
             committed_migration_profile=committed_migration_profile,
         )
 
@@ -4523,11 +4650,11 @@ class FixtureSupervisor:
         )
 
     def _candidate_policy(self) -> CandidatePreviewPolicy:
-        return (
-            IMP013_CANDIDATE_PREVIEW_POLICY
-            if self.candidate_variant == "imp013"
-            else CANDIDATE_PREVIEW_POLICY
-        )
+        if self.candidate_variant == "imp013":
+            return IMP013_CANDIDATE_PREVIEW_POLICY
+        if self.candidate_variant == "imp007":
+            return IMP007_CANDIDATE_PREVIEW_POLICY
+        return CANDIDATE_PREVIEW_POLICY
 
     def _provision_and_verify_accounts(self, admin_password: str) -> None:
         """Authenticate normally, provision two members, and exercise auth denials."""
@@ -4757,6 +4884,14 @@ class FixtureSupervisor:
         ):
             raise FixtureError("A second candidate Member read foreign project drafts.")
 
+        if self.candidate_variant == "imp007":
+            self._verify_candidate_backlog_tasks(
+                client,
+                other_client,
+                project_id=project_id,
+                documents=document_response.payload,
+            )
+
         pair_approval_path = f"/api/projects/{project_id}/document-pair-approval"
         if self.candidate_variant == "imp013":
             self._verify_candidate_pair_approval(
@@ -4765,7 +4900,10 @@ class FixtureSupervisor:
                 project_id=project_id,
                 owner_id=owner_id,
             )
-        elif other_client.request("GET", pair_approval_path).status != 404:
+        elif (
+            self.candidate_variant == "imp004"
+            and other_client.request("GET", pair_approval_path).status != 404
+        ):
             raise FixtureError("A second candidate Member discovered a foreign approval status.")
 
         self._validate_candidate_preview()
@@ -4775,11 +4913,145 @@ class FixtureSupervisor:
                 "draft creation, cross-Member denial, invalid/stale approval rejection, "
                 "version-bound pair approval, and approval invalidation after a saved edit."
             )
+        elif self.candidate_variant == "imp007":
+            self._say(
+                "IMP-007 candidate preflight passed: normal Member sign-in, revision-bound "
+                "backlog task view, and cross-Member task read/write denial."
+            )
         else:
             self._say(
                 "Candidate infrastructure preflight passed: normal Member sign-in, owned project "
                 "creation, three provenance-checked drafts, and cross-Member denial."
             )
+
+    def _verify_candidate_backlog_tasks(
+        self,
+        client: ApiClient,
+        other_client: ApiClient,
+        *,
+        project_id: str,
+        documents: Any,
+    ) -> None:
+        """Verify the IMP-007 read view and deny another Member's backlog access."""
+        if not self.candidate_preflight or self.candidate_variant != "imp007":
+            raise FixtureError("The IMP-007 backlog preflight is not configured safely.")
+        if not client.csrf_token or not other_client.csrf_token:
+            raise FixtureError("The synthetic Member backlog sessions are unavailable.")
+        if not isinstance(documents, list):
+            raise FixtureError("Candidate starter documents returned an unexpected shape.")
+        backlog_documents = [
+            document
+            for document in documents
+            if isinstance(document, dict) and document.get("kind") == "backlog"
+        ]
+        if len(backlog_documents) != 1:
+            raise FixtureError("Candidate project creation omitted its backlog draft.")
+        backlog_document = backlog_documents[0]
+        revision_number = backlog_document.get("revision_number")
+        content = backlog_document.get("content")
+        content_sha256 = backlog_document.get("content_sha256")
+        if (
+            type(revision_number) is not int
+            or revision_number < 1
+            or not isinstance(content, str)
+            or not isinstance(content_sha256, str)
+        ):
+            raise FixtureError("The candidate backlog draft metadata is invalid.")
+        try:
+            content_bytes = content.encode("utf-8", "strict")
+        except UnicodeEncodeError:
+            raise FixtureError("The candidate backlog draft is not valid UTF-8 text.") from None
+        if hashlib.sha256(content_bytes).hexdigest() != content_sha256:
+            raise FixtureError("The candidate backlog draft digest did not match its content.")
+
+        task_path = f"/api/projects/{project_id}/backlog/tasks"
+        view = ApiClient._require_json_object(
+            client.request("GET", task_path),
+            200,
+            "IMP-007 authenticated backlog task view",
+        )
+        tasks = view.get("tasks")
+        summary = view.get("summary")
+        if (
+            type(view.get("revision_number")) is not int
+            or view.get("revision_number") != revision_number
+            or view.get("content") != content
+            or view.get("content_sha256") != content_sha256
+            or not isinstance(tasks, list)
+            or not tasks
+            or not isinstance(summary, dict)
+        ):
+            raise FixtureError("The candidate backlog task view is not bound to its saved draft.")
+
+        task_ids: set[str] = set()
+        draft_count = 0
+        ready_count = 0
+        eligible_count = 0
+        waiting_count = 0
+        for task in tasks:
+            if not isinstance(task, dict):
+                raise FixtureError("The candidate backlog task view contains an invalid task.")
+            task_id = task.get("id")
+            task_status = task.get("status")
+            waiting_on = task.get("waiting_on")
+            ready = task.get("ready")
+            eligible = task.get("eligible")
+            if (
+                not isinstance(task_id, str)
+                or re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*-\d+", task_id) is None
+                or task_id.casefold() in task_ids
+                or not isinstance(task_status, str)
+                or task_status not in {"-", " ", "~", "x", "!"}
+                or not isinstance(waiting_on, list)
+                or any(not isinstance(dependency, str) for dependency in waiting_on)
+                or type(ready) is not bool
+                or type(eligible) is not bool
+            ):
+                raise FixtureError("The candidate backlog task view contains an invalid task.")
+            task_ids.add(task_id.casefold())
+            expected_ready = task_status == " "
+            expected_eligible = expected_ready and not waiting_on
+            if ready != expected_ready or eligible != expected_eligible:
+                raise FixtureError("The candidate backlog readiness summary is inconsistent.")
+            draft_count += task_status == "-"
+            ready_count += ready
+            eligible_count += eligible
+            waiting_count += ready and not eligible
+
+        expected_summary = {
+            "draft_count": draft_count,
+            "ready_count": ready_count,
+            "eligible_count": eligible_count,
+            "waiting_count": waiting_count,
+        }
+        if any(type(summary.get(field)) is not int for field in expected_summary) or (
+            summary != expected_summary
+        ):
+            raise FixtureError("The candidate backlog readiness summary is inconsistent.")
+
+        foreign_read = other_client.request("GET", task_path)
+        if foreign_read.status != 404 or (
+            isinstance(foreign_read.payload, dict)
+            and any(field in foreign_read.payload for field in ("content", "tasks", "summary"))
+        ):
+            raise FixtureError("A second candidate Member read a foreign backlog task view.")
+        first_task_id = tasks[0]["id"]
+        foreign_write = other_client.request(
+            "PUT",
+            f"{task_path}/{first_task_id}",
+            body={
+                "expected_revision": revision_number,
+                "status": "-",
+                "title": "Denied foreign task edit",
+                "body": "**Depends on:** None\n",
+            },
+            csrf_token=other_client.csrf_token,
+        )
+        if foreign_write.status != 404 or (
+            isinstance(foreign_write.payload, dict)
+            and any(field in foreign_write.payload for field in ("content", "tasks", "summary"))
+        ):
+            raise FixtureError("A second candidate Member edited a foreign backlog task.")
 
     def _verify_candidate_pair_approval(
         self,
@@ -5418,6 +5690,14 @@ class FixtureSupervisor:
                 fingerprint_label = "IMP013_CANDIDATE_FINGERPRINT"
                 result_label = "IMP013_CANDIDATE_PREFLIGHT_RESULT"
                 cleanup_label = "IMP013_CANDIDATE_CLEANUP"
+            elif self.candidate_variant == "imp007":
+                self._say(
+                    "IMP007_CANDIDATE_PREFLIGHT_SCOPE=authenticated-api-backlog; "
+                    "rendered browser review was not performed."
+                )
+                fingerprint_label = "IMP007_CANDIDATE_FINGERPRINT"
+                result_label = "IMP007_CANDIDATE_PREFLIGHT_RESULT"
+                cleanup_label = "IMP007_CANDIDATE_CLEANUP"
             else:
                 self._say(
                     "CANDIDATE_PREFLIGHT_SCOPE=infrastructure-only; authenticated browser rendering "
@@ -5857,7 +6137,11 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
         valid_argument_count = len(arguments) == 7 or (
             len(arguments) == 9
             and arguments[7]
-            in {"--candidate-fingerprint", "--imp013-candidate-fingerprint"}
+            in {
+                "--candidate-fingerprint",
+                "--imp007-candidate-fingerprint",
+                "--imp013-candidate-fingerprint",
+            }
             and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
         )
         if (
@@ -6148,11 +6432,13 @@ def _run_guardian(
             str(lifetime_minutes),
         ]
         if candidate_fingerprint is not None:
-            fingerprint_flag = (
-                "--imp013-candidate-fingerprint"
-                if candidate_variant == "imp013"
-                else "--candidate-fingerprint"
-            )
+            fingerprint_flag = {
+                "imp004": "--candidate-fingerprint",
+                "imp007": "--imp007-candidate-fingerprint",
+                "imp013": "--imp013-candidate-fingerprint",
+            }.get(candidate_variant)
+            if fingerprint_flag is None:
+                raise FixtureError("The candidate review scope is invalid.")
             command.extend([fingerprint_flag, candidate_fingerprint])
 
         def remember_child(process: subprocess.Popen[bytes]) -> None:
@@ -6284,8 +6570,8 @@ def launch_unattended(
     lock_fd = _open_control_lock(control_directory)
     guardian: subprocess.Popen[bytes] | None = None
     try:
-        if candidate_variant not in {"imp004", "imp013"} or (
-            candidate_variant == "imp013" and candidate_fingerprint is None
+        if candidate_variant not in {"imp004", "imp007", "imp013"} or (
+            candidate_variant in {"imp007", "imp013"} and candidate_fingerprint is None
         ):
             raise FixtureError("The candidate review scope requires a valid opt-in fingerprint.")
         validate_approved_handoff_directory(handoff_directory)
@@ -6313,11 +6599,13 @@ def launch_unattended(
             str(lock_fd),
         ]
         if candidate_fingerprint is not None:
-            fingerprint_flag = (
-                "--imp013-candidate-fingerprint"
-                if candidate_variant == "imp013"
-                else "--candidate-fingerprint"
-            )
+            fingerprint_flag = {
+                "imp004": "--candidate-fingerprint",
+                "imp007": "--imp007-candidate-fingerprint",
+                "imp013": "--imp013-candidate-fingerprint",
+            }.get(candidate_variant)
+            if fingerprint_flag is None:
+                raise FixtureError("The candidate review scope is invalid.")
             command.extend([fingerprint_flag, candidate_fingerprint])
         try:
             guardian = subprocess.Popen(
@@ -6367,6 +6655,12 @@ def launch_unattended(
                 print(
                     "This exact IMP-013 candidate requires authenticated approval-flow and "
                     "rendered review; preflight alone is infrastructure evidence."
+                )
+            elif candidate_variant == "imp007":
+                print(f"IMP007_CANDIDATE_FINGERPRINT={candidate_fingerprint}")
+                print(
+                    "This exact IMP-007 candidate requires authenticated rendered review; "
+                    "candidate preflight alone is infrastructure evidence."
                 )
             else:
                 print(f"CANDIDATE_FINGERPRINT={candidate_fingerprint}")
@@ -6576,7 +6870,11 @@ def _candidate_fingerprint_argument(value: str) -> str:
     return value
 
 
-def _add_candidate_fingerprint_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_candidate_fingerprint_arguments(
+    parser: argparse.ArgumentParser,
+    *,
+    include_imp007: bool = False,
+) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--candidate-fingerprint",
@@ -6590,9 +6888,19 @@ def _add_candidate_fingerprint_arguments(parser: argparse.ArgumentParser) -> Non
         type=_candidate_fingerprint_argument,
         help="opt into the pinned IMP-013 candidate after its approval preflight",
     )
+    if include_imp007:
+        group.add_argument(
+            "--imp007-candidate-fingerprint",
+            dest="imp007_candidate_fingerprint",
+            type=_candidate_fingerprint_argument,
+            help="opt into the pinned IMP-007 candidate after its backlog preflight",
+        )
 
 
 def _candidate_selection(parsed: argparse.Namespace) -> tuple[str | None, str]:
+    imp007_fingerprint = getattr(parsed, "imp007_candidate_fingerprint", None)
+    if imp007_fingerprint is not None:
+        return imp007_fingerprint, "imp007"
     imp013_fingerprint = getattr(parsed, "imp013_candidate_fingerprint", None)
     if imp013_fingerprint is not None:
         return imp013_fingerprint, "imp013"
@@ -6650,6 +6958,17 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "this fresh-stack preflight exercises the normal synthetic Member approval API flow "
         "but does not perform rendered browser review or publish credentials."
     )
+    imp007_preflight = subparsers.add_parser(
+        "imp007-candidate-preflight",
+        help=(
+            "build and verify the pinned IMP-007 backlog API, then clean up without browser handoff"
+        ),
+    )
+    imp007_preflight.description = (
+        "Opt in to the exact IMP-007 runtime/test/fixture allowlist over committed HEAD 31d0f8f; "
+        "this fresh-stack preflight verifies the authenticated backlog task view and cross-Member "
+        "denial but does not perform rendered browser review or publish credentials."
+    )
     launch = subparsers.add_parser(
         "launch",
         help="start the detached PTY supervisor and publish a private Member handoff",
@@ -6669,7 +6988,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
             f"default {DEFAULT_LIFETIME_MINUTES})"
         ),
     )
-    _add_candidate_fingerprint_arguments(launch)
+    _add_candidate_fingerprint_arguments(launch, include_imp007=True)
     stop = subparsers.add_parser(
         "stop",
         help="stop the recorded local fixture and wait for verified cleanup status",
@@ -6695,12 +7014,12 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     guardian.add_argument("--handoff-dir", type=Path, required=True)
     guardian.add_argument("--lifetime-minutes", type=int, required=True)
     guardian.add_argument("--lock-fd", type=int, required=True)
-    _add_candidate_fingerprint_arguments(guardian)
+    _add_candidate_fingerprint_arguments(guardian, include_imp007=True)
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
     supervise.add_argument("--handoff-dir", type=Path, required=True)
     supervise.add_argument("--lifetime-minutes", type=int, required=True)
-    _add_candidate_fingerprint_arguments(supervise)
+    _add_candidate_fingerprint_arguments(supervise, include_imp007=True)
 
     parsed = parser.parse_args(arguments)
     if parsed.command in {"start", "launch", "_guardian", "_supervise"} and not (
@@ -6758,6 +7077,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 root,
                 candidate_preflight=True,
                 candidate_variant="imp013",
+            ).run()
+        if parsed.command == "imp007-candidate-preflight":
+            return FixtureSupervisor(
+                root,
+                candidate_preflight=True,
+                candidate_variant="imp007",
             ).run()
         candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
         supervisor = FixtureSupervisor(

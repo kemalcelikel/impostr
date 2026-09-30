@@ -1,15 +1,14 @@
 # Local development setup
 
 These instructions cover the IMP-001 bootstrap, IMP-003 identity/account
-administration, and the IMP-004 project and Markdown-draft implementation present
-in this worktree, plus the human-only pair-approval candidate from IMP-013. Run
-commands from the repository root. Docker Compose is the supported install and
-start path; there is no supported direct Vite development-server command. This is
-local-only, work-branch software, not a shared-server release. The IMP-013
-candidate's rendered review and final local gates passed, but it remains
-uncommitted and blocked pending coordinator outcome. Neither a candidate preview
-nor a worktree alone constitutes a delivered release. Consult `BACKLOG.md` for
-task outcomes.
+administration, the IMP-004 project and Markdown-draft implementation, the
+human-only pair-approval slice from IMP-013, and the IMP-007 backlog-task API and
+operator candidate review. Run commands from the repository root. Docker Compose
+is the supported install and start path; there is no supported direct Vite
+development-server command. This is local-only, work-branch software, not a
+shared-server release. Candidate review evidence applies only to the exact
+reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
+delivered release. Consult `BACKLOG.md` for task outcomes.
 
 ## Prerequisites and pinned runtimes
 
@@ -373,6 +372,71 @@ rendered review against the new fingerprint. A failed review remains a failure e
 cleanup succeeds; use the ownership-checked recovery steps above if cleanup is
 not verified.
 
+### Reviewing the dirty IMP-007 backlog candidate
+
+This operator-only path previews the scoped IMP-007 worktree candidate over
+committed base `31d0f8f`; it is separate from the IMP-004 and IMP-013 profiles and
+is not a general dirty-tree preview. It accepts only its pinned runtime, test and
+fixture inputs, fingerprints the exact snapshot, and uses the committed
+`scripts/backlog.py` as compatibility support. Run the preflight from the
+repository root:
+
+```sh
+python3 scripts/local_browser_fixture.py imp007-candidate-preflight
+```
+
+The preflight builds a fresh disposable stack, migrates it to head
+`20260929_0005`, checks the authenticated saved backlog task view, and verifies
+that another synthetic Member cannot read or edit that project's tasks. It cleans
+up its owned resources without publishing a browser login; it is API/infrastructure
+evidence, not rendered review. If it passes, use the exact lowercase 64-character
+`IMP007_CANDIDATE_FINGERPRINT` printed by that run. Do not reuse a value from an
+earlier run or copy one from this guide.
+Any change to candidate inputs requires a new preflight and rendered review.
+
+Only with that same candidate snapshot, launch the authenticated rendered review
+using the exact preflight fingerprint:
+
+```sh
+python3 scripts/local_browser_fixture.py launch \
+  --handoff-dir /tmp/opencode/impostr-review-handoff \
+  --lifetime-minutes 30 \
+  --imp007-candidate-fingerprint <FINGERPRINT_FROM_THIS_PREFLIGHT>
+```
+
+The launch revalidates the fingerprint and snapshot, then runs the same private,
+loopback-only synthetic browser fixture described above. Use only its generated
+Member login through normal sign-in; the coordinator owns sign-in and rendered
+review. Keep the login, session data, temporary origin and raw logs private and
+untracked. After review, stop the fixture:
+
+```sh
+python3 scripts/local_browser_fixture.py stop \
+  --handoff-dir /tmp/opencode/impostr-review-handoff
+```
+
+Read the sanitized `cleanup-status.json` through the permitted handoff tool. Check
+that the run stopped, its generated account was removed or disabled, its owned
+Compose resources/images and private fixture state were removed, and recovery is
+`not-needed` or `completed`. A failed review remains a failure even if cleanup
+succeeds; if cleanup is not verified, use the ownership-checked recovery procedure
+above, not broad Docker cleanup.
+
+The latest reviewed candidate used an abbreviated fingerprint recorded as
+`a2621b7…d4a2e` (evidence only, not a reusable value). Its preflight passed at
+migration `20260929_0005` and confirmed cross-Member authorization denials. Normal
+synthetic Member sign-in and rendered review passed at 1440, 1024, 768 and 375 px;
+`ui-designer` returned PASS, and owned cleanup was verified with `stop` exit 0.
+This evidence applies only to that exact candidate snapshot; it does not mean the
+candidate was committed or that an IMP-014 task-editing UI is present.
+
+As with the other candidate reviews, this preview uses the local Docker daemon and
+the shared Playwright tool server is **not OS-confined**; it may access Docker,
+host secrets or another stack. This is accepted residual host risk for synthetic
+local review, not a security control. Do not intentionally use those capabilities,
+claim a proven denial, or extend the exception to product-agent isolation or
+shared-server readiness.
+
 The separately gated live SIGKILL recovery test is run from the repository root
 with Docker available and an appropriate container image already cached. It does
 not pull an image; if none is cached, the test skips. The test starts two isolated
@@ -452,6 +516,62 @@ reapplication are explicit; there is no automatic merge. Revision history is
 ordered by revision number. Conflict-proposal pagination uses a stable cursor so
 concurrent proposals do not shift already paged rows; a new history request can
 show later proposals.
+
+### Backlog task API and save contract
+
+The authenticated, project-authorized task endpoints are:
+
+- `GET /api/projects/{project_id}/backlog/tasks` returns the current saved
+  `BACKLOG.md` content, digest and `revision_number`, parsed tasks, and a summary.
+- `POST /api/projects/{project_id}/backlog/tasks` adds a task. Supply
+  `expected_revision`, permanent `id`, one-line `title`, and Markdown `body` with
+  one `Depends on` declaration. The new task is always a draft (`[-]`).
+- `PUT /api/projects/{project_id}/backlog/tasks/{task_id}` edits a planning task.
+  Supply `expected_revision`, `status` (`"-"` for draft or `" "` for ready),
+  `title`, and `body`; an optional `dependencies` list explicitly updates the
+  declaration.
+- `PUT /api/projects/{project_id}/documents/backlog` saves the complete Markdown
+  document, with `expected_revision` and `content`.
+
+Use the task view's `revision_number` as `expected_revision` for the next save.
+`ready` means the task has the `[ ]` marker; `eligible` means it is ready and all
+its prerequisites have `[x]`. A ready task can therefore still be waiting. Draft
+(`[-]`), ready (`[ ]`), and dependency eligibility are distinct. This summary is
+read-only: the current workspace offers no dedicated task-list editor, and IMP-014
+is a separate UI slice. Neither a ready marker nor eligibility approves the saved
+backlog revision. Backlog approval/download is separate from these endpoints.
+
+Task IDs are permanent; tasks cannot be deleted or renamed. New tasks need a
+unique valid ID/title, exactly one valid `Depends on` declaration, and draft (`[-]`)
+status, whether added through the task route or a whole-document save. Dependencies
+must refer to existing tasks and cannot be self-referential or cyclic. Task edits
+can move only between draft and ready. Runner-owned execution states (`[~]`, `[x]`,
+`[!]`) and their task blocks are not editable through this API; existing
+line-oriented `Branch:`/`PR:` metadata is runner-owned as well. Recognized compact,
+spaced, bold, list and indented metadata lines must be preserved; incidental inline
+prose or fenced examples mentioning those labels are not metadata. Whole-document
+saves must preserve existing outcomes and metadata and cannot introduce that
+metadata on a new task. The API follows the root `scripts/backlog.py` syntax and
+eligibility contract with additional validation for safe editing.
+
+Malformed backlog syntax, invalid task edits, or whole-document saves that try to
+change protected content return HTTP 422 and do not save a revision. A valid write
+based on an old `expected_revision` returns HTTP 409; the attempted document text
+is kept as a conflict proposal rather than replacing the current head. A task PUT
+against a runner-owned execution task is also rejected with HTTP 409 as read-only.
+In particular, do not retry a validation error as if it were a stale-save
+conflict.
+
+The task editor separates a task body from a following non-task level-two (`##`)
+heading, while the root helper scans the broader task interval for dependencies
+and runner metadata. A dependency declaration in preserved section text is still
+part of that task's parsed interval; use the `dependencies` field to change it
+without editing the preserved text. Preserve the heading and its Markdown
+boundary: an edit that would absorb or hide it (for example, by omitting a needed
+line break) is rejected with 422 rather than silently repaired. A heading-looking
+line inside a fenced code block is not a section boundary; keep fences balanced,
+and do not append a task after an unclosed fence. A valid task may end at actual
+end-of-file without a trailing newline when no later section would be merged.
 
 ### Human-only saved-pair review and approval
 
@@ -562,10 +682,11 @@ use Alembic downgrade or `docker compose down -v` on the source stack as recover
 Compose binds the front door to loopback by default and does not publish the
 database or API ports. This worktree includes account authentication,
 administrator-managed accounts, project creation, private draft/revision history,
-and a human-only pair-approval candidate for `PROJECT.md` and `AGENTS.md`. The
-candidate has passed rendered review and local gates but remains uncommitted and
-blocked pending coordinator outcome. It does not provide chat, exports, or an agent
-gateway.
+and human-only pair approval for `PROJECT.md` and `AGENTS.md`. The dirty IMP-007
+backlog-task API candidate has passed the exact-snapshot operator preflight and
+rendered review described above, but remains uncommitted; that evidence is not a
+delivery or a dedicated task-editing UI. This worktree does not provide chat,
+exports, or an agent gateway.
 It has no TLS or domain setup, trusted external reverse-proxy/client-IP contract,
 verified backup/restore runbook, complete release security gate, or verified agent
 isolation. Do not expose it by changing the published binding, firewall, or proxy

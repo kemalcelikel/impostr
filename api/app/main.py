@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 
 from app.admin import router as admin_router
 from app.auth import router as auth_router
+from app.backlog_tasks import router as backlog_tasks_router
 from app.config import AppSettings
 from app.database import get_database_engine
 from app.dependencies import require_browser_mutation
@@ -103,6 +104,7 @@ def create_app(
     api_router.include_router(admin_router)
     api_router.include_router(projects_router)
     api_router.include_router(project_documents_router)
+    api_router.include_router(backlog_tasks_router)
     api_router.include_router(document_pair_approvals_router)
     application.include_router(api_router)
 

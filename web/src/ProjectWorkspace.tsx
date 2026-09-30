@@ -69,6 +69,13 @@ type DocumentRevision = RevisionSummary & { content: string };
 type ConflictProposal = ConflictProposalSummary & { content: string };
 type CompareContent = { label: string; content: string };
 type ProjectDocuments = Record<DocumentKind, ProjectDocument>;
+type BacklogTaskSummary = {
+  draft_count: number;
+  ready_count: number;
+  eligible_count: number;
+  waiting_count: number;
+};
+type BacklogTaskSnapshot = { revision_number: number; summary: BacklogTaskSummary };
 type PairKind = "project" | "agents";
 type RevisionReference = { id: string; revision_number: number; content_sha256: string };
 type PairApprovalRecord = {
@@ -523,6 +530,120 @@ function isoDate(value: string): string {
 
 function contentBytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function SavedBacklogStatus({
+  projectId,
+  revisionNumber,
+  onSessionExpired,
+}: {
+  projectId: string;
+  revisionNumber: number;
+  onSessionExpired: () => void;
+}) {
+  const headingId = `saved-backlog-status-${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
+  const [snapshot, setSnapshot] = useState<
+    | { key: string; state: "ready"; value: BacklogTaskSnapshot }
+    | { key: string; state: "stale" }
+    | { key: string; state: "error"; message: string }
+    | null
+  >(null);
+  // A result is visible only for the project/revision that requested it.
+  const displayedSnapshot =
+    snapshot?.key === `${projectId}:${revisionNumber}` ? snapshot : { state: "loading" as const };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    void apiRequest<BacklogTaskSnapshot>(
+      `/api/projects/${encodeURIComponent(projectId)}/backlog/tasks`,
+      { signal: controller.signal },
+    )
+      .then((value) => {
+        if (!active) return;
+        setSnapshot(
+          value.revision_number === revisionNumber
+            ? { key: `${projectId}:${revisionNumber}`, state: "ready", value }
+            : { key: `${projectId}:${revisionNumber}`, state: "stale" },
+        );
+      })
+      .catch((failure: unknown) => {
+        if (!active || controller.signal.aborted) return;
+        if (failure instanceof ApiError && failure.status === 401) onSessionExpired();
+        setSnapshot({
+          key: `${projectId}:${revisionNumber}`,
+          state: "error",
+          message: errorMessage(failure),
+        });
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [onSessionExpired, projectId, revisionNumber]);
+
+  return (
+    <section
+      aria-labelledby={headingId}
+      className="grid min-w-0 gap-3 rounded-xl border border-line bg-surface p-4"
+    >
+      <div>
+        <h4 className="font-semibold text-foreground" id={headingId}>
+          Saved task status
+        </h4>
+        <p className="mt-1 text-xs leading-5 text-copy-muted">
+          Read-only summary for BACKLOG.md revision {revisionNumber}. Ready means the owner marked a
+          task as ready; it does not mean this backlog revision is approved. Dependency-eligible
+          means every prerequisite is complete.
+        </p>
+      </div>
+      {displayedSnapshot.state === "loading" ? (
+        <p className="text-sm text-copy-muted" role="status">
+          Loading saved task status…
+        </p>
+      ) : displayedSnapshot.state === "stale" ? (
+        <p className="text-sm text-amber-200" role="status">
+          The backlog changed while task status was loading. Reload saved drafts to review the
+          latest revision.
+        </p>
+      ) : displayedSnapshot.state === "error" ? (
+        <p className="text-sm text-red-200" role="alert">
+          Saved task status is unavailable: {displayedSnapshot.message}
+        </p>
+      ) : (
+        <div aria-live="polite" className="grid min-w-0 gap-3">
+          <dl className="grid min-w-0 gap-3 sm:grid-cols-3">
+            <div className="min-w-0 rounded-lg border border-line bg-canvas px-3 py-2">
+              <dt className="text-xs text-copy-muted">Ready</dt>
+              <dd className="mt-1 font-mono text-lg text-foreground">
+                {displayedSnapshot.value.summary.ready_count}
+              </dd>
+            </div>
+            <div className="min-w-0 rounded-lg border border-line bg-canvas px-3 py-2">
+              <dt className="text-xs text-copy-muted">Dependency-eligible</dt>
+              <dd className="mt-1 font-mono text-lg text-accent">
+                {displayedSnapshot.value.summary.eligible_count}
+              </dd>
+            </div>
+            <div className="min-w-0 rounded-lg border border-line bg-canvas px-3 py-2">
+              <dt className="text-xs text-copy-muted">Waiting on prerequisites</dt>
+              <dd className="mt-1 font-mono text-lg text-foreground">
+                {displayedSnapshot.value.summary.waiting_count}
+              </dd>
+            </div>
+          </dl>
+          <p className="text-xs text-copy-muted">
+            {displayedSnapshot.value.summary.draft_count === 0
+              ? "No draft tasks in this saved backlog."
+              : displayedSnapshot.value.summary.draft_count === 1
+                ? "1 draft task is not ready."
+                : `${displayedSnapshot.value.summary.draft_count} draft tasks are not ready.`}
+          </p>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function ProjectWorkspace({
@@ -2553,6 +2674,14 @@ export default function ProjectWorkspace({
                   {editorBytes.toLocaleString()} / {MAX_DOCUMENT_BYTES.toLocaleString()} bytes
                 </span>
               </div>
+
+              {selectedKind === "backlog" && selectedProject ? (
+                <SavedBacklogStatus
+                  onSessionExpired={onSessionExpired}
+                  projectId={selectedProject.id}
+                  revisionNumber={currentDocument.revision_number}
+                />
+              ) : null}
 
               <label className="sr-only" htmlFor={`${instanceId}-document-editor-${selectedKind}`}>
                 Edit {currentDocument.filename}
