@@ -1,0 +1,137 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, m10e381cd3a7e3" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access project metadata created by your account.
+        - generic [ref=e44]: Member
+      - status [ref=e45]: Signed in as m10e381cd3a7e3.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Private project drafts
+            - heading "Projects" [level=2] [ref=e50]
+            - paragraph [ref=e51]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=e52]:
+            - generic [ref=e53]: Project name
+            - textbox "Project name" [ref=e54]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Your project list" [level=3] [ref=e82]
+              - generic [ref=e59]: 1 project
+            - list [ref=e83]:
+              - listitem [ref=e84]:
+                - button "Open project Synthetic approval review" [pressed] [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: Synthetic approval review
+                    - generic [ref=e88]: Created Sep 29, 2026, 7:23 PM UTC
+                  - generic [aria-hidden] [ref=e89]: Open
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: Synthetic approval review
+              - heading "Planning drafts" [level=3] [ref=e94]
+              - paragraph [ref=e95]: Project created Sep 29, 2026, 7:23 PM UTC · changes create immutable drafts
+            - generic [ref=e96]: Human review · no chat
+          - region [ref=e97]:
+            - generic [ref=e98]:
+              - generic [ref=e99]:
+                - paragraph [ref=e100]: First-stage review
+                - heading "Approve the saved document pair" [level=4] [ref=e101]
+                - paragraph [ref=e102]: One human action approves exactly the current PROJECT.md and AGENTS.md saved revisions. Any later save needs a new review. This does not approve the backlog or include chat, model proposals, or exports.
+              - generic [ref=e103]: Approved at last check
+            - generic [ref=e104]:
+              - button "Reload saved pair and status" [ref=e105]
+              - paragraph [ref=e106]: Last checked 10:24:49 PM. Another tab may have saved since then. Reload checks both heads and approval; unsaved editor text is kept.
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - term [ref=e165]: PROJECT.md
+                - definition [ref=e166]: Saved revision 2
+                - definition [ref=e167]: Revision ID ca04d1c5-0b06-403c-9d84-b7da57cc6763
+              - generic [ref=e168]:
+                - term [ref=e169]: AGENTS.md
+                - definition [ref=e170]: Saved revision 2
+                - definition [ref=e171]: Revision ID 3e3c754e-55a2-4c27-9907-60dbac3d4294
+            - generic [ref=e178]:
+              - paragraph [ref=e179]: Latest approval · Sep 29, 2026, 7:24 PM UTC
+              - paragraph [ref=e180]: PROJECT.md revision 2 · AGENTS.md revision 2 · current pair
+              - generic [ref=e181]:
+                - code [ref=e182]: PROJECT.md ID ca04d1c5-0b06-403c-9d84-b7da57cc6763
+                - code [ref=e183]: AGENTS.md ID 3e3c754e-55a2-4c27-9907-60dbac3d4294
+            - status [ref=e184]: Approved PROJECT.md revision 2 and AGENTS.md revision 2 as one saved pair.
+            - generic [ref=e117]:
+              - button "Approved at last check" [disabled] [ref=e185]
+              - group [ref=e186]:
+                - generic "Immutable pair approval history (1 shown)" [ref=e187] [cursor=pointer]
+          - tablist "Draft document switcher" [ref=e119]:
+            - tab "Project" [ref=e120]
+            - tab "Agent rules" [selected] [ref=e121]
+            - tab "Backlog" [ref=e122]
+          - tabpanel "Agent rules" [ref=e176]:
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - paragraph [ref=e126]: AGENTS.md · revision 2
+                - paragraph [ref=e127]: Saved human draft
+              - generic [ref=e128]: 422 / 131,072 bytes
+            - generic [ref=e129]: Edit AGENTS.md
+            - textbox "Edit AGENTS.md" [ref=e177]: "# Repository Agent Rules: Synthetic review ## Sources of truth and scope PROJECT.md defines the product and the owner chooses approved work. ## Setup and verification commands Run `python3 -m pytest` from api/ after installing locked dependencies. ## Security and hardening workflow Keep secrets out of Git; deny cross-project access. ## Git and task-state ownership The owner controls task state and integration."
+            - generic [ref=e131]:
+              - button "Save draft" [disabled] [ref=e132]
+              - button "Discard editor changes" [disabled] [ref=e133]
+              - button "Hide history" [expanded] [active] [ref=e218]
+            - region [ref=e190]:
+              - generic [ref=e191]:
+                - generic [ref=e192]:
+                  - paragraph [ref=e193]: Immutable records
+                  - heading "AGENTS.md history" [level=4] [ref=e194]
+                - generic [ref=e219]: Current revision 2
+              - generic [ref=e220]:
+                - heading "Saved revisions" [level=5] [ref=e221]
+                - list [ref=e222]:
+                  - listitem [ref=e223]:
+                    - generic [ref=e224]:
+                      - generic [ref=e225]: Revision 2 · current
+                      - generic [ref=e226]: Human edit · Sep 29, 2026, 7:24 PM UTC
+                    - generic [ref=e227]:
+                      - button "Compare revision 2" [ref=e228]
+                      - button "Reapply revision 2 in editor" [ref=e229]
+                  - listitem [ref=e230]:
+                    - generic [ref=e231]:
+                      - generic [ref=e232]: Revision 1
+                      - generic [ref=e233]: Starter template · Sep 29, 2026, 7:23 PM UTC
+                    - paragraph [ref=e234]: Source AGENTS.md.example · SHA-256 e256dc7a1088dfc829ed40716ff99b018a08a6d95e2dc64b6987194ac613fe82
+                    - generic [ref=e235]:
+                      - button "Compare revision 1" [ref=e236]
+                      - button "Reapply revision 1 in editor" [ref=e237]
+              - generic [ref=e238]:
+                - heading "Conflict proposals" [level=5] [ref=e239]
+                - paragraph [ref=e240]: No rejected edits. If another tab saves first, the attempted text is kept here.
+            - paragraph [ref=e135]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=e66]:
+        - paragraph [ref=e67]: Account security
+        - heading "Change your password" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Changing your password signs out every other active session.
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Current password
+            - generic [ref=e73]:
+              - textbox "Current password" [ref=e74]
+              - button "Show" [ref=e75]
+          - generic [ref=e76]:
+            - generic [ref=e77]: New password
+            - generic [ref=e78]:
+              - textbox "New password" [ref=e79]
+              - button "Show" [ref=e80]
+          - button "Update password" [ref=e81]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

@@ -15,9 +15,11 @@ from app.main import create_app
 from app.models import (
     BootstrapState,
     Project,
+    ProjectApprovalManifest,
     ProjectDocument,
     ProjectDocumentPairApproval,
     ProjectDocumentRevision,
+    User,
 )
 from app.project_names import project_name_key
 from app.project_templates import default_template_root
@@ -51,14 +53,186 @@ def test_identity_and_private_metadata_migration_upgrades_and_downgrades(
                 "project_documents",
                 "project_document_revisions",
                 "project_document_pair_approvals",
+                "project_approval_manifests",
                 "document_conflict_proposals",
             }.issubset(table_names)
             assert connection.scalar(select(BootstrapState.completed)) is False
+            inspector = inspect(connection)
+            manifest_columns = {
+                column["name"] for column in inspector.get_columns("project_approval_manifests")
+            }
+            assert {
+                "id",
+                "project_id",
+                "pair_approval_id",
+                "project_revision_id",
+                "agents_revision_id",
+                "backlog_revision_id",
+                "actor_user_id",
+                "created_at",
+            } == manifest_columns
+            manifest_uniques = {
+                tuple(constraint["column_names"])
+                for constraint in inspector.get_unique_constraints("project_approval_manifests")
+            }
+            assert ("project_id", "pair_approval_id", "backlog_revision_id") in manifest_uniques
+            pair_uniques = {
+                tuple(constraint["column_names"])
+                for constraint in inspector.get_unique_constraints(
+                    "project_document_pair_approvals"
+                )
+            }
+            assert ("id", "project_id", "project_revision_id", "agents_revision_id") in pair_uniques
+            manifest_foreign_keys = inspector.get_foreign_keys("project_approval_manifests")
+            assert any(
+                constraint["constrained_columns"]
+                == ["pair_approval_id", "project_id", "project_revision_id", "agents_revision_id"]
+                and constraint["referred_table"] == "project_document_pair_approvals"
+                and constraint["referred_columns"]
+                == ["id", "project_id", "project_revision_id", "agents_revision_id"]
+                for constraint in manifest_foreign_keys
+            )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.downgrade(config, "20260929_0005")
+            assert "project_approval_manifests" not in set(inspect(connection).get_table_names())
+            remaining_pair_uniques = {
+                tuple(constraint["column_names"])
+                for constraint in inspect(connection).get_unique_constraints(
+                    "project_document_pair_approvals"
+                )
+            }
+            assert (
+                "id",
+                "project_id",
+                "project_revision_id",
+                "agents_revision_id",
+            ) not in remaining_pair_uniques
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
 
         with engine.begin() as connection:
             config.attributes["connection"] = connection
             command.downgrade(config, "base")
             assert set(inspect(connection).get_table_names()) == {"alembic_version"}
+    finally:
+        engine.dispose()
+
+
+def test_manifest_migration_preserves_existing_pair_approval_without_backfill(
+    tmp_path: Path,
+) -> None:
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'manifest-migration.db'}")
+    config = _alembic_config()
+    owner_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    project_document_id = uuid.uuid4()
+    agents_document_id = uuid.uuid4()
+    project_revision_id = uuid.uuid4()
+    agents_revision_id = uuid.uuid4()
+    pair_approval_id = uuid.uuid4()
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "20260929_0005")
+
+        with Session(engine) as db, db.begin():
+            db.add(
+                User(
+                    id=owner_id,
+                    username="migration-owner",
+                    password_hash="migration-test-only-hash",
+                    role="user",
+                    is_active=True,
+                    created_at=now,
+                    password_changed_at=now,
+                )
+            )
+            db.add(Project(id=project_id, name="Manifest migration", owner_user_id=owner_id))
+            db.add_all(
+                [
+                    ProjectDocument(
+                        id=project_document_id,
+                        project_id=project_id,
+                        kind="project",
+                        head_revision_number=1,
+                        created_at=now,
+                    ),
+                    ProjectDocument(
+                        id=agents_document_id,
+                        project_id=project_id,
+                        kind="agents",
+                        head_revision_number=1,
+                        created_at=now,
+                    ),
+                ]
+            )
+            db.add_all(
+                [
+                    ProjectDocumentRevision(
+                        id=project_revision_id,
+                        document_id=project_document_id,
+                        revision_number=1,
+                        content="# Saved project\n",
+                        content_sha256="1" * 64,
+                        origin="human",
+                        author_user_id=owner_id,
+                        created_at=now,
+                    ),
+                    ProjectDocumentRevision(
+                        id=agents_revision_id,
+                        document_id=agents_document_id,
+                        revision_number=1,
+                        content="# Saved rules\n",
+                        content_sha256="2" * 64,
+                        origin="human",
+                        author_user_id=owner_id,
+                        created_at=now,
+                    ),
+                ]
+            )
+            db.add(
+                ProjectDocumentPairApproval(
+                    id=pair_approval_id,
+                    project_id=project_id,
+                    project_revision_id=project_revision_id,
+                    agents_revision_id=agents_revision_id,
+                    actor_user_id=owner_id,
+                    created_at=now,
+                )
+            )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+
+        with Session(engine) as db:
+            pair = db.get(ProjectDocumentPairApproval, pair_approval_id)
+            assert pair is not None
+            assert pair.project_id == project_id
+            assert pair.project_revision_id == project_revision_id
+            assert pair.agents_revision_id == agents_revision_id
+            assert (
+                db.scalar(
+                    select(ProjectApprovalManifest.id).where(
+                        ProjectApprovalManifest.project_id == project_id
+                    )
+                )
+                is None
+            )
+
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.downgrade(config, "20260929_0005")
+            assert "project_approval_manifests" not in set(inspect(connection).get_table_names())
+
+        with Session(engine) as db:
+            assert db.get(ProjectDocumentPairApproval, pair_approval_id) is not None
     finally:
         engine.dispose()
 

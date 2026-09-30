@@ -1,0 +1,12 @@
+- generic [ref=f4e3]:
+  - banner [ref=f4e4]:
+    - link "Impostr home" [ref=f4e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f4e9]: Impostr
+  - main [ref=f4e10]:
+    - generic [ref=f4e11]:
+      - heading "Connecting to your workspace" [level=1] [ref=f4e12]
+      - paragraph [ref=f4e13]: Checking your secure session…
+  - contentinfo [ref=f4e14]:
+    - generic [ref=f4e15]: Private project access
+    - generic [ref=f4e16]: Cookie session · Operator-provisioned accounts

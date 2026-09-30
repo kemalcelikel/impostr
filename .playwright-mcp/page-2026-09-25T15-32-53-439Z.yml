@@ -1,0 +1,99 @@
+- generic [ref=f2e3]:
+  - banner [ref=f2e4]:
+    - link "Impostr home" [ref=f2e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f2e9]: Impostr
+    - button "Sign out" [ref=f2e18]
+  - main [ref=f2e10]:
+    - generic [ref=f2e19]:
+      - region [ref=f2e20]:
+        - generic [ref=f2e21]:
+          - paragraph [ref=f2e22]: Private workspace
+          - heading "Welcome, preview" [level=1] [ref=f2e23]
+          - paragraph [ref=f2e24]: You can access project metadata created by your account.
+        - generic [ref=f2e25]: Member
+      - region [ref=f2e26]:
+        - generic [ref=f2e27]:
+          - generic [ref=f2e28]:
+            - paragraph [ref=f2e29]: Private project drafts
+            - heading "Projects" [level=2] [ref=f2e30]
+            - paragraph [ref=f2e31]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=f2e32]:
+            - generic [ref=f2e33]: Project name
+            - textbox "Project name" [ref=f2e34]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [disabled] [ref=f2e35]
+          - generic [ref=f2e36]:
+            - generic [ref=f2e37]:
+              - heading "Your project list" [level=3] [ref=f2e38]
+              - generic [ref=f2e39]: 1 project
+            - list [ref=f2e40]:
+              - listitem [ref=f2e41]:
+                - button "Open project Preview planning workspace" [disabled] [pressed] [ref=f2e42]:
+                  - generic [ref=f2e43]:
+                    - generic [ref=f2e44]: Preview planning workspace
+                    - generic [ref=f2e45]: Created Sep 25, 2026, 10:00 AM UTC
+                  - generic [aria-hidden] [ref=f2e46]: Open
+        - generic [ref=f2e68]:
+          - generic [ref=f2e69]:
+            - generic [ref=f2e70]:
+              - paragraph [ref=f2e71]: Preview planning workspace
+              - heading "Planning drafts" [level=3] [ref=f2e72]
+              - paragraph [ref=f2e73]: Project created Sep 25, 2026, 10:00 AM UTC · changes create immutable drafts
+            - generic [ref=f2e74]: Draft only
+          - tablist "Draft documents" [ref=f2e75]:
+            - tab "Project" [disabled] [selected] [ref=f2e76]
+            - tab "Agent rules" [disabled] [ref=f2e77]
+            - tab "Backlog" [disabled] [ref=f2e78]
+          - tabpanel "Project" [ref=f2e79]:
+            - generic [ref=f2e80]:
+              - generic [ref=f2e81]:
+                - paragraph [ref=f2e82]: PROJECT.md · revision 1
+                - paragraph [ref=f2e83]: Starter draft from PROJECT.md.example
+              - generic [ref=f2e84]: 31 / 131,072 bytes
+            - generic [ref=f2e85]: Edit PROJECT.md
+            - textbox "Edit PROJECT.md" [ref=f2e86]: "# Final rendered unsaved draft"
+            - generic [ref=f2e87]:
+              - button "Save draft" [ref=f2e88]
+              - button "Discard editor changes" [ref=f2e89]
+              - button "Hide history" [expanded] [active] [ref=f2e94]
+              - generic [ref=f2e93]: Unsaved editor text · save before switching drafts
+            - region [ref=f2e95]:
+              - generic [ref=f2e96]:
+                - generic [ref=f2e97]:
+                  - paragraph [ref=f2e98]: Immutable records
+                  - heading "PROJECT.md history" [level=4] [ref=f2e99]
+                - generic [ref=f2e100]: Current revision 1
+              - generic [ref=f2e101]:
+                - heading "Saved revisions" [level=5] [ref=f2e102]
+                - list [ref=f2e103]:
+                  - listitem [ref=f2e104]:
+                    - generic [ref=f2e105]:
+                      - generic [ref=f2e106]: Revision 1 · current
+                      - generic [ref=f2e107]: Human edit · Sep 25, 2026, 10:00 AM UTC
+                    - generic [ref=f2e108]:
+                      - button "Compare revision 1" [ref=f2e109]
+                      - button "Reapply revision 1 in editor" [ref=f2e110]
+              - generic [ref=f2e111]:
+                - heading "Conflict proposals" [level=5] [ref=f2e112]
+                - paragraph [ref=f2e113]: No rejected edits. If another tab saves first, the attempted text is kept here.
+            - paragraph [ref=f2e91]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=f2e52]:
+        - paragraph [ref=f2e53]: Account security
+        - heading "Change your password" [level=2] [ref=f2e54]
+        - paragraph [ref=f2e55]: Changing your password signs out every other active session.
+        - generic [ref=f2e56]:
+          - generic [ref=f2e57]:
+            - generic [ref=f2e58]: Current password
+            - generic [ref=f2e59]:
+              - textbox "Current password" [ref=f2e60]
+              - button "Show" [ref=f2e61]
+          - generic [ref=f2e62]:
+            - generic [ref=f2e63]: New password
+            - generic [ref=f2e64]:
+              - textbox "New password" [ref=f2e65]
+              - button "Show" [ref=f2e66]
+          - button "Update password" [ref=f2e67]
+  - contentinfo [ref=f2e14]:
+    - generic [ref=f2e15]: Private project access
+    - generic [ref=f2e16]: Cookie session · Operator-provisioned accounts

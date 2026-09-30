@@ -1,0 +1,29 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - paragraph [ref=e13]: Private planning workspace
+        - heading "Plan clearly. Build with confidence." [level=1] [ref=e15]: Plan clearly.Build with confidence.
+        - paragraph [ref=e16]: Sign in to see your private project metadata and planning workspace.
+        - paragraph [ref=e17]: Access is provided by an administrator. There is no public sign-up.
+      - form [ref=e18]:
+        - paragraph [ref=e19]: Account access
+        - heading "Sign in" [level=2] [ref=e20]
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - generic [ref=e23]: Username
+            - textbox "Username" [ref=e24]
+          - generic [ref=e25]:
+            - generic [ref=e26]: Password
+            - generic [ref=e27]:
+              - textbox "Password" [ref=e28]
+              - button "Show" [ref=e29]
+          - button "Sign in" [ref=e30]
+        - paragraph [ref=e31]: Password managers and paste are supported. Ask your administrator if you need account access.
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

@@ -4,18 +4,18 @@ Shared agents, project templates, and optional skills for interactive and overni
 
 ## What goes where?
 
-| Location | Purpose |
-|---|---|
-| Project `PROJECT.md` | Product, architecture, contracts, and acceptance criteria |
-| Project `AGENTS.md` | Project rules, selected workflow, check commands, app URL, test login, and target devices |
-| Project `BACKLOG.md` | Active sprint, tasks, dependencies, branches, and PR links |
-| Project `opencode.json` / `opencode.jsonc` | Project-specific MCP tools and permission overrides, when needed |
-| Global [`tech-lead`](agents/tech-lead.md) | Interactive technical planning, project setup, and approved sprint planning updates |
-| Global [`architect`](agents/architect.md) / [`reviewer`](agents/reviewer.md) / [`docs`](agents/docs.md) | Planning, independent review, and documentation after work stabilizes |
-| Global [`developer`](agents/developer.md) / [`senior-developer`](agents/senior-developer.md) | Implementation and checks; the senior developer handles escalated work |
-| Global [`ui-designer`](agents/ui-designer.md) | Design decisions and rendered browser review |
-| Global [`overnight`](agents/overnight.md) | Runner-only execution coordination, task Git/PR delivery, and backlog outcomes |
-| Toolkit `project-skills/` → project `.opencode/skills/` | Opt-in skills, installed only in projects that need them |
+| Location                                                                                                | Purpose                                                                                   |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Project `PROJECT.md`                                                                                    | Product, architecture, contracts, and acceptance criteria                                 |
+| Project `AGENTS.md`                                                                                     | Project rules, selected workflow, check commands, app URL, test login, and target devices |
+| Project `BACKLOG.md`                                                                                    | Active sprint, tasks, dependencies, branches, and PR links                                |
+| Project `opencode.json` / `opencode.jsonc`                                                              | Project-specific MCP tools and permission overrides, when needed                          |
+| Global [`tech-lead`](agents/tech-lead.md)                                                               | Interactive technical planning, project setup, and approved sprint planning updates       |
+| Global [`architect`](agents/architect.md) / [`reviewer`](agents/reviewer.md) / [`docs`](agents/docs.md) | Planning, independent review, and documentation after work stabilizes                     |
+| Global [`developer`](agents/developer.md) / [`senior-developer`](agents/senior-developer.md)            | Implementation and checks; the senior developer handles escalated work                    |
+| Global [`ui-designer`](agents/ui-designer.md)                                                           | Design decisions and rendered browser review                                              |
+| Global [`overnight`](agents/overnight.md)                                                               | Runner-only execution coordination, task Git/PR delivery, and backlog outcomes            |
+| Toolkit `project-skills/` → project `.opencode/skills/`                                                 | Opt-in skills, installed only in projects that need them                                  |
 
 ## 1. Install the agents
 
@@ -32,19 +32,21 @@ permissions; edit that file to change the agent. Keep provider/resource settings
 and global defaults in `opencode.json`, preserving your own authentication.
 `opencode models` lists available IDs.
 
-| Agent | Model | Effort |
-|---|---|---|
-| Architect | GPT-6 Sol | Max |
-| Tech lead | GPT-6 Sol | High |
-| Developer | GPT-6 Luna | Max |
-| Senior developer | GPT-6 Sol | High |
-| Reviewer | GPT-6 Sol | High |
-| Overnight / UI-designer | GPT-6 Sol | Medium |
-| Docs | GPT-6 Luna | Medium |
+| Agent                   | Model      | Effort |
+| ----------------------- | ---------- | ------ |
+| Architect               | GPT-6 Sol  | High   |
+| Tech lead               | GPT-6 Sol  | Medium |
+| Developer               | GPT-6 Luna | Medium |
+| Senior developer        | GPT-6 Sol  | High   |
+| Reviewer                | GPT-6 Sol  | Medium |
+| Overnight / UI-designer | GPT-6 Sol  | Medium |
+| Docs                    | GPT-6 Luna | Low    |
 
 `senior-developer.md` is a standalone agent with independently editable instructions.
 Overnight gives routine findings one focused repair attempt, then escalates when
-needed; both developers share the existing task budget and independent review.
+needed; both developers share the task's repair budget. Independent review is
+selective: substantial or higher-risk changes, with concrete important defects
+blocking delivery. Optional coverage and polish are notes.
 
 The default interactive model is Sol; small utility tasks use Luna. Deployment IDs
 are `gpt-6-sol` and `gpt-6-luna` on the same Azure resource. Model usage estimates:
@@ -105,6 +107,7 @@ start with `sprint-`):
 
 ```markdown
 # Sprint v29
+
 Sprint branch: <ACTIVE_SPRINT_BRANCH>
 Version control: Bitbucket Cloud
 ```
@@ -115,10 +118,12 @@ access, such as `BITBUCKET_API_TOKEN`, outside Markdown. **Humans perform all me
 The runner detects the selected skill via the exact `AGENTS.md` line above. It requires
 the checkout to start on the declared sprint branch at the local remote-tracking
 `<remote>/<sprint>` tip; it does not fetch itself. Fetch before launching the runner.
-It assigns one item, then stops after one session. Once a human merges that task's
-PR, fetch and align the local sprint branch and confirm its `BACKLOG.md` includes the
-delivered outcome before launching another run. The task branch's final backlog
-status/PR URL is committed and pushed to make that reconciliation possible.
+It assigns one item per session and continues through independent tasks. After clean
+task delivery, it fetches, fast-forwards the inactive local sprint reference, and
+returns to that branch without merging. Terminal task records are reconciled by ID
+so delivered/blocked work is not repeated; newer terminal sprint records are preserved.
+The task branch's final backlog status/PR URL is committed and pushed. Dependent tasks
+wait until prerequisite code is integrated; human merges remain required.
 Set `SPRINT_REMOTE` when the project's configured remote is not `origin`.
 The runner accepts uncommitted changes; do not commit broken work just to launch
 it. For sprint runs it still requires the declared sprint branch aligned with its
@@ -167,7 +172,13 @@ to your global OpenCode configuration:
   "mcp": {
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp@latest", "--headless", "--isolated"],
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--isolated"
+      ],
       "enabled": true,
       "timeout": 20000
     }
@@ -176,8 +187,8 @@ to your global OpenCode configuration:
 ```
 
 Provide Node.js 18+ and a supported browser; pin a verified package version for
-repeatable installs. Developer starts the app. UI-designer uses available browser
-tools for implementation reviews, with screenshots for visual judgments.
+repeatable installs. Developer starts the app. For substantial UI changes,
+UI-designer spot-checks important flows, with screenshots for visual judgments.
 
 Put the dev command, URL, test-login setup, and target viewports in `AGENTS.md`.
 Coordinate browser use sequentially: `--isolated` does not give every agent a separate
@@ -197,9 +208,51 @@ nohup bash ./run-tonight.sh > .opencode/launcher.log 2>&1 &
 Prepare dependencies/credentials first and run one runner per checkout. Ignore
 `.opencode/progress.md` and runner logs in the application's `.gitignore`.
 
-For non-sprint projects the runner uses three-item batches. Direct execution is the
-default; set `RUNNER_USE_SBX=1` to opt into the sandbox. All sessions have a
-two-hour timeout; after three consecutive sessions with no completed/blocked
-backlog outcome, the runner stops for review rather than retrying forever.
+For non-sprint projects the runner uses three-item batches; sprint sessions assign
+one task and continue through available independent work. Direct execution is the
+default; set `RUNNER_USE_SBX=1` to opt into the sandbox. All sessions have a two-hour
+timeout; the run has no overall deadline while tasks are being delivered or blocked.
+After three consecutive sessions with no completed/blocked outcome, it stops rather
+than retrying forever. Fixable unfinished tasks resume in place; dirty terminal task
+work stops sprint branch transitions and is preserved for recovery.
 Worktrees are optional. Review `DONE.md`, backlog outcomes, commits, and PRs
 afterward; delivered work is not necessarily merged.
+
+Testing defaults to focused checks of important changed behavior and realistic
+failures, without coverage targets or exhaustive corner cases. Listed project commands
+are not automatically mandatory gates. Reviews and docs passes are used when useful,
+and reports stay brief. Default three substantive repair attempts per task, excluding
+initial implementation, formatting, and check reruns. Requested owner recovery may
+renew that budget without a separate formal approval process.
+
+Sprint dependency selection reads completed task records from the fetched sprint,
+without new API credentials or PR metadata requirements. Locally carried outcomes
+from unmerged tasks remain waiting; the coordinator still checks actual prerequisite
+code. Fetch before a new launch; the initial sprint alignment check still applies.
+
+Updating this toolkit does not rewrite planning files or skills already copied into
+application repositories. Refresh the installed runner/helper/sprint skill and have
+tech-lead simplify existing AGENTS.md/PROJECT.md gates while preserving product scope
+and backlog IDs/outcomes. Restart OpenCode to load updated agents.
+
+### Existing and halfway-built projects
+
+Keep the existing backlog: verbose task bodies, `Done looks like`/`Verification`
+sections, extra metadata, and unique title-only headings remain supported. Stable IDs
+are recommended for new work, not a migration requirement. Dependencies can reference
+IDs or exact unique titles, with optional backticks. Missing/prose dependency references
+leave that task waiting while independent tasks continue; tech-lead can reconcile only
+those references. Keep the existing `## [state] ...` heading/status format.
+Fenced examples and group-level text are excluded from task metadata. Ambiguous or
+malformed dependency declarations leave only the affected task waiting.
+
+Ask tech-lead: “Adopt the simplified workflow in this existing project. Keep product
+requirements, completed work, task identities, and partial changes. Replace generic
+testing/review gates with focused checks and selective review; reconcile dependencies
+only where needed.” Old explicit project gates remain active until updated; global
+agent changes cannot silently remove them. No complete backlog rewrite is necessary.
+
+Resume dirty task-branch work in place through tech-lead recovery before a new sprint
+launch. Within a running sprint, unfinished tasks are pinned to the same assignment
+and branch even if queue order changes. Carried terminal records update status/delivery
+metadata only, preserving current task descriptions and acceptance criteria.

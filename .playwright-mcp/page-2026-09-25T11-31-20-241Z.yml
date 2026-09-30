@@ -1,0 +1,98 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - generic [ref=e35]:
+      - generic [ref=e36]: browser-admin · Administrator
+      - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, browser-admin" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access only projects created by your account. Administrator metadata access is recorded.
+        - generic [ref=e44]: Administrator
+      - status [ref=e134]: Password reset for browser-check-member. Their existing sessions were revoked.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Project metadata
+            - heading "Your projects" [level=2] [ref=e50]
+          - generic [ref=e51]: Creator-private
+        - paragraph [ref=e52]: No project metadata is available yet.
+      - region [ref=e53]:
+        - generic [ref=e54]:
+          - paragraph [ref=e55]: Operator-managed accounts
+          - heading "Create an account" [level=2] [ref=e56]
+          - paragraph [ref=e57]: Set an initial password and share it securely. No self-registration is available.
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - generic [ref=e60]: Username
+              - textbox "Username" [ref=e61]
+            - generic [ref=e62]:
+              - generic [ref=e63]: Role
+              - combobox "Role" [ref=e64]:
+                - option "Member" [selected]
+                - option "Administrator"
+            - generic [ref=e65]:
+              - generic [ref=e66]: Initial password
+              - generic [ref=e67]:
+                - textbox "Initial password" [ref=e68]
+                - button "Show" [ref=e69]
+            - paragraph [ref=e70]: Use at least 12 characters. The password is never shown again after creation.
+            - button "Create account" [ref=e71]
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - paragraph [ref=e75]: Access controls
+              - heading "Manage accounts" [level=2] [ref=e76]
+            - generic [ref=e77]: 2 shown
+          - list [ref=e105]:
+            - listitem [ref=e106]:
+              - article [ref=e107]:
+                - generic [ref=e108]:
+                  - generic [ref=e109]:
+                    - heading "browser-admin" [level=3] [ref=e110]
+                    - paragraph [ref=e111]: Administrator · Active
+                  - generic [ref=e112]: Active
+                - paragraph [ref=e114]: Use Account security below to change your password.
+            - listitem [ref=e115]:
+              - article [ref=e116]:
+                - generic [ref=e117]:
+                  - generic [ref=e118]:
+                    - heading "browser-check-member" [level=3] [ref=e119]
+                    - paragraph [ref=e120]: Member · Active
+                  - generic [ref=e121]: Active
+                - generic [ref=e122]:
+                  - group [ref=e123]:
+                    - generic "Reset password" [ref=e124] [cursor=pointer]
+                    - generic [ref=e126]:
+                      - generic [ref=e127]:
+                        - generic [ref=e128]: Temporary password for browser-check-member
+                        - generic [ref=e129]:
+                          - textbox "Temporary password for browser-check-member" [ref=e130]
+                          - button "Show" [ref=e131]
+                      - paragraph [ref=e132]: Share the temporary password with the account owner through an approved secure channel.
+                      - button "Set temporary password" [ref=e133]
+                  - button "Deactivate browser-check-member" [ref=e125]: Deactivate account
+      - region [ref=e88]:
+        - paragraph [ref=e89]: Account security
+        - heading "Change your password" [level=2] [ref=e90]
+        - paragraph [ref=e91]: Changing your password signs out every other active session.
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - generic [ref=e94]: Current password
+            - generic [ref=e95]:
+              - textbox "Current password" [ref=e96]
+              - button "Show" [ref=e97]
+          - generic [ref=e98]:
+            - generic [ref=e99]: New password
+            - generic [ref=e100]:
+              - textbox "New password" [ref=e101]
+              - button "Show" [ref=e102]
+          - button "Update password" [ref=e103]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

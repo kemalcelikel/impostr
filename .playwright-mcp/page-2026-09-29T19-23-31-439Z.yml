@@ -1,0 +1,56 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - generic [ref=e35]:
+      - generic [ref=e36]: m10e381cd3a7e3 · Member
+      - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, m10e381cd3a7e3" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access project metadata created by your account.
+        - generic [ref=e44]: Member
+      - status [ref=e45]: Signed in as m10e381cd3a7e3.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Private project drafts
+            - heading "Projects" [level=2] [ref=e50]
+            - paragraph [ref=e51]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=e52]:
+            - generic [ref=e53]: Project name
+            - textbox "Project name" [ref=e54]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Project list" [level=3] [ref=e58]
+              - generic [ref=e59]: 0 projects
+            - paragraph [ref=e60]: No projects yet. Create one to start with the three Markdown drafts.
+        - generic [ref=e62]:
+          - paragraph [ref=e63]: Draft workspace
+          - heading "Choose a project to review its drafts" [level=3] [ref=e64]
+          - paragraph [ref=e65]: Saved revisions and rejected conflict text remain in private project history. No approval, chat, export, or runner actions are available here.
+      - region [ref=e66]:
+        - paragraph [ref=e67]: Account security
+        - heading "Change your password" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Changing your password signs out every other active session.
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Current password
+            - generic [ref=e73]:
+              - textbox "Current password" [ref=e74]
+              - button "Show" [ref=e75]
+          - generic [ref=e76]:
+            - generic [ref=e77]: New password
+            - generic [ref=e78]:
+              - textbox "New password" [ref=e79]
+              - button "Show" [ref=e80]
+          - button "Update password" [ref=e81]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

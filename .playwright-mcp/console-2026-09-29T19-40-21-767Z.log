@@ -1,0 +1,4 @@
+[     129ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.210.40.93:44983/api/auth/session:0
+[    9819ms] [VERBOSE] [DOM] Password forms should have (optionally hidden) username fields for accessibility: (More info: https://goo.gl/9p2vKq) %o @ http://127.210.40.93:44983/:0
+[   42689ms] [ERROR] Failed to load resource: the server responded with a status of 422 (Unprocessable Entity) @ http://127.210.40.93:44983/api/projects/d33b86d3-3ab2-4962-bb42-b6bffcc6465a/document-pair-approval:0
+[  325809ms] [ERROR] Failed to load resource: the server responded with a status of 409 (Conflict) @ http://127.210.40.93:44983/api/projects/d33b86d3-3ab2-4962-bb42-b6bffcc6465a/documents/project:0

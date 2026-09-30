@@ -1,0 +1,105 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - generic [ref=e35]:
+      - generic [ref=e36]: m10e381cd3a7e3 · Member
+      - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, m10e381cd3a7e3" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access project metadata created by your account.
+        - generic [ref=e44]: Member
+      - status [ref=e45]: Signed in as m10e381cd3a7e3.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Private project drafts
+            - heading "Projects" [level=2] [ref=e50]
+            - paragraph [ref=e51]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=e52]:
+            - generic [ref=e53]: Project name
+            - textbox "Project name" [ref=e54]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [disabled] [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Your project list" [level=3] [ref=e82]
+              - generic [ref=e59]: 1 project
+            - list [ref=e83]:
+              - listitem [ref=e84]:
+                - button "Open project Synthetic approval review" [disabled] [pressed] [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: Synthetic approval review
+                    - generic [ref=e88]: Created Sep 29, 2026, 7:23 PM UTC
+                  - generic [aria-hidden] [ref=e89]: Open
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: Synthetic approval review
+              - heading "Planning drafts" [level=3] [ref=e94]
+              - paragraph [ref=e95]: Project created Sep 29, 2026, 7:23 PM UTC · changes create immutable drafts
+            - generic [ref=e96]: Human review · no chat
+          - region [ref=e97]:
+            - generic [ref=e98]:
+              - generic [ref=e99]:
+                - paragraph [ref=e100]: First-stage review
+                - heading "Approve the saved document pair" [level=4] [ref=e101]
+                - paragraph [ref=e102]: One human action approves exactly the current PROJECT.md and AGENTS.md saved revisions. Any later save needs a new review. This does not approve the backlog or include chat, model proposals, or exports.
+              - generic [ref=e103]: Not yet approved
+            - generic [ref=e104]:
+              - button "Reload saved pair and status" [ref=e105]
+              - paragraph [ref=e106]: Last checked 10:24:21 PM. Another tab may have saved since then. Reload checks both heads and approval; unsaved editor text is kept.
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - term [ref=e165]: PROJECT.md
+                - definition [ref=e166]: Saved revision 1
+                - definition [ref=e167]: Revision ID 46511d2a-c3d2-4ff4-a004-adce673b7d12
+              - generic [ref=e168]:
+                - term [ref=e169]: AGENTS.md
+                - definition [ref=e170]: Saved revision 1
+                - definition [ref=e171]: Revision ID 323552ab-43e2-481d-9358-272db156fab2
+            - paragraph [ref=e172]: No pair approval is recorded yet. Saving or viewing a draft does not approve it.
+            - status [ref=e173]: Unsaved editor text is not part of the displayed approval tuple. Save or discard it before approving the saved pair.
+            - button "Approve saved PROJECT.md + AGENTS.md pair" [disabled] [ref=e118]
+          - tablist "Draft document switcher" [ref=e119]:
+            - tab "Project" [disabled] [selected] [ref=e120]
+            - tab "Agent rules" [disabled] [ref=e121]
+            - tab "Backlog" [disabled] [ref=e122]
+          - tabpanel "Project" [ref=e123]:
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - paragraph [ref=e126]: PROJECT.md · revision 1
+                - paragraph [ref=e127]: Starter draft from PROJECT.md.example
+              - generic [ref=e128]: 61 / 131,072 bytes
+            - generic [ref=e129]: Edit PROJECT.md
+            - textbox "Edit PROJECT.md" [ref=e130]: "# Project: Synthetic approval UX review Unsaved test marker."
+            - generic [ref=e131]:
+              - button "Save draft" [ref=e132]
+              - button "Discard editor changes" [ref=e133]
+              - button "View history" [ref=e134]
+              - generic [ref=e174]: Unsaved editor text · save before switching drafts
+            - paragraph [ref=e135]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=e66]:
+        - paragraph [ref=e67]: Account security
+        - heading "Change your password" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Changing your password signs out every other active session.
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Current password
+            - generic [ref=e73]:
+              - textbox "Current password" [ref=e74]
+              - button "Show" [ref=e75]
+          - generic [ref=e76]:
+            - generic [ref=e77]: New password
+            - generic [ref=e78]:
+              - textbox "New password" [ref=e79]
+              - button "Show" [ref=e80]
+          - button "Update password" [ref=e81]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

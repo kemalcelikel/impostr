@@ -121,7 +121,7 @@ def test_postgres_migrated_auth_private_access_and_atomic_limits() -> None:
         with TestClient(app) as alice_client:
             with Session(engine) as db:
                 assert db.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    "20260929_0005"
+                    "20260930_0006"
                 )
                 assert (
                     len(
@@ -1115,7 +1115,7 @@ def test_postgres_document_migration_preserves_metadata_only_projects(tmp_path: 
         with engine.begin() as connection:
             migration_config.attributes["connection"] = connection
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "20260929_0005"
+                "20260930_0006"
             )
             assert connection.scalar(select(User.id).limit(1)) is None
             assert connection.scalar(select(Project.id).limit(1)) is None

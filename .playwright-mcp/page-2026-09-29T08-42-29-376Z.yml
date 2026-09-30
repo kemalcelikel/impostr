@@ -1,0 +1,43 @@
+- generic [ref=f4e3]:
+  - banner [ref=f4e4]:
+    - link "Impostr home" [ref=f4e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f4e9]: Impostr
+    - generic [ref=f4e17]:
+      - generic [ref=f4e18]: m13fd7fec53e12 · Member
+      - button "Sign out" [ref=f4e19]
+  - main [ref=f4e10]:
+    - generic [ref=f4e20]:
+      - region [ref=f4e21]:
+        - generic [ref=f4e22]:
+          - paragraph [ref=f4e23]: Private workspace
+          - heading "Welcome, m13fd7fec53e12" [level=1] [ref=f4e24]
+          - paragraph [ref=f4e25]: You can access project metadata created by your account.
+        - generic [ref=f4e26]: Member
+      - status [ref=f4e27]: Signed in as m13fd7fec53e12.
+      - region [ref=f4e28]:
+        - generic [ref=f4e29]:
+          - generic [ref=f4e30]:
+            - paragraph [ref=f4e31]: Project metadata
+            - heading "Your projects" [level=2] [ref=f4e32]
+          - generic [ref=f4e33]: Creator-private
+        - paragraph [ref=f4e34]: No project metadata is available yet.
+      - region [ref=f4e35]:
+        - paragraph [ref=f4e36]: Account security
+        - heading "Change your password" [level=2] [ref=f4e37]
+        - paragraph [ref=f4e38]: Changing your password signs out every other active session.
+        - generic [ref=f4e39]:
+          - generic [ref=f4e40]:
+            - generic [ref=f4e41]: Current password
+            - generic [ref=f4e42]:
+              - textbox "Current password" [ref=f4e43]
+              - button "Show" [ref=f4e44]
+          - generic [ref=f4e45]:
+            - generic [ref=f4e46]: New password
+            - generic [ref=f4e47]:
+              - textbox "New password" [ref=f4e48]
+              - button "Show" [ref=f4e49]
+          - button "Update password" [ref=f4e50]
+  - contentinfo [ref=f4e14]:
+    - generic [ref=f4e15]: Private project access
+    - generic [ref=f4e16]: Cookie session · Operator-provisioned accounts

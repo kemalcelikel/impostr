@@ -464,7 +464,10 @@ export default function App() {
   }
 
   async function logout(): Promise<void> {
-    if (workspaceHasEdits && !window.confirm("Unsaved draft text will be lost. Sign out anyway?")) {
+    if (
+      workspaceHasEdits &&
+      !window.confirm("Unsaved draft or task edits will be lost. Sign out anyway?")
+    ) {
       return;
     }
     setBusyAction("logout");

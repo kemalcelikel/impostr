@@ -2,40 +2,72 @@
 
 ## Purpose and release boundary
 
-Impostr is a private, shared-server planning workspace for people who use the
-`overnight-agent` toolkit but do not want to copy starter files, edit Markdown in
-Vim, or conduct project setup entirely in a terminal. A signed-in user creates a
-project, plans with the installed OpenCode `tech-lead`, reviews and approves
-`PROJECT.md` and `AGENTS.md`, plans a backlog with a live task list, and downloads
+Impostr's first usable release is a **one-owner, private-access planning app**
+hosted on this PC. The owner may use it from another device on the LAN through
+a tested private HTTPS route; the app's trusted backend remains unexposed. A
+future multi-user server release needs separate qualification and is **not**
+delivered by the personal release. The app serves people who use the
+`overnight-agent` toolkit but do not want to copy starter files, edit Markdown
+in Vim, or conduct project setup entirely in a terminal. A signed-in user
+creates a project, plans with the installed OpenCode `tech-lead`, reviews and
+approves `PROJECT.md` and `AGENTS.md`, plans a backlog with a live task list, and downloads
 the exact approved versions of all three Markdown files. The product name is
 **Impostr** (without an “e”).
 
-**First release includes:** admin-created accounts without signup; private projects;
-project metadata and immutable Markdown revisions in PostgreSQL in Docker;
-resumable project-scoped chat with multiple session tabs; version-bound two-file
-approval, backlog editing and approval, three-file review, and individual approved
-downloads. The UI is a dark, modern terminal-inspired *application*, not a terminal
-emulator.
+**First release includes:** existing admin-created accounts without signup;
+private projects; project metadata and immutable Markdown revisions in
+PostgreSQL in Docker; resumable project-scoped chat with multiple session tabs;
+version-bound two-file approval, backlog editing and approval, three-file review,
+and individual approved downloads. Project conversation attachments include
+PNG/JPEG images, selectable-text PDFs, text-only DOCX extraction, and UTF-8
+text/Markdown. The model must actually receive an attached image before the UI
+claims it saw it; scanned/visual PDF pages and embedded DOCX images are not
+supported in this first version. Attachments persist privately with the project/
+conversation until explicit deletion; deleting later cannot retract bytes already
+sent to a model. The phone/other-device route and full planning workflow must
+pass the personal-release gates before calling this version complete. The UI is
+a dark, modern terminal-inspired *application*, not a terminal emulator.
 
-**Not in the first release:** creating a Git repository for a planned project,
-installing agents or skills, launching/monitoring `run-tonight.sh` in the browser,
+During implementation, the human-only document review/approval and backlog
+editor may be verified before live agent chat. These intermediate slices are not
+a substitute for the first release above: chat, session recovery, containment,
+end-to-end approvals and downloads remain release gates.
+
+**Not in the first release:** multi-user shared-server qualification, public
+Internet exposure, scanned/visual PDF or embedded DOCX-image understanding,
+macros, or Office formats other than bounded DOCX text. It also excludes creating
+a Git repository for a planned project, installing agents or skills, launching/
+monitoring `run-tonight.sh` in the browser,
 running implementation agents from the web, Git pushes/PRs/merges, shared project
 collaboration/invitations, public signup, and importing runner outcomes. Downloaded
 files are planning artifacts, not evidence that a repository is ready to run. The
 owner continues to prepare application repositories and launch the runner manually.
 
-### Current implementation boundary (IMP-001/003)
+### Current implementation boundary (through IMP-007 on work branch)
 
-The checkout has an earlier, limited application slice; the first-release scope
-above is not yet implemented. The current UI supports operator-provisioned sign-in,
-administrator-managed accounts, own-password changes, and reads of project
-metadata. The first administrator is created or recovered through an offline CLI;
-there is no public signup or network recovery route. Administrators can create,
-reset, and deactivate accounts. Members can read metadata for projects they own;
-administrators can read all project metadata, and administrator metadata reads are
-audited. Project creation is not implemented, so a new database can contain no
-projects. Planning documents, project workflow, chat, approvals, downloads, and an
-agent gateway are not part of this slice.
+The checkout has a limited application slice; the first-release scope above is
+not yet implemented. The current UI supports operator-provisioned sign-in,
+administrator-managed accounts, own-password changes, project creation with
+private drafts for `PROJECT.md`, `AGENTS.md`, and `BACKLOG.md`, human pair
+approval, and read-only backlog status. The API supports validated task edits.
+The first administrator is created or recovered through an offline CLI; there is no public
+signup or network recovery route. Administrators can create, reset, and deactivate
+accounts. Members can access projects they own; administrators can access all
+projects, and administrator access is audited. Consult `docs/local-development.md`
+for implemented project, revision, workspace-cache, and operator behavior and
+`BACKLOG.md` for the committed IMP-004/013/007 delivery outcomes and uncommitted
+IMP-009/014 partial work. This work branch is not a merged release; pair
+approval is local human-only functionality, not final backlog approval or
+approved downloads. Do not infer chat or an agent gateway from it.
+
+The owner approved splitting blocked IMP-009 into independently verified
+persistence and integrated enforcement slices. IMP-020 adds only inert
+manifest schema; IMP-021 finishes valid final approval and exact downloads.
+Neither is delivered or executable: exact-source snapshot access was denied,
+so both retain draft markers and the shared #11–13 ceiling. The split changes delivery
+boundaries, not the product's approval, authorization or Markdown-evidence rules;
+schema-only delivery must not enable unfinished final-approval routes. See
+BACKLOG.md for preserved partial work, attempts and the capability checkpoint.
 
 The API uses Argon2id password hashing, server-side cookie sessions, CSRF and exact
 Origin checks on unsafe requests, and database-backed rate limits. These are
@@ -49,14 +81,19 @@ slice.
 
 ### Current implementation versus planned application
 
-- This checkout contains the root `PROJECT.md.example`, `AGENTS.md.example`,
-  `BACKLOG.md.example`, `scripts/backlog.py`, and `run-tonight.sh`; a nested
-  `overnight-agent/` distribution carries duplicates and global agent definitions.
-  The limited IMP-001/003 application is in `api/`, `web/`, and `compose.yaml`;
-  its supported local commands are in `docs/local-development.md`.
-- Root `.example` files are the canonical **input templates** for Impostr-created
-  projects; retain their identity/version for each created project. The nested
-  distribution is a reference, not a second source of truth. The root helper is
+- This checkout contains root `scripts/backlog.py` and `run-tonight.sh`, plus an
+  `overnight-agent/` distribution carrying templates, helper, runner and agent definitions.
+  The owner deleted the root examples and selected the simplified nested bundle.
+  The IMP-001/003/004 application work is in `api/`, `web/`, and `compose.yaml`;
+  supported local commands and the
+  boundary between baseline checks and candidate review are in
+  `docs/local-development.md`.
+- `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example` are the selected canonical
+  **input templates** for future Impostr-created projects. This is not integrated:
+  API packaging, discovery, tests and browser snapshots still expect deleted root
+  inputs; approval requires their legacy structure. IMP-022 must establish trusted
+  legacy/new profiles and exact seed bytes without rewriting existing projects or
+  weakening required-decision evidence. A path-only change is insufficient. The root helper is
   the compatibility reference for exported backlog syntax. These root planning
   files describe Impostr itself and are not the templates for user projects.
 - OpenCode agents are installed for the current CLI environment (including
@@ -82,7 +119,7 @@ projects and have multiple conversation tabs for one project.
 
 1. **Sign in and create:** after authentication, a user names a project. The server
    chooses its internal ID and isolated workspace; it seeds *drafts* for the three
-   documents from the root examples, records template provenance, creator, and
+   documents from the selected template bundle, records template provenance, creator, and
    creation time. Do not run or install the toolkit as part of creation. A name
    collision is handled explicitly; a user-provided name never becomes an arbitrary
    filesystem path.
@@ -125,10 +162,13 @@ the exported files have been installed in a Git repository.
   transcripts/session mappings, immutable Markdown revisions (content, document
   kind, version, author/origin, timestamp, template provenance), approvals, and
   audit events in PostgreSQL. The DB is authoritative for Impostr drafts/approved
-  revisions. A temporary per-project agent workspace is a **proposal surface**;
-  reconcile file changes into new DB revisions after validation, never treat edits
-  to a workspace file as an automatic approval. Use DB migrations and backup/
-  restore procedures before relying on this as durable storage.
+  revisions. In the current IMP-004 slice, `/workspaces` is a private, bounded,
+  disposable API mirror of the three current database heads, not an agent workspace
+  or source of truth; reads can rebuild it from PostgreSQL. A later agent workspace
+  remains a proposal surface and must reconcile validated changes into new DB
+  revisions, never turn file edits into approval. The IMP-004 database restore
+  drill is not verified; see `docs/local-development.md` before relying on this as
+  durable storage.
 - Save each document with an expected current revision. A stale save or approval
   returns a conflict with the latest revision and preserves both versions for
   review. A generated revision does not overwrite a newer human edit. The approved
@@ -169,6 +209,18 @@ the exported files have been installed in a Git repository.
   accesses the DB directly, or receives the OpenCode server/host credentials.
   Session and document IDs are opaque server IDs, not proof of authorization.
   Cross-origin and CSRF policy must match the actual deployment origin.
+- Attachments have opaque project- and conversation-bound IDs. Authorize upload,
+  status, preview/fetch, model inclusion and deletion on the server. Store
+  originals and bounded safe derivatives outside the public web root and agent
+  workspace, retaining them with the project until explicitly deleted and
+  including them in the personal-release recovery drill. Reject spoofed content
+  types, unsafe names, active/macro content and oversized or abusive documents;
+  process PDF/DOCX/image inputs with bounded resources and no converter network
+  access. Only explicitly attached, validated content reaches the model. Record
+  what was actually included in a turn; a failed conversion cannot silently
+  produce a success state. Attachments are not added to the approved three-file
+  Markdown export. Actual byte/page/turn caps and selected model fidelity must
+  be measured and approved before attachment work is marked ready.
 
 ## Architecture and technical direction
 
@@ -177,16 +229,14 @@ the exported files have been installed in a Git repository.
 | Browser | Vite + React + TypeScript + Tailwind CSS; stage-aware client, accessible editor/list/chat, no secret storage. |
 | Trusted API | Python + FastAPI (technical choice), typed request validation, auth and project authorization, revision transactions, streamed session gateway. |
 | Persistence | Docker-hosted PostgreSQL; SQLAlchemy + Alembic migrations, database-owned approval/version history and project data. |
-| Front door | Nginx, same-origin API/UI with TLS for shared-server access; DB and OpenCode endpoints are not exposed to browsers. |
-| Agent runtime | Existing host-configured OpenCode models and `tech-lead` definition, launched with narrowly scoped, isolated per-project workspaces. No host home, sibling projects, Docker socket or database credentials inside an agent session. Agent runtime receives only required model access via operator-managed secret injection. |
-| Templates | Versioned root starter examples are copied into project-scoped *draft* workspaces; the Markdown parser compatibility reference is root `scripts/backlog.py`. |
+| Front door | Nginx, same-origin API/UI. Current Compose binds loopback only. A later operator-provisioned **private HTTPS** route must be verified from a phone/other device before the personal release; DB, worker and model relay have no browser ingress. No public Internet exposure. |
+| Agent runtime | On this PC, try the already-installed `bwrap` under the actual worker identity as a fail-closed per-project boundary, not the empty namespace smoke or `run-tonight.sh`'s optional sandbox. A trusted host-side relay keeps existing model credentials outside the worker and allows bounded model traffic. No host home, sibling projects, Docker/DB sockets, API secrets, or copied host OpenCode auth in the worker; prove live operation and negative access tests before a product gateway is claimed. If this is unavailable, IMP-002 remains blocked. |
+| Templates | Selected simplified examples under `overnight-agent/` will seed new drafts after IMP-022 integration. Existing immutable starter revisions/provenance stay unchanged. The API maintains a private disposable workspace mirror. The application parser oracle remains root `scripts/backlog.py`; expanded nested parser semantics are not automatically adopted. |
 
-Choose supported, pinned dependency releases during bootstrap and commit lockfiles;
-proposed baselines are Python 3.12, Node 22 LTS, PostgreSQL 17, React 19, Tailwind
-CSS 4, and current maintained Vite/FastAPI/Alembic/Nginx releases. These are
-**planned choices, not currently installed app dependencies**. The actual OpenCode
-CLI is present at version 1.18.32 here; before building the gateway, prove the
-compatible session/stream/question API and pin the working integration. A Python
+The implemented IMP-001/003 slice pins its container runtimes and actual app
+dependencies in the manifests/locks listed in `AGENTS.md`. The host OpenCode
+CLI was most recently observed at 1.18.33; before building the gateway, prove
+the compatible session/stream/question API and pin the working integration. A Python
 API may use the authenticated OpenCode HTTP interface or a controlled adapter;
 do not assume the JS SDK or `opencode run` is a resumable web-chat transport.
 
@@ -214,40 +264,66 @@ installs skills or initializes Git as a repair for missing setup.
   keyboard focus, dialog focus return, and screen-reader names/states work.
   Normal text should meet 4.5:1 contrast, controls/focus 3:1; respect reduced
   motion. Check the rendered flows in browser, including keyboard-only operation.
+- Chat attachments must show **Uploading**, **Processing**, **Ready to send** or
+  a specific failed/retry/remove state, then distinguish **Stored** from **Included
+  in this model turn** and **Not included**. Never claim that a filename, upload
+  success or extracted text alone proves the model saw an image. On mobile, keep
+  the composer and attachment controls usable without overflow; announce failures
+  and provide filename-specific keyboard/screen-reader controls. Explain that
+  text-only PDF/DOCX excludes scans, diagrams and embedded images, and deletion
+  cannot retract content already sent to a provider.
 
 ## Security, operations, and acceptance
 
-This is a private **multi-user** service with potentially sensitive product ideas,
-transcripts and model credentials. Authenticated roles and project ownership must
+The personal first release is a **one-owner private-access** service with
+potentially sensitive product ideas, attachments, transcripts and model
+credentials. Existing roles and project authorization remain mandatory; a
+single intended owner is not an auth bypass, and synthetic second-user tests
+remain required. Authenticated roles and project ownership must
 be checked on every read, save, event stream, permission/question reply, approval,
 and download; guessing another project/session ID must reveal nothing. Use
 password hashing, server-side secure sessions with HttpOnly/SameSite cookies,
 CSRF protection for cookie-authenticated mutations, rate limiting for login and
 agent prompts, size/time/concurrency limits, and safe Markdown rendering. Keep
 provider keys outside DB Markdown, browser storage, exports and logs. No public
-signup or unauthenticated OpenCode/DB ingress. Secret handling, backup/restore,
-account recovery and server TLS setup are operator responsibilities documented
-before shared-server launch. Audit credential administration and approvals without
-recording secrets. Test negative authorization cases and runtime escape attempts.
+signup or unauthenticated OpenCode/DB ingress. Do not publish raw HTTP for phone
+access or assume a router is a security boundary. Private HTTPS, exact Origin/
+proxy handling and operator-managed network restrictions must be verified before
+the personal LAN release, not configured or guessed during current local work.
+Secret handling, backup/restore and account recovery are personal release/
+operational gates; later multi-user qualification is separate. Audit credential
+administration and approvals without recording secrets. Test negative
+authorization cases and runtime escape attempts.
 
-Completion of the first release requires an end-to-end browser demonstration of
-two distinct users with private projects, resumed/new-tab chat, both approval
-gates, direct edits plus agent proposals, stale-revision rejection, backlog status/
-dependency validation, three revision-identical downloads, and failures/recovery.
-Run actual app checks once bootstrap establishes them; review security-sensitive
-changes independently and review rendered UI with `ui-designer`. Never equate a
+Completion of the personal first release requires an end-to-end demonstration
+of distinct projects, resumed/new-tab chat, both approval gates, direct edits
+plus agent proposals, stale-revision rejection, backlog status/dependency
+validation, three revision-identical downloads, and failures/recovery. Use
+synthetic second-user/project probes for authorization; these do not qualify a
+multi-user server. Also prove actual image model input, honest text-only PDF/
+DOCX behavior, private attachment access and deletion, and the approved private
+HTTPS route from an actual phone/other device. Restore the DB and retained media
+from synthetic backups before release.
+Start with focused checks for changed behavior and realistic risks; broaden for
+integration and the release demonstration above, not as a blanket per-task gate.
+Independently review substantial or security/data-sensitive changes; `ui-designer`
+spot-checks important rendered flows for substantial UI changes. Optional suggestions
+do not add acceptance requirements. Never equate a
 successful mock integration test with an isolated, working OpenCode deployment.
 
 ## Decisions and remaining gates
 
 | Topic | Status | Consequence / next action |
 |---|---|---|
-| Release boundary, shared-server/private projects, admin UI, root templates | Owner decided | Plan-and-export only; creator/admin access; no web runner. |
+| Release boundary, private projects, admin UI, selected templates | Owner revised / personal first release | One owner on this PC; retain roles/authorization and plan-and-export workflow. Simplified nested templates are selected but await compatible application integration (IMP-022). A verified private HTTPS LAN route and full chat/media/approval/download flow are first-release gates. Public and multi-user server operation are later, not silently approved. No web runner. |
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
-| UI/backend/deployment stack | Owner decided / technical choice | Vite/React/Tailwind, Python/PostgreSQL/Alembic/Nginx; FastAPI/ORM and major-version baselines are technical proposals to confirm in bootstrap. |
-| Safe live OpenCode integration | Open capability gate | Spike must prove session resume, events/questions, config/agent discovery, secret handling and isolation before gateway is implementation-ready. |
+| UI/backend/deployment stack | Implemented local baseline | Vite/React/TypeScript/Tailwind, Python/FastAPI/SQLAlchemy/PostgreSQL/Alembic/Nginx; manifests/locks pin actual dependencies and container runtimes. |
+| Safe live OpenCode integration | Owner chose `bwrap`-first / open capability gate | On this PC, prove fail-closed per-project host containment and trusted model relay, plus live session resume, stream, questions, permissions and proposals. Bounded synthetic live model/image tests are approved; do not copy host auth into a worker. No verified broker or negative containment command exists yet. |
 | Deployment environment, exact app commands and secrets provision | Local-only setup verified / release gate open | Docker/Compose setup, migrations, local account bootstrap/recovery, API health and database recovery commands are documented in `docs/local-development.md`. No separate host PostgreSQL install is required. Web-agent isolation, TLS/reverse-proxy handling, backup/restore, and release checks remain unverified. |
-| This repository's execution/delivery policy | Owner approved / publication gate | Base from published `v1`; perform verified slices on one long-lived feature branch; continue independently eligible work after a blocker; submit one final PR to `development` for human merge. All 12 dependency-gated items are owner-approved ready; publish this changed execution contract before launch. |
+| Automated local browser-review credentials | Verified local fixture / residual host risk accepted | IMP-015 and exact-input IMP-004/013/007 reviews passed locally; IMP-014 still needs its own profile and rendering. The shared Playwright tool server is **not OS-confined** and may access host files, provider credentials or Docker. Use a fresh synthetic stack and generated short-lived Member login/session, revoke it after review, and never intentionally use owner's accounts or real project data. This is not host-secret/Docker denial, product isolation, shared-server readiness or an auth bypass. IMP-002 remains blocked. |
+| First-release attachments | Owner decided / model fidelity and limits unverified | PNG/JPEG actual image input; text/Markdown and bounded selectable-text PDF/DOCX extraction. No scanned/visual PDF or embedded DOCX images in v1. Retain privately per project/conversation until explicit deletion; only explicitly attached validated derivatives reach the model. Provider/media support and numeric limits require measured proof before the media items become ready. |
+| Phone/LAN access | Owner decided / operator setup later | Private HTTPS route on this PC, tested from another device, with backend/DB/worker/relay unexposed. No route, domain, certificate, trusted proxy or deployment command is verified; do not open raw LAN HTTP as a shortcut. Implementation can proceed locally before the access slice is ready, but the personal release cannot pass without it. |
+| This repository's execution/delivery policy | Owner approved / in use | Base from published `v1`; verified slices on `feature/impostr-v1`, ending in one PR to `development` for human merge. IMP-001/003/004/007/013/015 are locally committed; IMP-002 remains blocked and IMP-009/014 remain partial. IMP-020/021 are approved but capability-blocked drafts. Candidate evidence applies only to exact inputs. Temporary broad coordinator edit for the local batch is not product isolation or an acceptance waiver; restrictive-rule restoration remains owner post-batch work. Media/LAN/multi-user and revised release checks remain draft scope. |
 
 Implementation slices, dependencies and verification are in `BACKLOG.md`; actual
 verified repository commands and automation constraints are in `AGENTS.md`.

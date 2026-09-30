@@ -1,0 +1,1115 @@
+nohup: ignoring input
+[2026-09-30 19:37:37] Starting overnight run: impostr
+[2026-09-30 19:37:37] Checking for stale in-progress items...
+Reset 0 unfinished item(s) to [ ] ready.
+[2026-09-30 19:37:37] Found 7 ready item(s). Running up to 1 eligible items per session.
+[2026-09-30 19:37:37] Running opencode directly; set RUNNER_USE_SBX=1 to opt into sbx.
+[2026-09-30 19:37:37] ━━━ Session 1 starting ━━━
+[0m
+> overnight · gpt-6-sol
+[0m
+[0m→ [0mRead BACKLOG.md
+[0m→ [0mRead PROJECT.md
+[0m→ [0mRead .opencode/progress.md
+[0m
+[0m$ [0mgit status --short && git branch --show-current && git rev-parse HEAD && git log --oneline -10 && git diff --cached --stat && git diff --stat
+M AGENTS.md
+ M BACKLOG.md
+ M DONE.md
+ M PROJECT.md
+ M api/app/main.py
+ M api/app/models.py
+ M api/tests/test_migrations.py
+ M api/tests/test_postgres_integration.py
+ M run-tonight.sh
+ M web/src/App.test.tsx
+ M web/src/App.tsx
+ M web/src/ProjectWorkspace.test.tsx
+ M web/src/ProjectWorkspace.tsx
+?? .opencode/launch.log
+?? .opencode/progress.md
+?? .opencode/recovery-launch.log
+?? .opencode/run.log
+?? .opencode/session-1.log
+?? .opencode/session-2.log
+?? .opencode/session-3.log
+?? .playwright-mcp/
+?? api/app/project_approval_manifests.py
+?? api/migrations/versions/20260930_0006_project_approval_manifests.py
+?? api/tests/test_project_approval_manifests.py
+?? api/tests/test_project_approval_manifests_postgres.py
+?? web/src/BacklogPlanning.test.tsx
+?? web/src/BacklogPlanning.tsx
+feature/impostr-v1
+e2cabfdc42f6a6a84ea0dcb85cdbd36f0927dccf
+e2cabfd Add validated backlog task editing and review fixture
+31d0f8f Record IMP-013 verified local outcome
+888e53c Add human document pair approval
+60e9480 Add private projects and versioned Markdown drafts
+2d71c1b Add disposable authenticated browser review fixture
+2222dd2 Record IMP-002 blocker and IMP-003 outcome
+e4558ae Add private account administration and project access
+d221407 Record IMP-001 verification outcome
+af0c9e7 Bootstrap local Impostr app and database baseline
+86a97a4 Plan single-branch Impostr batch delivery
+ AGENTS.md                              | 208 ++++++--
+ BACKLOG.md                             | 870 +++++++++++++++++++++++++++++---
+ DONE.md                                |  19 +
+ PROJECT.md                             | 169 +++++--
+ api/app/main.py                        |   2 +
+ api/app/models.py                      |  56 +++
+ api/tests/test_migrations.py           | 174 +++++++
+ api/tests/test_postgres_integration.py |   4 +-
+ run-tonight.sh                         |   2 +-
+ web/src/App.test.tsx                   | 118 ++++-
+ web/src/App.tsx                        |   5 +-
+ web/src/ProjectWorkspace.test.tsx      | 194 +++++++-
+ web/src/ProjectWorkspace.tsx           | 886 +++++++++++++++++----------------
+ 13 files changed, 2104 insertions(+), 603 deletions(-)
+[0m
+[0m→ [0mRead api/app/project_approval_manifests.py
+[0m→ [0mRead api/tests/test_project_approval_manifests.py
+[0m→ [0mRead DONE.md
+[0m
+[0m$ [0mgit diff -- api/app/main.py api/app/models.py api/tests/test_migrations.py api/tests/test_postgres_integration.py && git status --porcelain=v1 --untracked-files=normal && docker info --format '{{.ServerVersion}}' && docker compose version
+diff --git a/api/app/main.py b/api/app/main.py
+index d28cea5..a7f6379 100644
+--- a/api/app/main.py
++++ b/api/app/main.py
+@@ -24,6 +24,7 @@ from app.dependencies import require_browser_mutation
+ from app.document_contract import DocumentKind
+ from app.document_pair_approvals import router as document_pair_approvals_router
+ from app.passwords import dummy_password_hash
++from app.project_approval_manifests import router as project_approval_manifests_router
+ from app.project_documents import (
+     router as project_documents_router,
+ )
+@@ -106,6 +107,7 @@ def create_app(
+     api_router.include_router(project_documents_router)
+     api_router.include_router(backlog_tasks_router)
+     api_router.include_router(document_pair_approvals_router)
++    api_router.include_router(project_approval_manifests_router)
+     application.include_router(api_router)
+ 
+     @application.middleware("http")
+diff --git a/api/app/models.py b/api/app/models.py
+index a1b3ac5..bed864f 100644
+--- a/api/app/models.py
++++ b/api/app/models.py
+@@ -12,6 +12,7 @@ from sqlalchemy import (
+     CheckConstraint,
+     DateTime,
+     ForeignKey,
++    ForeignKeyConstraint,
+     Index,
+     Integer,
+     LargeBinary,
+@@ -196,6 +197,13 @@ class ProjectDocumentPairApproval(Base):
+             "agents_revision_id",
+             name="uq_project_pair_approval_revisions",
+         ),
++        UniqueConstraint(
++            "id",
++            "project_id",
++            "project_revision_id",
++            "agents_revision_id",
++            name="uq_project_pair_approval_snapshot",
++        ),
+         Index(
+             "ix_project_pair_approvals_project_created",
+             "project_id",
+@@ -232,6 +240,54 @@ class ProjectDocumentPairApproval(Base):
+     )
+ 
+ 
++class ProjectApprovalManifest(Base):
++    __tablename__ = "project_approval_manifests"
++    __table_args__ = (
++        ForeignKeyConstraint(
++            ["pair_approval_id", "project_id", "project_revision_id", "agents_revision_id"],
++            [
++                "project_document_pair_approvals.id",
++                "project_document_pair_approvals.project_id",
++                "project_document_pair_approvals.project_revision_id",
++                "project_document_pair_approvals.agents_revision_id",
++            ],
++            ondelete="CASCADE",
++            name="fk_project_approval_manifests_pair_snapshot",
++        ),
++        UniqueConstraint(
++            "project_id",
++            "pair_approval_id",
++            "backlog_revision_id",
++            name="uq_project_approval_manifest_snapshot",
++        ),
++        Index(
++            "ix_project_approval_manifests_project_created",
++            "project_id",
++            "created_at",
++            "id",
++        ),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
++    project_id: Mapped[uuid.UUID] = mapped_column(
++        Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
++    )
++    pair_approval_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
++    project_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
++    agents_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
++    backlog_revision_id: Mapped[uuid.UUID] = mapped_column(
++        Uuid(as_uuid=True),
++        ForeignKey("project_document_revisions.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
++        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True), nullable=False, server_default=func.now()
++    )
++
++
+ class DocumentConflictProposal(Base):
+     __tablename__ = "document_conflict_proposals"
+     __table_args__ = (
+diff --git a/api/tests/test_migrations.py b/api/tests/test_migrations.py
+index 39b5947..b6d3e2e 100644
+--- a/api/tests/test_migrations.py
++++ b/api/tests/test_migrations.py
+@@ -15,9 +15,11 @@ from app.main import create_app
+ from app.models import (
+     BootstrapState,
+     Project,
++    ProjectApprovalManifest,
+     ProjectDocument,
+     ProjectDocumentPairApproval,
+     ProjectDocumentRevision,
++    User,
+ )
+ from app.project_names import project_name_key
+ from app.project_templates import default_template_root
+@@ -51,9 +53,66 @@ def test_identity_and_private_metadata_migration_upgrades_and_downgrades(
+                 "project_documents",
+                 "project_document_revisions",
+                 "project_document_pair_approvals",
++                "project_approval_manifests",
+                 "document_conflict_proposals",
+             }.issubset(table_names)
+             assert connection.scalar(select(BootstrapState.completed)) is False
++            inspector = inspect(connection)
++            manifest_columns = {
++                column["name"] for column in inspector.get_columns("project_approval_manifests")
++            }
++            assert {
++                "id",
++                "project_id",
++                "pair_approval_id",
++                "project_revision_id",
++                "agents_revision_id",
++                "backlog_revision_id",
++                "actor_user_id",
++                "created_at",
++            } == manifest_columns
++            manifest_uniques = {
++                tuple(constraint["column_names"])
++                for constraint in inspector.get_unique_constraints("project_approval_manifests")
++            }
++            assert ("project_id", "pair_approval_id", "backlog_revision_id") in manifest_uniques
++            pair_uniques = {
++                tuple(constraint["column_names"])
++                for constraint in inspector.get_unique_constraints(
++                    "project_document_pair_approvals"
++                )
++            }
++            assert ("id", "project_id", "project_revision_id", "agents_revision_id") in pair_uniques
++            manifest_foreign_keys = inspector.get_foreign_keys("project_approval_manifests")
++            assert any(
++                constraint["constrained_columns"]
++                == ["pair_approval_id", "project_id", "project_revision_id", "agents_revision_id"]
++                and constraint["referred_table"] == "project_document_pair_approvals"
++                and constraint["referred_columns"]
++                == ["id", "project_id", "project_revision_id", "agents_revision_id"]
++                for constraint in manifest_foreign_keys
++            )
++
++        with engine.begin() as connection:
++            config.attributes["connection"] = connection
++            command.downgrade(config, "20260929_0005")
++            assert "project_approval_manifests" not in set(inspect(connection).get_table_names())
++            remaining_pair_uniques = {
++                tuple(constraint["column_names"])
++                for constraint in inspect(connection).get_unique_constraints(
++                    "project_document_pair_approvals"
++                )
++            }
++            assert (
++                "id",
++                "project_id",
++                "project_revision_id",
++                "agents_revision_id",
++            ) not in remaining_pair_uniques
++
++        with engine.begin() as connection:
++            config.attributes["connection"] = connection
++            command.upgrade(config, "head")
+ 
+         with engine.begin() as connection:
+             config.attributes["connection"] = connection
+@@ -63,6 +122,121 @@ def test_identity_and_private_metadata_migration_upgrades_and_downgrades(
+         engine.dispose()
+ 
+ 
++def test_manifest_migration_preserves_existing_pair_approval_without_backfill(
++    tmp_path: Path,
++) -> None:
++    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'manifest-migration.db'}")
++    config = _alembic_config()
++    owner_id = uuid.uuid4()
++    project_id = uuid.uuid4()
++    project_document_id = uuid.uuid4()
++    agents_document_id = uuid.uuid4()
++    project_revision_id = uuid.uuid4()
++    agents_revision_id = uuid.uuid4()
++    pair_approval_id = uuid.uuid4()
++    now = datetime.now(UTC).replace(tzinfo=None)
++
++    try:
++        with engine.begin() as connection:
++            config.attributes["connection"] = connection
++            command.upgrade(config, "20260929_0005")
++
++        with Session(engine) as db, db.begin():
++            db.add(
++                User(
++                    id=owner_id,
++                    username="migration-owner",
++                    password_hash="migration-test-only-hash",
++                    role="user",
++                    is_active=True,
++                    created_at=now,
++                    password_changed_at=now,
++                )
++            )
++            db.add(Project(id=project_id, name="Manifest migration", owner_user_id=owner_id))
++            db.add_all(
++                [
++                    ProjectDocument(
++                        id=project_document_id,
++                        project_id=project_id,
++                        kind="project",
++                        head_revision_number=1,
++                        created_at=now,
++                    ),
++                    ProjectDocument(
++                        id=agents_document_id,
++                        project_id=project_id,
++                        kind="agents",
++                        head_revision_number=1,
++                        created_at=now,
++                    ),
++                ]
++            )
++            db.add_all(
++                [
++                    ProjectDocumentRevision(
++                        id=project_revision_id,
++                        document_id=project_document_id,
++                        revision_number=1,
++                        content="# Saved project\n",
++                        content_sha256="1" * 64,
++                        origin="human",
++                        author_user_id=owner_id,
++                        created_at=now,
++                    ),
++                    ProjectDocumentRevision(
++                        id=agents_revision_id,
++                        document_id=agents_document_id,
++                        revision_number=1,
++                        content="# Saved rules\n",
++                        content_sha256="2" * 64,
++                        origin="human",
++                        author_user_id=owner_id,
++                        created_at=now,
++                    ),
++                ]
++            )
++            db.add(
++                ProjectDocumentPairApproval(
++                    id=pair_approval_id,
++                    project_id=project_id,
++                    project_revision_id=project_revision_id,
++                    agents_revision_id=agents_revision_id,
++                    actor_user_id=owner_id,
++                    created_at=now,
++                )
++            )
++
++        with engine.begin() as connection:
++            config.attributes["connection"] = connection
++            command.upgrade(config, "head")
++
++        with Session(engine) as db:
++            pair = db.get(ProjectDocumentPairApproval, pair_approval_id)
++            assert pair is not None
++            assert pair.project_id == project_id
++            assert pair.project_revision_id == project_revision_id
++            assert pair.agents_revision_id == agents_revision_id
++            assert (
++                db.scalar(
++                    select(ProjectApprovalManifest.id).where(
++                        ProjectApprovalManifest.project_id == project_id
++                    )
++                )
++                is None
++            )
++
++        with engine.begin() as connection:
++            config.attributes["connection"] = connection
++            command.downgrade(config, "20260929_0005")
++            assert "project_approval_manifests" not in set(inspect(connection).get_table_names())
++
++        with Session(engine) as db:
++            assert db.get(ProjectDocumentPairApproval, pair_approval_id) is not None
++    finally:
++        engine.dispose()
++
++
+ def test_document_migration_preserves_legacy_projects_and_backfills_drafts(
+     tmp_path: Path,
+ ) -> None:
+diff --git a/api/tests/test_postgres_integration.py b/api/tests/test_postgres_integration.py
+index 48af6ea..aad6084 100644
+--- a/api/tests/test_postgres_integration.py
++++ b/api/tests/test_postgres_integration.py
+@@ -121,7 +121,7 @@ def test_postgres_migrated_auth_private_access_and_atomic_limits() -> None:
+         with TestClient(app) as alice_client:
+             with Session(engine) as db:
+                 assert db.scalar(text("SELECT version_num FROM alembic_version")) == (
+-                    "20260929_0005"
++                    "20260930_0006"
+                 )
+                 assert (
+                     len(
+@@ -1115,7 +1115,7 @@ def test_postgres_document_migration_preserves_metadata_only_projects(tmp_path:
+         with engine.begin() as connection:
+             migration_config.attributes["connection"] = connection
+             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+-                "20260929_0005"
++                "20260930_0006"
+             )
+             assert connection.scalar(select(User.id).limit(1)) is None
+             assert connection.scalar(select(Project.id).limit(1)) is None
+ M AGENTS.md
+ M BACKLOG.md
+ M DONE.md
+ M PROJECT.md
+ M api/app/main.py
+ M api/app/models.py
+ M api/tests/test_migrations.py
+ M api/tests/test_postgres_integration.py
+ M run-tonight.sh
+ M web/src/App.test.tsx
+ M web/src/App.tsx
+ M web/src/ProjectWorkspace.test.tsx
+ M web/src/ProjectWorkspace.tsx
+?? .opencode/launch.log
+?? .opencode/progress.md
+?? .opencode/recovery-launch.log
+?? .opencode/run.log
+?? .opencode/session-1.log
+?? .opencode/session-2.log
+?? .opencode/session-3.log
+?? .playwright-mcp/
+?? api/app/project_approval_manifests.py
+?? api/migrations/versions/20260930_0006_project_approval_manifests.py
+?? api/tests/test_project_approval_manifests.py
+?? api/tests/test_project_approval_manifests_postgres.py
+?? web/src/BacklogPlanning.test.tsx
+?? web/src/BacklogPlanning.tsx
+29.8.0
+Docker Compose version v5.5.1
+[0m
+[0m• [0mRepair IMP-009 approval validation[90m Developer Agent[0m
+[0m✓ [0mRepair IMP-009 approval validation[90m Developer Agent[0m
+[0m• [0mReview IMP-009 boundary fix[90m Reviewer Agent[0m
+[0m✓ [0mReview IMP-009 boundary fix[90m Reviewer Agent[0m
+[0m• [0mRepair focused review defects[90m Developer Agent[0m
+[0m✓ [0mRepair focused review defects[90m Developer Agent[0m
+[0m• [0mFull IMP-009 independent review[90m Reviewer Agent[0m
+[0m✓ [0mFull IMP-009 independent review[90m Reviewer Agent[0m
+[0m✗ [0mPatch failed
+[91m[1mError: [0mapply_patch verification failed: Error: Failed to find expected lines in /home/kemal/projects/impostr/BACKLOG.md:
+581: 
+[0m% [0mPatch 1 file
+[0m✗ [0mPatch failed
+[91m[1mError: [0mapply_patch verification failed: Error: Failed to find expected lines in /home/kemal/projects/impostr/.opencode/progress.md:
+19: 
+[0m% [0mPatch 1 file
+[0m% [0mPatch 1 file
+[0m
+[0m$ [0mgit diff --check -- BACKLOG.md DONE.md && git status --short && git diff -- BACKLOG.md DONE.md
+...output truncated...
+
+Full output saved to: /home/kemal/.local/share/opencode/tool-output/tool_0f34b58a80010iLCkVridlygqE
+
++**Owner-approved same-ID recovery (2026-09-30; requeued `[ ]`):** Preserve the
++three substantive attempts and dirty API/migration/tests; do not restart from
++the committed IMP-007 baseline or stage IMP-014's unrelated web edits. Allow
++up to three **additional** substantive attempts on this ID,
++counted across runner sessions. First prove an undecided nested heading such as
++`#### Pending: PostgreSQL concurrency` in a ready task's verification cannot
++reach final approval; cover fenced examples, completed headings, stale revisions
++and the three-file manifest/download invariants without rejecting legitimate
++finished work. Require independent full-diff approval, isolated PostgreSQL and
++established API/toolkit checks, affected docs and a verified local commit before
++`[x]`. Only an in-scope fix with remaining budget may continue `[~]` between
++sessions under the approved AGENTS.md policy; genuine blockers stay `[!]`.
++**Recovery blocker (2026-09-30):** The three additional substantive attempts
++(six cumulative) repaired pending nested verification/scope headings and several
++section-boundary bypasses in the preserved API/tests, but independent full-diff
++re-review still NEEDS WORK: an empty ready-task Scope can borrow a following
++`**Depends on:** None` as evidence, and `#### PostgreSQL concurrency unresolved`
++can pass with completed verification text. Both could permit an incomplete
++approved/downloadable backlog. Senior-reported API 241 passed/12 PostgreSQL
++profile skips plus static checks, isolated PostgreSQL migration 0006/focused 4
++passed, and toolkit 128 passed/1 gated skip are intermediate evidence, not final
++acceptance. No affected docs, verified commit, or approved-download claim.
++Preserve IMP-009 API/migration/tests and unrelated IMP-014 web edits. Further
++implementation requires an owner decision/new finite budget; independent approval,
++final gates, docs and commit remain pending.
++**Owner-directed structural recovery (2026-09-30; requeued same ID):** The owner
++authorizes up to **two additional substantive attempts** (#7-8 cumulative),
++counted across sessions; retain the six prior attempts, both reviewer findings,
++all uncommitted IMP-009 API/migration/tests and unrelated IMP-014 web/planning
++edits. Before broad implementation, add a bounded regression matrix for the
++ready-task field and Markdown-section boundaries: empty `**Scope:**` must not
++borrow a following `**Depends on:**` or other task metadata, and explicit
++unfinished child headings such as `#### PostgreSQL concurrency unresolved` must
++prevent final approval even when another verification step is complete. Include
++the prior prefix-pending, Scope, post-H2, fenced-example, completed-heading and
++valid substantive continuation cases. Verify both refusal to create an approval
++manifest/download for invalid snapshots and acceptance of valid snapshots;
++preserve project access, stale revision, root-helper dependency and draft-edit
++behavior. Repair the structural boundary rather than special-casing the two
++reviewer strings, then obtain focused independent feedback before the final
++full-diff review. Reuse valid earlier evidence only for unchanged inputs; run
++the actual focused and established API/PostgreSQL/toolkit gates, affected docs
++and verified local commit before `[x]`. A distinct in-scope fix with remaining
++ budget may checkpoint `[~]` under AGENTS.md; repeated uncorrected findings,
++ missing capability or exhausted budget return `[!]`, not a waiver or silent
++ new budget. Do not stage IMP-014's dirty UI or push/open a PR.
++**Structural recovery blocker (2026-09-30):** Attempts #7–8 exhausted the
++owner's additional budget. Tests-first boundary repairs remain uncommitted;
++independent full-diff review still NEEDS WORK: empty Scope can borrow
++`**Documentation impact:**` or `**Open decisions:**`, and an unresolved
++verification child heading with trailing explanation can permit an approved,
++downloadable snapshot. Developer-reported final API 258 passed/12 profile
++skips plus static checks, isolated PostgreSQL migration 0006/12 passed, and
++toolkit 128 passed/1 gated skip are intermediate, not final acceptance.
++Preserve the IMP-009 API/migration/tests and unrelated IMP-014 web/planning
++edits. Further implementation requires an owner decision/new finite budget;
++independent approval, final coordinator gates, affected docs and verified
++commit remain pending. No push or PR.
+ 
+ ---
+ 
+ ## [ ] IMP-010 — Three-file final review experience
+ 
+ Type: feature
+-**Depends on:** IMP-008, IMP-009
++**Depends on:** IMP-014, IMP-009
+ **Scope:** Stage 3 version/status overview with three simultaneous desktop document
+ panes and accessible narrower-screen review/download flow.
+ **Required capabilities:** Rendered browser review with `ui-designer`.
+@@ -305,33 +618,44 @@ panes and accessible narrower-screen review/download flow.
+ 
+ ---
+ 
+-## [ ] IMP-011 — Shared-server security and recovery acceptance
++## [-] IMP-011 — One-owner private-access release and recovery acceptance
+ 
+ Type: feature
+-**Depends on:** IMP-003, IMP-005, IMP-008, IMP-009, IMP-010
+-**Scope:** Integrated release verification, independent security/design review,
+-backups/restore, operational documentation and gates; fix defects in owning slices
+-or track them explicitly rather than treating this as a substitute for unit checks.
+-**Required capabilities:** Private TLS-capable deployment host, container runtime,
+-isolated OpenCode model access, two provisioned test accounts and browser tools.
++**Depends on:** IMP-003, IMP-005, IMP-008, IMP-009, IMP-010, IMP-016, IMP-018
++**Scope:** Integrate the full planning/chat/attachment/approval/download flow on
++this PC for one owner, including private HTTPS access from another device,
++isolated agent operation, synthetic-data DB/media restore, independent security/
++design review and operator docs. Fix defects in owning slices rather than
++substituting this item for their acceptance. This is **not** multi-user server
++qualification.
++**Required capabilities:** IMP-016's operator-provisioned private HTTPS route,
++IMP-002's tested brokered worker, two synthetic accounts/projects, browser tools
++and a disposable recovery dataset. No route or backup procedure is verified yet.
+ 
+ ### Done looks like
+-- Two-user walkthrough covers private projects, admin provisioning, resume/new
+-  session tabs, pair/backlog approval, editing/conflict states and byte-identical
+-  approved downloads; no cross-user access or host credential leakage.
+-- Restart and restore retain revision/approval/chat history; negative security
+-  tests, real OpenCode isolation evidence, dependency/secret checks and operator
+-  runbook pass, or each unavailable gate is explicitly blocked before release.
++- One-owner walkthrough from the PC and a real phone/other device covers private
++  project creation, live resumed/new-tab chat, image and text-only PDF/DOCX
++  attachments actually included in turns, pair/backlog approval, edit/conflict
++  states and three byte-identical approved downloads. Keep two synthetic users/
++  projects for negative access checks; do not call this multi-user qualification.
++- Restart and synthetic restore retain revision/approval/chat history and retained
++  media; private HTTPS/Origin/CSRF, bounded tool/model access, upload abuse and
++  authorization denials, dependency/secret checks and the operator runbook pass.
++  Any unavailable gate blocks the personal release rather than being declared
++  postponed hardening.
+ 
+ ### Verification
+-- Run recorded app/unit/integration/browser/security checks on delivered revision,
+-  independent reviewer and `ui-designer` sign-off, backup/restore drill and an
+-  operator-led smoke on the private server.
++- Run established app/unit/integration/browser/security checks on the delivered
++  revision, independent reviewer and `ui-designer` sign-off, owned synthetic
++  DB/media restore, agent escape/failure checks and a remote-device smoke through
++  the actual private HTTPS route. Never expose Docker, DB, worker or relay ingress.
+ 
+ **Documentation impact:** Final operations, recovery and user guides for the
+ stable release; do not store secrets or private chat in reports.
+-**Open decisions:** Operator must provision deployment host, credentials, TLS and
+-agreed security tooling; release cannot be called ready until these are tested.
++**Open decisions:** Operator must provision and verify the private HTTPS route
++and synthetic restore resources. Exact URL/certificate/proxy commands and model/
++media limits are not established. Multi-user server deployment is deferred to
++IMP-019. Owner approved this draft scope, not its `[-]` readiness.
+ 
+ ---
+ 
+@@ -340,7 +664,8 @@ agreed security tooling; release cannot be called ready until these are tested.
+ Type: release-finalization
+ **Depends on:** IMP-011
+ **Scope:** Integrated checks and the one GitHub PR from `feature/impostr-v1` to
+-`development`; no implementation on `v1` and no automated merge.
++`development` for the **one-owner private-access** release; no implementation on
++`v1` and no automated merge. Do not claim multi-user server readiness.
+ **Required capabilities:** All in-scope feature items verified and locally
+ committed in the same branch, actual app checks, independent review, and usable
+ GitHub branch push/PR tooling and auth.
+@@ -513,3 +838,444 @@ toolkit 116/1 gated skip, normal synthetic Member rendered review at
+ failed attempts and blockers above remain history, not current defects. This is
+ local human-only approval, not chat, exports, agent isolation or release readiness;
+ no push/PR/merge.
++
++---
++
++## [ ] IMP-014 — Human-only collapsible backlog planning layout
++
++Type: feature
++**Depends on:** IMP-007, IMP-013, IMP-009
++**Execution ordering:** IMP-009 is a prerequisite for this checkout's
++commit-pinned IMP-014 candidate review, not a product/API dependency of the
++human backlog rail. Its verified commit must establish the preview base so the
++candidate cannot silently include IMP-009's unresolved dirty API/migration.
++**Scope:** Extract direct task-list UI from IMP-008: collapsible
++rail, editable task title/body/dependencies, on-row draft/ready controls and
++conflict handling. Does not stream or display agent-added task updates.
++
++### Done looks like
++- Human edits and list/document views agree at the saved revision; conflicts
++  preserve unsaved text and no execution status can be synthesized. Desktop and
++  narrow keyboard-accessible layouts handle empty, saving and invalid states.
++- IMP-008 retains chat and live agent-update integration on top of this rail
++  rather than counting the same direct-edit UI twice.
++
++### Verification
++- Browser interaction and rendered responsive/keyboard review for direct editing,
++  collapse, readiness toggle and stale revisions; no model integration claim.
++
++**Documentation impact:** Human-only backlog editing guidance, not a release claim.
++**Decision:** Owner approved this extraction and IMP-008/010 dependency
++changes on 2026-09-25. Do not mark live agent updates or IMP-008 delivered from
++this item's work.
++**Earlier blocker (2026-09-30; preserved):** Uncommitted web task rail/editor and tests passed 71 web tests, lint, format, typecheck and build; independent code re-review found no remaining defect but returned INCOMPLETE without authenticated rendered interaction/design review at the agreed viewports. The committed-HEAD browser fixture excludes this dirty UI and its approved candidate profiles do not include IMP-014. Preserve partial work; obtain an owner-approved exact-candidate review path, then rendered sign-off, affected docs and final gates before a local commit or `[x]`.
++**Owner-approved same-ID requeue (2026-09-30; ready but waiting for IMP-009):**
++Preserve the dirty UI/tests and prior review evidence. The owner authorizes
++extending the existing local-only candidate fixture for IMP-014 over the
++actual committed base after IMP-009 passes, with an independently reviewed
++inventory limited to runtime
++`web/src/App.tsx`, `web/src/ProjectWorkspace.tsx` and
++`web/src/BacklogPlanning.tsx`; tests `web/src/App.test.tsx`,
++`web/src/ProjectWorkspace.test.tsx` and `web/src/BacklogPlanning.test.tsx`;
++host fixture `scripts/local_browser_fixture.py` and
++`scripts/test_local_browser_fixture.py`. Reconcile the full diff first and
++exclude unverified IMP-009 API/migration changes from the preview. Existing
++fingerprint, size, path, secret and cleanup guards remain mandatory. Recompute
++the fingerprint
++and repeat the normal synthetic Member sign-in, authorization denial, actual
++rendered interaction at agreed viewports, keyboard/focus and ui-designer sign-off
++after any candidate input changes; a committed-HEAD or IMP-007 profile review is
++not evidence for the dirty UI. Require final web/toolkit and affected API checks,
++independent full-diff approval, docs and a verified local commit before `[x]`.
++The already verified IMP-007 opt-in candidate mechanism and approved input scope
++make the profile extension implementable **within this item**; the IMP-014
++profile itself is not yet built or reviewed. Once IMP-009 is `[x]`, inspect its
++actual commit and the remaining dirty diff before doing any candidate work.
++First establish a reviewed exact-base profile and pass fingerprinted preflight;
++if that cannot be done without unrelated inputs, stop `[!]` with the capability
++gap rather than bypassing the fixture. A profile or preflight is not completed
++browser review: all authenticated rendered gates still belong to IMP-014.
++Allow up to three substantive recovery attempts on this ID in addition to its
++recorded prior work; use AGENTS.md's bounded continuation only with a distinct
++in-scope next step and remaining budget. No push/PR or chat claim.
++
++---
++
++## [x] IMP-015 — Prove automated authenticated local browser review
++
++Type: test-infrastructure
++**Depends on:** IMP-001, IMP-003
++**Scope:** Establish a repeatable, operator-controlled disposable local test
++fixture using the real Compose front door, migrations, normal offline admin
++bootstrap and authenticated member creation. Supply a real signed-in browser
++context for automated checks and `ui-designer` review. Only newly generated,
++short-lived member credentials/session may be visible in that test browser or
++private run logs. Never deliberately give the reviewer admin, database, provider,
++host or real-user credentials or real project data. The owner explicitly accepts
++the residual risk of an **unconfined** shared browser-tool server on this personal
++development host; do not claim it cannot access Docker, host secrets or another
++stack. Do not change production authentication or claim agent-runtime isolation.
++This proof uses the committed IMP-003 sign-in/account surface; IMP-004's
++uncommitted project behavior is not an IMP-015 acceptance dependency or part of
++its commit.
++**Required capabilities:** Operator-controlled Docker/Compose host, a fresh
++disposable test database and browser tools; no existing test login is reused.
++
++### Done looks like
++- A trusted test supervisor creates unique disposable stack/storage and per-run
++  credentials, brings up migrations and the real app, creates two member accounts
++  through normal auth, and proves the reviewer can interact with an authenticated
++  context at the local front door. No admin, DB, provider or host credentials
++  enter command arguments, reviewer prompts/browser-tool calls or logs, and no
++  credential values enter tracked files.
++  Disposable member login/session material may be visible in browser tool calls,
++  network inspection and private local logs; it is never committed, reused or
++  presented as safe outside the test stack. No test-only auth bypass or externally
++  published service is added.
++- Only synthetic data is intentionally placed in the disposable test stack.
++  The reviewer browser process is **not** OS-confined or proven unable to reach
++  host resources; this local-only owner risk acceptance is not evidence of a
++  privileged-agent boundary. Keep logs private, revoke both member sessions,
++  and remove only resources the supervisor created on normal exit and failure;
++  retained logs may hold revoked disposable tokens. Never clean up the owner's
++  existing interactive-test stack. Failed setup, sign-in or teardown fails
++  closed rather than substituting a mock preview.
++
++### Verification
++- Demonstrate repeatable fresh setup, real member sign-in and authenticated
++  UI interaction, denial of member-only requests to admin endpoints, browser
++  context handoff and rendered interaction at the agreed viewports. IMP-004 later
++  tests project creation and cross-user project denial using this fixture. Record
++  the actual supported setup/check commands after running them; exercise
++  member-to-admin API denial, expired/revoked session denial and cleanup without
++  touching existing developer data. Independently review test-credential handling,
++  resource ownership, no intentional privileged access, failure paths and the
++  explicitly accepted unconfined-host limitation; `ui-designer` confirms the
++  context is the real signed-in app.
++
++**Documentation impact:** AGENTS.md verified fixture/check procedure and local
++operator guide once proven, with no credential values or reusable login secrets.
++**Decision (2026-09-28):** Owner approved this independent, ready prerequisite
++for IMP-004's sixth recovery and wants automatic development/testing without
++manual sign-in. It is not delivered application behavior. If safe
++browser-context handoff cannot be proved with the available tools, leave IMP-004
++blocked and ask for a revised execution decision; do not silently use credentials
++in agent prompts or a fake UI. Because IMP-004's partial files already dirty this
++checkout, stage/commit only IMP-015's own verified changes and plan outcome; never
++include IMP-004 code, migrations, docs or test artifacts in that commit.
++**Blocker (2026-09-28):** The designer shares the coordinator's browser page, but
++no operator-only secret-safe browser attachment is verified; available reviewer
++browser tools can inspect HttpOnly session cookies and raw login requests. No
++fixture, authenticated review or cleanup proof ran. Owner must approve a restricted
++reviewer interface or revise the disposable-session exposure requirement; IMP-004
++remains blocked.
++**Recovery authorization (2026-09-28):** Owner explicitly accepted visibility of
++generated, short-lived, isolated **member-only** credentials/session to the
++reviewer browser and private logs; this does not apply to the manually created
++`imp004member` account or any real/admin/DB/provider secrets. The old browser
++visibility objection is narrowed, not evidence of a fixture or a safe browser
++process. Reuse this ID and the shared-page marker evidence; do not claim an
++operator-only handoff or remove the blocker until a trusted supervisor,
++reviewer-process confinement, real sign-in and teardown are independently
++verified. Owner reviewed the revised acceptance and explicitly approved this
++item's `[ ]` requeue for one bounded attempt. If any boundary cannot be proved,
++record a new `[!]` outcome rather than weakening it; IMP-004 remains `[!]`.
++**Bounded recovery blocker (2026-09-28):** No verified way to attach `ui-designer`
++to an OS-confined reviewer/browser-tool server; the available shared Playwright
++server permits server-process code execution and `--isolated` does not establish
++host/Docker/other-stack denial. Independent review found the boundary incomplete.
++No fixture, credentials, stack, sign-in, denial/teardown proof or commit ran;
++operator-provisioned confined reviewer attachment is required before retrying.
++**Local-only recovery authorization (2026-09-28):** The owner explicitly accepts the
++residual host-level risk of the unconfined shared Playwright tool server for a
++personal, synthetic IMP-015 and later IMP-004 test run, rather than provisioning
++OS confinement. The prior confinement requirement is superseded **only for this
++local test**; the historical blocker and failed attempt above remain recorded.
++This decision does not demonstrate host/Docker denial or relax IMP-002,
++production or shared-server security. Do not use the owner's `imp004member`
++password. A trusted supervisor must still create per-run Member logins and a
++fresh disposable stack, automate
++normal sign-in, show real authenticated rendering to `ui-designer`, prove app
++authorization/session revocation and safe cleanup, and obtain independent review.
++No fixture or authenticated review has been delivered. The owner reviewed this
++revised acceptance and explicitly approved one `[ ]` local-only recovery attempt.
++If verification fails, record a new `[!]` outcome; IMP-004 remains `[!]`.
++**Local-only recovery blocker (2026-09-28):** The disposable committed-HEAD
++fixture remains uncommitted in `scripts/local_browser_fixture.py` and its tests.
++Forty toolkit tests passed, but the first real Compose run failed at offline
++administrator bootstrap (exit 1, diagnostic output suppressed); the supervisor
++reported removal of its own containers, networks, volume and images. No member
++handoff, authenticated browser/design review, session-denial proof, repeat run or
++post-handoff teardown was verified. Independent review NEEDS WORK. This bounded
++recovery is exhausted; diagnose the bootstrap safely and seek owner authorization
++before retrying. Preserve IMP-004's dirty work and blocked status.
++**Focused recovery authorization (2026-09-28):** Reuse the
++existing uncommitted supervisor/tests and IMP-015 ID; do not restart or requeue
++IMP-004. The generated admin and member usernames contain `_`, which the
++committed `normalize_username` regex rejects even though its message and local
++guide claim it is allowed. Use valid synthetic names and regression-test all
++generated account names against the committed-app rule; do not alter product
++authentication in this fixture recovery. Treat that documentation/validator
++mismatch as a separate product-contract discrepancy for later owner triage.
++Because the bootstrap terminal output was suppressed, verify the actual failure
++cause on a fresh disposable run with bounded, redacted diagnostics only; never
++print or persist admin, DB or provider credentials. Prove an unattended fixture
++stays available throughout normal browser sign-in and `ui-designer` review,
++instead of ending when the runner's PTY stdin closes. Verify repeatable setup,
++authorization/session denials, owned-resource cleanup on success and failure,
++and no interference with the owner's existing local stack. Obtain independent
++full-diff review, affected operator docs and established toolkit checks; commit
++only independently verified IMP-015 changes, not IMP-004 or prior unrelated
++planning edits. If any gate cannot be proven, keep `[!]` with fresh evidence.
++Owner reviewed this same-ID recovery and explicitly approved one `[ ]` requeue;
++the previous failure and partial work remain recorded above. IMP-004 stays `[!]`
++until this item's real authenticated review and independent gates are verified.
++**Focused recovery blocker (2026-09-28):** Fresh disposable committed-HEAD
++Compose runs found `alembic upgrade head` exited 0 but `alembic current` was
++empty and the `users` table absent (bootstrap SQLSTATE 42P01). Migration revision
++files exist in the image; the Alembic head-discovery exception is unclassified.
++The committed username validator actually accepts `_`, so the earlier rejection
++explanation is incorrect. Partial fixture/tests remain uncommitted; 46 toolkit
++tests and Python compilation passed, but independent review NEEDS WORK. Failed
++runs reported owned-resource removal; no successful setup, member sign-in,
++browser/design handoff, session-denial proof, repeat run, final docs or commit.
++Diagnose Alembic discovery with bounded, redacted evidence before another
++owner-approved recovery. IMP-004 stays blocked.
++**Correction and diagnosis authorization (2026-09-28):** Retract the earlier assertion in
++the focused recovery authorization that `_` is rejected: the committed and dirty
++username patterns both accept it. Generated names are not an established cause
++of bootstrap failure; the associated documentation discrepancy was also a false
++claim. Preserve the older attempt text above as history, not current direction.
++On the existing uncommitted IMP-015 fixture, first classify why the fresh
++committed-HEAD app's Alembic upgrade reports success without a current revision
++or the `users` table. Inspect only the supervisor-owned disposable stack;
++compare configured script location, discovered revision IDs/head, image contents,
++same DB/schema identity and table presence using bounded allowlisted outputs.
++Never dump environment files, URLs, raw migration logs, admin/DB credentials or
++another stack. Reconcile with the previously verified committed-app migration
++path before changing anything; if an app migration or trust boundary change is
++needed, stop for owner scope. If a fixture-only cause is established, repair it
++in this same ID, then prove two fresh runs, real Member sign-in, ui-designer
++authenticated review, session/authorization denials, owned teardown after
++handoff and failure, independent review, docs and final checks. No IMP-004 or
++unrelated dirty files in an IMP-015 commit. The owner reviewed this bounded,
++redacted diagnosis-first plan and explicitly approved one `[ ]` requeue of the
++same ID; if cause or gates remain unverified, record a new `[!]` outcome.
++IMP-004 stays `[!]` until IMP-015 is actually verified.
++**Diagnosis-first recovery blocker (2026-09-28):** The migration failure was
++fixture-only: restrictive supervisor umask left archived `migrations/versions`
++unreadable by the container runtime, so Alembic discovered no revisions.
++Restoring nested archive directory permissions produced a fresh disposable
++migration probe with head/current `20260925_0002` and `users` present; one full
++setup reportedly reached synthetic-member handoff and API denials. Coordinator
++access to the private handoff log was denied, so browser sign-in, same-page
++`ui-designer` review, second full run and post-handoff teardown were not verified.
++The supervisor was signaled and exited, but its cleanup report was inaccessible.
++Review found partial-account/admin-session failure paths; fixture-only repairs
++and tests remain uncommitted and need re-review. Toolkit tests passed (56);
++no affected docs, delivery commit, push or PR. Preserve the partial scripts and
++IMP-004 work; obtain an authorized accessible disposable-member handoff and
++repeat live gates before another owner-approved requeue. IMP-004 remains blocked.
++**Permitted-handoff recovery authorization (2026-09-28):** Owner authorizes a narrowly
++coordinator-readable private handoff limited to the supervisor's generated,
++short-lived Member login and a sanitized owned-stack cleanup status. This does
++not authorize access to the previously denied nested log by another tool,
++generic reads of temporary directories, owner-created accounts or privileged
++secrets. Before provisioning credentials, prove that the proposed channel is
++actually readable through its permitted tool using a harmless marker; if it is
++denied, stop and ask for explicit permission rather than switching transports.
++Keep handoff private and short-lived; neither credentials nor cookies enter Git,
++application files or public output. A reviewer receives only the disposable
++Member login through the existing local-only risk exception. Run two fresh
++committed-app setups, normal browser sign-in in the coordinator's shared page,
++real `ui-designer` rendered review, member/admin and revoked-session denials;
++verify supervisor-owned account/session teardown and exact resource removal
++**after** handoff, plus failure cleanup and unaffected owner stacks. Re-review
++the final fixture diff including prior partial-account/admin-session repairs,
++update operator docs and run established checks. Stage/commit only verified
++IMP-015 work without IMP-004 or unrelated dirty planning edits. If any gate
++fails or the output channel remains denied, record `[!]` and preserve evidence.
++Owner reviewed this same-ID recovery and explicitly approved one `[ ]` requeue;
++IMP-004 stays `[!]` until all IMP-015 acceptance and delivery gates pass.
++**Permitted-handoff recovery blocker (2026-09-29):** The required pre-credential
++harmless-marker write to the proposed private `/tmp/opencode/` handoff channel was
++denied by tool permission. No alternate transport or denied-path read was attempted;
++no credentials, stack, browser run, cleanup proof, docs or commit resulted. Grant
++explicit access to a private coordinator-readable handoff channel before requeueing;
++IMP-004 remains blocked.
++**Channel proof and owner-authorized recovery (2026-09-29):** In a fresh manual
++`overnight` OpenCode session, the owner temporarily allowed the coordinator's
++`edit` tool and retained a narrow external-directory allowance for
++`/tmp/opencode/impostr-review-handoff/`. Its file-writing tool created a harmless
++`marker.txt` and its `Read` tool returned `MARKER-OK`. This proves that tool
++write/read path, **not** synthetic account handoff, authenticated review or
++cleanup. The broader `edit` permission can modify any checkout file; keep this
++exception to one bounded IMP-015 attempt, preserve IMP-004 and unrelated dirty
++work, and restore the original restrictive coordinator edit rule afterward
++whether the attempt passes or blocks. Do not widen external-directory access.
++The owner explicitly approved one same-ID `[ ]` requeue. Use the permitted
++private channel only for generated short-lived Member login and sanitized owned
++cleanup status, never owner accounts or privileged data. Still prove two real
++authenticated browser runs, reviewer/design sign-off, authorization/session
++denials, post-handoff teardown, docs and final checks before an isolated commit
++or `[x]`. If any gate fails, record `[!]` with evidence; IMP-004 remains `[!]`.
++**Current handoff (2026-09-29):** Two fresh committed-app browser runs, independent
++review and operator docs passed; fixture/docs committed locally as `2d71c1b`.
++The installed agent's temporary broad edit rule
++cannot be restored through this session's permitted external-directory tools.
++Owner must restore its restrictive rule before completion; IMP-004 remains blocked.
++**Verification-only recovery authorization (2026-09-29):** The owner reports
++restoring the installed `overnight` agent's restrictive edit allowlist and
++explicitly approves one `[ ]` same-ID verification-only pass. In a **fresh**
++agent process, verify the effective rule denies broad checkout edits and permits
++only its original planning/outcome files, without printing unrelated config or
++credentials. Recheck commit `2d71c1b`, its intended paths and the recorded
++real-browser, independent-review and cleanup evidence. Do not redo feature
++implementation or treat a commit alone as completion. If the permission and
++existing gates hold, the coordinator may record `[x]` for IMP-015; otherwise
++record `[!]` with the remaining reason. Do not change IMP-004's `[!]` outcome
++in this verification pass; its separate sixth repair still requires readiness
++review and all its own acceptance gates. No push or PR.
++**Verified outcome (2026-09-29):** Fresh-process edit probe denied a broad
++checkout write and allowed only the original planning/outcome paths. Commit
++`2d71c1b` contains only the fixture, its tests and operator docs; recorded real
++Member browser/designer PASS, 403/401 denials, owned cleanup, independent
++APPROVED review and live SIGKILL recovery remain valid. Toolkit recheck passed
++82 tests (one gated live test skipped). Local-only; no push or PR. IMP-004
++remains blocked pending its own sixth-recovery readiness review and gates.
++
++---
++
++## [-] IMP-016 — Prove private HTTPS LAN access
++
++Type: feature
++**Depends on:** IMP-001, IMP-003
++**Scope:** Permit the one owner to reach the existing same-origin app on this PC
++from a phone/another computer through an operator-managed private HTTPS route.
++Keep backend, database, model relay and OpenCode worker off browser/LAN ingress;
++do not bind raw HTTP publicly as a shortcut.
++**Required capabilities:** Operator-selected LAN/VPN reachability, private HTTPS
++origin/certificate and trusted proxy/firewall policy, plus a second test device.
++None is specified or verified; no network changes are authorized now.
++
++### Done looks like
++- Only the approved private HTTPS origin serves authenticated UI/API; exact
++  Origin/CSRF, secure session cookies, Host/forwarded-header handling and logout
++  work through the trusted route. Unapproved HTTP/origins and direct privileged
++  service ingress fail; existing loopback development remains supported.
++- Operator instructions state what is actually configured, how to revoke access
++  and the limits of one-owner private access. No public or multi-user claim.
++
++### Verification
++- Test normal and negative sign-in/CSRF/Host/session cases from an actual phone or
++  other computer on the approved private route; confirm no direct DB/worker/
++  relay exposure and that streaming still works when chat is integrated. Review
++  the rendered phone UI. Do not invent an address, certificate or command.
++
++**Documentation impact:** Verified private-access setup/recovery in the operator
++guide; PROJECT.md release boundary once the route is real.
++**Decision:** Owner approved this draft first-release LAN scope but defers
++network provisioning for now and selected private HTTPS instead of plain HTTP.
++Remain `[-]` until actual operator route/certificate and execution checks exist.
++
++---
++
++## [-] IMP-017 — Ingest and privately store project attachments
++
++Type: feature
++**Depends on:** IMP-004
++**Scope:** Authenticated, project-scoped private media intake, processing and
++lifecycle for PNG/JPEG, UTF-8 text/Markdown, selectable-text PDF and text-only
++DOCX. IMP-018 binds chosen media to a live conversation; no chat/model inclusion
++is delivered by this item.
++**Required capabilities:** Private retained storage with synthetic backup/
++restore plan and a networkless, resource-bounded processing boundary. Tested
++file/turn/page/pixel/storage caps must be chosen before readiness.
++
++### Done looks like
++- Opaque attachment IDs and server project authorization protect upload,
++  processing status, preview/fetch and deletion. Originals and derived text
++  remain private with the project until explicit deletion; IMP-018 records and
++  authorizes their conversation usage. Backup/restore includes retained media.
++  No original or unsafe active preview enters the public web root.
++- Validate bytes as well as type/size, reject traversal, symlinks, active SVG/
++  HTML, macros/archives and abusive PDFs/DOCX/images. Extract only bounded
++  selectable PDF/DOCX text in a restricted, networkless process. No scanned PDF
++  or embedded DOCX-image understanding is claimed; no remote URL fetch.
++
++### Verification
++- API/storage tests for cross-project/session IDs, size/type spoofing, parser
++  exhaustion and failure cleanup, retained/deleted content, and synthetic
++  restore. Independent security review of the processing and data lifecycle;
++  no model-media claim from an uploaded filename or successful extraction.
++
++**Documentation impact:** Supported formats, actual measured limits, deletion
++semantics and recovery instructions after proof.
++**Decision:** Owner approved this draft scope, formats and private retention,
++not numeric limits or a verified parser boundary. Not runner-eligible yet.
++
++---
++
++## [-] IMP-018 — Attach verified media to planning chat
++
++Type: feature
++**Depends on:** IMP-005, IMP-017
++**Scope:** Accessible attachment composer and project-session model handoff.
++Only explicitly selected, validated derivatives enter a turn; agent-proposed
++Markdown still uses the existing revision/approval rules.
++**Required capabilities:** IMP-002's measured OpenCode/relay/model input contract
++for actual PNG/JPEG pixels and extracted UTF-8 PDF/DOCX/text. Unsupported
++modality or absent live proof is a blocker, not a simulated success.
++
++### Done looks like
++- Per-file **Uploading**, **Processing**, **Ready**, **Failed** and retry/remove
++  states show type and applicable bounds before send. After send, distinguish
++  **Stored** from **Included in this model turn** and **Not included** using the
++  real gateway result. Explain text-only PDF/DOCX limitations and that deletion
++  cannot retract content already sent to a model.
++- Resumed/new-tab chat preserves server-known attachment state and avoids
++  duplicate turns on reconnect. Wrong-project/session or deleted attachment IDs
++  fail server-side; failed extraction or unsupported model input cannot be
++  presented as model-visible content.
++
++### Verification
++- Synthetic image question answerable only from pixels, selectable PDF/DOCX/
++  text turns, honest failures for scans/embedded images, revoke/delete/reconnect
++  and cross-project denial tests against the actual model adapter. Rendered
++  keyboard/screen-reader/phone review at 1440/1024/768/375px; independent
++  review of media provenance and authorization.
++
++**Documentation impact:** User-visible support/retention/fidelity and provider
++handoff limitations; no attachment in the three approved Markdown downloads.
++**Decision:** Owner approved this draft first-release media scope and bounded
++synthetic model tests, but no actual image/attachment protocol is verified yet.
++Remain `[-]` until the model capability and prior slices are real.
++
++---
++
++## [-] IMP-019 — Qualify a later multi-user shared-server release
++
++Type: release-hardening
++**Depends on:** IMP-011
++**Scope:** Later release qualification for multiple real users and a supported
++server deployment, not part of the one-owner personal PR. Preserve the current
++application's role/ownership checks; do not interpret the local browser-server
++risk exception or a personal LAN smoke as this outcome.
++**Required capabilities:** Operator-provisioned intended server, isolation and
++relay under its service identity, private TLS/network policy, two disposable
++accounts and backup/restore facility.
++
++### Done looks like
++- Host-run agent, tenant/session, model-secret and ingress denials; bounded
++  resources, dependency/secret checks, backup/recovery runbook and independent
++  security review pass on the actual server. Two-user end-to-end private project,
++  approvals/chat/attachment/download tests demonstrate no cross-user access.
++
++### Verification
++- Perform the full negative/access/recovery drill on the eventual server;
++  carry over no unverified proof from this PC. Keep blocked or draft until
++  operator setup and a separate owner-approved release plan exist.
++
++**Documentation impact:** Multi-user deployment, operations and residual risks.
++**Decision:** Owner wants to envision the complete one-owner app first; this
++future item is intentionally `[-]`, not a current blocker or completed gate.
+diff --git a/DONE.md b/DONE.md
+index 3831e3a..3bb5588 100644
+--- a/DONE.md
++++ b/DONE.md
+@@ -1,2 +1,22 @@
+ IMP-001 — Bootstrapped the local React/FastAPI/PostgreSQL/Nginx stack with an Alembic baseline, pinned locks, tests, and operator instructions. Verified fresh migration, health and outage recovery, API/web gates (4 tests each), six toolkit tests, responsive browser checks, and independent review; committed as `af0c9e7` on `feature/impostr-v1`. No push/PR; shared-server release and final Python dependency audit remain out of scope/unverified.
+ IMP-002 blocked: OpenCode and a bare namespace smoke exist, but no secret-safe model broker, isolated live session, or denial evidence; no gateway was exposed. IMP-003 delivered offline admin bootstrap/recovery, authenticated account controls, private metadata access, UI, migration, tests and local docs in `e4558ae` on `feature/impostr-v1`. Verified API 32 passed/3 skipped, PostgreSQL 3 passed, web 6 passed plus checks, toolkit 6 passed, local browser and independent review. No push/PR; TLS/proxy, agent isolation, backup/restore and final dependency audits remain release gates.
++IMP-004 blocked after three implementation attempts: uncommitted creation, template drafts, revision/conflict history, private workspaces, migration, UI and tests remain on `feature/impostr-v1`. Latest reported checks: API 49 passed/7 PostgreSQL-only skipped plus Ruff/format/mypy, disposable PostgreSQL 7 passed at migration 0003, web 19 passed plus lint/format/typecheck/build; independent review still finds dirty-navigation/history/pagination races. Rendered review and documentation are pending; no commit, push or PR.
++IMP-004 remains blocked after the owner-authorized fourth focused attempt on `feature/impostr-v1`: web gate 27 passed with lint/format/typecheck/build, but independent re-review found edit-loss/stranding, inconsistent history snapshot, and normalized-name DB-length defects. Mock rendered review was not authenticated sign-off; final API/PostgreSQL gates and docs remain pending. Partial work preserved without commit/push/PR; dependent work stopped.
++IMP-004 blocked after fifth owner-authorized repair: focused API (50 passed/8 skipped), isolated PostgreSQL (8 passed, migration 0004), web (31 passed plus checks), toolkit (6 passed) reported passing, but full-diff re-review NEEDS WORK on cross-account delayed-create metadata leakage and shifting proposal pagination. Authenticated rendered review, docs and final gates not completed; uncommitted work preserved on `feature/impostr-v1` at `2222dd2`, no push/PR or dependent work. Owner decision required.
++IMP-015 blocked: a harmless marker proved `ui-designer` shares the browser page, but no operator-only credential-safe attachment or reviewer cookie/network isolation exists; no disposable stack, sign-in, authenticated UI or cleanup was verified. No implementation commit, push or PR; IMP-004 remains blocked pending an owner decision on a restricted reviewer interface or disposable-session exposure.
++IMP-015 bounded recovery blocked on `feature/impostr-v1` at `2222dd2`: architect/developer feasibility and independent review found no verified OS-confined reviewer/browser-tool server attachment; shared Playwright execution cannot prove Docker/host/other-stack denial. No fixture, secrets, stack, authenticated review, cleanup, docs or commit; existing IMP-004 work preserved and blocked. Operator-provisioned confined attachment and negative checks are required before retrying; no push/PR.
++IMP-015 local-only recovery blocked on `feature/impostr-v1` at `2222dd2`: uncommitted disposable committed-app supervisor/tests added; 40 toolkit tests passed, but live Compose setup exited 1 at hidden-PTY offline admin bootstrap. The supervisor reported removing its owned stack/volume/images; no member sign-in, browser handoff, design review, full teardown or final docs were verified. Independent review NEEDS WORK; no commit/push/PR, IMP-004 remains blocked. Diagnose bootstrap and obtain owner recovery decision.
++IMP-015 focused recovery blocked on `feature/impostr-v1` at `2222dd2`: 46 toolkit tests and Python compilation passed on uncommitted supervisor/tests, but fresh disposable migration reports success without a current Alembic revision or `users` table; head-discovery exception remains unclassified. Committed username validation accepts `_`, contrary to the prior diagnosis. Failed runs reported owned-resource removal; independent review NEEDS WORK, with no authenticated handoff, rendered review, final docs, commit, push or PR. IMP-004 remains blocked; owner decision required before another bounded diagnosis.
++IMP-015 diagnosis-first recovery blocked: fixture archive umask caused unreadable migration revisions; repaired uncommitted scripts passed a fresh migration probe and one setup reportedly reached handoff. Private handoff log access was denied to the coordinator, preventing browser/design review and cleanup confirmation; second run and independent final approval remain outstanding. Further failure-path repairs reached 56 reported passing toolkit tests; no docs, commit, push or PR. IMP-004 remains blocked pending an authorized accessible disposable-member handoff and full verification.
++IMP-015 permitted-handoff recovery blocked: harmless-marker creation in the proposed private `/tmp/opencode/` channel was denied before credentials or Docker setup. No alternate transport, browser review, live cleanup proof, docs or commit; existing IMP-004 and fixture partial work preserved on `feature/impostr-v1`. Explicit handoff-channel permission is needed; IMP-004 remains blocked.
++IMP-015 current attempt: five fresh committed-HEAD synthetic browser setups succeeded, including two after recovery repair; normal Member sign-in, shared-page designer PASS, 403/401 denials and owned teardown verified; 82 toolkit tests passed (one gated skip), live SIGKILL recovery passed, independent fixture review APPROVED. Fixture/docs committed locally as `2d71c1b`; completion is blocked until the owner restores restrictive installed `overnight` edit permissions, which this session cannot access; IMP-004 remains blocked. No push/PR or merge.
++IMP-015 verified complete on `feature/impostr-v1`: fresh-process edit probe denied broad checkout writes and allowed original planning/outcome files; fixture/docs commit `2d71c1b` is isolated. Recorded real browser/designer PASS, 403/401 denials, cleanup and independent APPROVED review hold; toolkit recheck 82 passed/1 gated skip (live SIGKILL previously passed). IMP-004 remains blocked for separate review; no push/PR.
++IMP-004 sixth recovery blocked on `feature/impostr-v1` at `2d71c1b`: fail-closed candidate preflight at `cddff403…` verified migration 0004, Member project/three drafts, authorization and cleanup; fifth-review race repairs passed reported API 51/9 skipped, PostgreSQL 9, web 33 and coordinator toolkit 96/1 skipped. Full-diff review INCOMPLETE: the private-channel marker write was denied, preventing authenticated candidate browser/design review; the earlier launch's sanitized cleanup reports removed resources. Docs/final gates/commit pending; dirty work preserved, dependents stopped, no push/PR.
++IMP-004 complete locally on `feature/impostr-v1` in `60e9480`: candidate `a7675f6d…` passed fresh migration 0004, synthetic Member drafts/cross-user denial, authenticated designer PASS at 1440/1024/768/375 and owned cleanup; independent review APPROVED. API 51 passed/9 skipped plus static checks, isolated PostgreSQL 9 passed, web 35 passed plus checks, toolkit 98 passed/1 gated skip; data and recovery-limit docs included. Backlog outcome updated in working tree; unrelated planning edits/logs excluded from commit. No push/PR, backup restore drill, agent gateway or shared-server release; operator must restore restrictive coordinator edit rules after batch.
++IMP-013 blocked on `feature/impostr-v1` at `60e9480`: uncommitted pair-approval API/migration/tests, UI and candidate fixture preserved. Focused repairs passed reported API 63/10 skipped, isolated PostgreSQL 10, web 47; earlier toolkit 117/1 skipped and candidate preflight predate final edits. Independent re-review NEEDS WORK on paired-custom-element `TBD` approval and pair-refresh/history head race; no current authenticated rendered review, final docs/gates or commit. Dependent work stopped; no push/PR.
++IMP-007 blocked on `feature/impostr-v1` at `31d0f8f`: partial backlog parser/task API/raw-save guard/read-only summary and tests remain uncommitted after three substantive passes. Independent re-review NEEDS WORK: dependency beneath a non-task H2 is reported but not editable via task API. Developer-reported API 122/11 skipped plus checks, web 61 plus checks, PostgreSQL migration 0005/concurrency 1 and toolkit 117/1 skipped passed; rendered review, docs and final acceptance pending. IMP-014/009 remain blocked; no commit/push/PR.
++IMP-007 bounded recovery blocked on `feature/impostr-v1` at `31d0f8f`: H2 dependency editing and final-outcome append repairs remain uncommitted; independent full-diff re-review NEEDS WORK on no-newline body merging preserved H2 and unprotected compact Branch:/PR: metadata. Developer-reported API 128 passed/11 skips plus checks; final web/PostgreSQL/toolkit, authenticated rendered review and docs not run. Partial work preserved; IMP-014/009 remain blocked, no commit/push/PR.
++IMP-007 complete locally on `feature/impostr-v1` in `e2cabfd`: bounded backlog task/raw-save validation, pinned candidate fixture, tests and help docs; full-diff reviewer APPROVED. API 177 passed/11 skipped plus static checks, isolated PostgreSQL 11, web 62 plus checks, toolkit 128/1 skipped, fingerprint-pinned synthetic Member browser/design PASS at 1440/1024/768/375 and verified owned cleanup. No push/PR/merge; separate IMP-014 task-list UI and IMP-009 approval/download remain future work.
++IMP-009 and IMP-014 blocked on `feature/impostr-v1` at `e2cabfd`: uncommitted approval/download API and migration need repair of a deferred-heading validation bypass (review NEEDS WORK); uncommitted task rail/editor needs exact-candidate authenticated rendered/keyboard review (review INCOMPLETE). Reported API 227 passed/12 skipped plus static checks and focused PostgreSQL migration 0006 test; coordinator web gate 71 tests plus checks passed. Partial work preserved; no affected docs, delivery commit, push or PR. See BACKLOG.md and `.opencode/progress.md` for recovery gates.
++IMP-009 remains blocked at `e2cabfd` after six cumulative attempts: independent full-diff review still finds empty Scope borrowing `Depends on: None` and suffix `unresolved` heading bypasses. Intermediate reported API 241/12 skipped with static checks, isolated PostgreSQL migration 0006/focused 4 and toolkit 128/1 skipped passed; final acceptance, docs and commit did not. Preserve dirty IMP-009 API/migration/tests and unrelated IMP-014 web work; owner decision needed before another repair. No push/PR.
++IMP-009 blocked on `feature/impostr-v1` at `e2cabfd` after eight cumulative attempts: tests-first boundary repairs remain uncommitted; full-diff re-review NEEDS WORK because empty Scope borrows other metadata and an unresolved child heading with trailing explanation can approve/download an incomplete backlog. Developer-reported API 258/12 skips plus checks, isolated PostgreSQL migration 0006/12 tests, toolkit 128/1 skip passed, not final acceptance. No docs, commit, push or PR; preserve IMP-009 partial work and unrelated IMP-014 changes. New owner budget/decision required.
+[0m
+[0m% [0mPatch 1 file
+**IMP-009 is blocked** on `feature/impostr-v1`. The two owner-authorized recovery attempts are exhausted, and independent full-diff review still found two ways an incomplete ready task could enter an approved, downloadable backlog. The reported API, PostgreSQL, and toolkit checks passed, but they do not establish final acceptance.
+
+I marked IMP-009 `[!]`, recorded the blocker in `.opencode/progress.md`, and appended the requested summary to `DONE.md`. The uncommitted IMP-009 work and unrelated IMP-014 edits remain preserved. No docs pass, commit, push, or PR was made. Further implementation needs an owner decision and a new finite attempt budget.
+[2026-09-30 20:10:02] Session 1 completed.
+Reset 0 unfinished item(s) to [ ] ready.
+[2026-09-30 20:10:12] No dependency-eligible items; stopping with 6 ready item(s) waiting.
+  [ ] IMP-005 — Project-scoped resumable planning chats (waiting for IMP-002)
+  [ ] IMP-006 — Integrate chat with first-stage document review (waiting for IMP-005)
+  [ ] IMP-008 — Integrate live chat with backlog planning layout (waiting for IMP-005, IMP-006, IMP-014)
+  [ ] IMP-010 — Three-file final review experience (waiting for IMP-014, IMP-009)
+  [ ] IMP-012 — Verify work branch and open single development PR (waiting for IMP-011)
+  [ ] IMP-014 — Human-only collapsible backlog planning layout (waiting for IMP-009)
+[2026-09-30 20:10:12] 
+[2026-09-30 20:10:12] ━━━ All sessions complete ━━━
+[2026-09-30 20:10:12] 
+[2026-09-30 20:10:12] Backlog status:
+  [x] done  —  IMP-001 — Bootstrap app and database baseline
+  [!] blocked  —  IMP-002 — Prove safe OpenCode web-session integration
+  [x] done  —  IMP-003 — Admin-provisioned login and private project access
+  [x] done  —  IMP-004 — Seed projects and versioned Markdown drafts
+  [ ] ready  —  IMP-005 — Project-scoped resumable planning chats
+  [ ] ready  —  IMP-006 — Integrate chat with first-stage document review
+  [x] done  —  IMP-007 — Validate and edit runner-compatible backlog
+  [ ] ready  —  IMP-008 — Integrate live chat with backlog planning layout
+  [!] blocked  —  IMP-009 — Approve backlog and serve immutable downloads
+  [ ] ready  —  IMP-010 — Three-file final review experience
+  [-] skipped  —  IMP-011 — One-owner private-access release and recovery acceptance
+  [ ] ready  —  IMP-012 — Verify work branch and open single development PR
+  [x] done  —  IMP-013 — Human-only first-stage document review and pair approval
+  [ ] ready  —  IMP-014 — Human-only collapsible backlog planning layout
+  [x] done  —  IMP-015 — Prove automated authenticated local browser review
+  [-] skipped  —  IMP-016 — Prove private HTTPS LAN access
+  [-] skipped  —  IMP-017 — Ingest and privately store project attachments
+  [-] skipped  —  IMP-018 — Attach verified media to planning chat
+  [-] skipped  —  IMP-019 — Qualify a later multi-user shared-server release
+[2026-09-30 20:10:12] 
+[2026-09-30 20:10:12] Blocked items (need your attention before next run):
+  [!] IMP-002 — Prove safe OpenCode web-session integration
+  [!] IMP-009 — Approve backlog and serve immutable downloads
+[2026-09-30 20:10:12] 
+[2026-09-30 20:10:12] Morning review:
+[2026-09-30 20:10:12]   cat DONE.md
+[2026-09-30 20:10:12]   cat BACKLOG.md
+[2026-09-30 20:10:12]   git log --oneline

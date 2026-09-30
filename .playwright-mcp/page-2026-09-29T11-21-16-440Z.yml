@@ -1,0 +1,139 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - generic [ref=e35]:
+      - generic [ref=e36]: m13579ebc6390c · Member
+      - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, m13579ebc6390c" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access project metadata created by your account.
+        - generic [ref=e44]: Member
+      - status [ref=e45]: Signed in as m13579ebc6390c.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Private project drafts
+            - heading "Projects" [level=2] [ref=e50]
+            - paragraph [ref=e51]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=e52]:
+            - generic [ref=e53]: Project name
+            - textbox "Project name" [ref=e54]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Your project list" [level=3] [ref=e82]
+              - generic [ref=e59]: 2 projects
+            - list [ref=e83]:
+              - listitem [ref=e260]:
+                - button "Open project Second synthetic review project" [ref=e261]:
+                  - generic [ref=e262]:
+                    - generic [ref=e263]: Second synthetic review project
+                    - generic [ref=e264]: Created Sep 29, 2026, 11:19 AM UTC
+                  - generic [aria-hidden] [ref=e265]: View
+              - listitem [ref=e84]:
+                - button "Open project Synthetic planning review" [pressed] [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: Synthetic planning review
+                    - generic [ref=e88]: Created Sep 29, 2026, 11:14 AM UTC
+                  - generic [aria-hidden] [ref=e89]: Open
+        - generic [ref=e291]:
+          - generic [ref=e292]:
+            - generic [ref=e293]:
+              - paragraph [ref=e294]: Synthetic planning review
+              - heading "Planning drafts" [level=3] [ref=e295]
+              - paragraph [ref=e296]: Project created Sep 29, 2026, 11:14 AM UTC · changes create immutable drafts
+            - generic [ref=e297]: Draft only
+          - tablist "Draft documents" [ref=e298]:
+            - tab "Project" [ref=e299]
+            - tab "Agent rules" [ref=e300]
+            - tab "Backlog" [selected] [ref=e301]
+          - tabpanel "Backlog" [ref=e315]:
+            - generic [ref=e303]:
+              - generic [ref=e304]:
+                - paragraph [ref=e305]: BACKLOG.md · revision 3
+                - paragraph [ref=e306]: Saved human draft
+              - generic [ref=e307]: 35 / 131,072 bytes
+            - generic [ref=e308]: Edit BACKLOG.md
+            - textbox "Edit BACKLOG.md" [ref=e316]: "# Synthetic backlog from first tab"
+            - generic [ref=e310]:
+              - button "Save draft" [disabled] [ref=e311]
+              - button "Discard editor changes" [disabled] [ref=e312]
+              - button "Hide history" [expanded] [ref=e317]
+            - region [ref=e358]:
+              - generic [ref=e359]:
+                - heading "Compare Conflict proposal with saved revision 3" [level=4] [ref=e360]
+                - button "Close comparison" [ref=e361]
+              - generic [ref=e362]:
+                - article [ref=e363]:
+                  - heading "Saved revision 3" [level=5] [ref=e364]
+                  - generic [ref=e365]: "# Synthetic backlog from first tab"
+                - article [ref=e366]:
+                  - heading "Conflict proposal" [level=5] [ref=e367]
+                  - generic [ref=e368]: "# Synthetic backlog from first tab"
+            - region [ref=e318]:
+              - generic [ref=e319]:
+                - generic [ref=e320]:
+                  - paragraph [ref=e321]: Immutable records
+                  - heading "BACKLOG.md history" [level=4] [ref=e322]
+                - generic [ref=e323]: Current revision 3
+              - generic [ref=e324]:
+                - heading "Saved revisions" [level=5] [ref=e325]
+                - list [ref=e326]:
+                  - listitem [ref=e327]:
+                    - generic [ref=e328]:
+                      - generic [ref=e329]: Revision 3 · current
+                      - generic [ref=e330]: Human edit · Sep 29, 2026, 11:18 AM UTC
+                    - generic [ref=e331]:
+                      - button "Compare revision 3" [ref=e332]
+                      - button "Reapply revision 3 in editor" [ref=e333]
+                  - listitem [ref=e334]:
+                    - generic [ref=e335]:
+                      - generic [ref=e336]: Revision 2
+                      - generic [ref=e337]: Human edit · Sep 29, 2026, 11:17 AM UTC
+                    - generic [ref=e338]:
+                      - button "Compare revision 2" [ref=e339]
+                      - button "Reapply revision 2 in editor" [ref=e340]
+                  - listitem [ref=e341]:
+                    - generic [ref=e342]:
+                      - generic [ref=e343]: Revision 1
+                      - generic [ref=e344]: Starter template · Sep 29, 2026, 11:14 AM UTC
+                    - paragraph [ref=e345]: Source BACKLOG.md.example · SHA-256 aa2f4000af2318242ad410ea6b32602611636e3f0399b7a677d42a06a883eb2d
+                    - generic [ref=e346]:
+                      - button "Compare revision 1" [ref=e347]
+                      - button "Reapply revision 1 in editor" [ref=e348]
+              - generic [ref=e349]:
+                - heading "Conflict proposals" [level=5] [ref=e350]
+                - list [ref=e351]:
+                  - listitem [ref=e352]:
+                    - paragraph [ref=e353]: Conflict proposal · expected revision 1, newer revision 2
+                    - paragraph [ref=e354]: Saved Sep 29, 2026, 11:17 AM UTC
+                    - generic [ref=e355]:
+                      - button "Compare conflict proposal" [active] [ref=e356]
+                      - button "Reapply conflict proposal in editor" [ref=e357]
+            - paragraph [ref=e314]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=e66]:
+        - paragraph [ref=e67]: Account security
+        - heading "Change your password" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Changing your password signs out every other active session.
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Current password
+            - generic [ref=e73]:
+              - textbox "Current password" [ref=e74]
+              - button "Show" [ref=e75]
+          - generic [ref=e76]:
+            - generic [ref=e77]: New password
+            - generic [ref=e78]:
+              - textbox "New password" [ref=e79]
+              - button "Show" [ref=e80]
+          - button "Update password" [ref=e81]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

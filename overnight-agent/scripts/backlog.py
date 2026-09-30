@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Manage the Markdown work queue used by run-tonight.sh.
 
-Commands: count, count-outcomes, sprint-branch, count-eligible, list-waiting,
-claim-batch, next-batch, mark-running, reset-running, list-blocked, list-all.
+Commands: count, count-running, count-outcomes, sprint-branch, count-eligible,
+list-waiting, claim-batch, next-batch, mark-running, reset-running, reconcile,
+list-blocked, list-all.
 count succeeds with zero for an empty queue. claim-batch/next-batch/mark-running return 1
 when no work is available; invalid input returns 2. Completion, Git operations,
 verification, and recovery decisions belong to the agents and project instructions.
@@ -13,13 +14,37 @@ import os
 from pathlib import Path
 import re
 import stat
+import subprocess
 import sys
 import tempfile
 
 
 STATUS_PATTERN = re.compile(r"^## \[([ ~x!\-])\] (.+)$")
 ID_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*-\d+)(?:\s|$)")
-DEPENDENCY_PATTERN = re.compile(r"(?m)^\s*(?:\*\*)?Depends on:(?:\*\*)?\s*(.*?)\s*$")
+DEPENDENCY_PATTERN = re.compile(r"(?m)^[ \t]*(?:\*\*)?Depends on:(?:\*\*)?[ \t]*(.*?)[ \t]*$")
+
+
+def task_key(item: dict) -> str:
+    match = ID_PATTERN.match(item["title"])
+    return (match[1] if match else item["title"]).casefold()
+
+
+def outside_fences(content: str) -> str:
+    """Hide fenced examples while preserving offsets for metadata edits."""
+    result, fence = [], None
+    for line in content.splitlines(keepends=True):
+        text = line.rstrip("\r\n")
+        if fence:
+            hidden = True
+            if re.fullmatch(r" {0,3}" + re.escape(fence[0]) + "{" + str(fence[1]) + r",}\s*", text):
+                fence = None
+        else:
+            opening = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", text)
+            hidden = bool(opening)
+            if opening:
+                fence = (opening[1][0], len(opening[1]))
+        result.append("".join(char if char in "\r\n" else " " for char in line) if hidden else line)
+    return "".join(result)
 
 
 def load(path: str) -> str:
@@ -45,7 +70,7 @@ def save(path: str, content: str) -> None:
 
 def get_items(content: str) -> list[dict]:
     """Read task headings outside fenced examples; reject ambiguous identities."""
-    items, identities, titles = [], set(), set()
+    items, identities, titles, boundaries = [], set(), set(), []
     offset, fence = 0, None
     for line in content.splitlines(keepends=True):
         text = line.rstrip("\r\n")
@@ -57,6 +82,8 @@ def get_items(content: str) -> list[dict]:
             if opening:
                 fence = (opening.group(1)[0], len(opening.group(1)))
             else:
+                if re.match(r"^ {0,3}#{1,2}(?:\s|$)", text):
+                    boundaries.append(offset)
                 match = STATUS_PATTERN.fullmatch(text)
                 if match:
                     title = match.group(2).strip()
@@ -74,7 +101,8 @@ def get_items(content: str) -> list[dict]:
                     raise ValueError(f"Invalid task heading: {text}")
         offset += len(line)
     for index, item in enumerate(items):
-        end = items[index + 1]["header_start"] if index + 1 < len(items) else len(content)
+        end = next((position for position in boundaries if position > item["header_start"]), len(content))
+        item["section_end"] = end
         item["body"] = content[item["header_end"]:end].strip()
     return items
 
@@ -99,40 +127,61 @@ def cmd_count_outcomes(path: str) -> int:
     return 0
 
 
+def cmd_count_running(path: str) -> int:
+    print(sum(item["status"] == "~" for item in get_items(load(path))))
+    return 0
+
+
 def cmd_sprint_branch(path: str) -> int:
-    branches = re.findall(r"(?m)^-? ?Sprint branch: [`]?([^\s`]+)[`]?\s*$", load(path))
+    branches = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?(?:\*\*)?Sprint branch:(?:\*\*)?[ \t]*`?([^\s`]+)`?[ \t]*$", outside_fences(load(path)))
     if len(branches) != 1 or branches[0].startswith("<"):
         raise ValueError("Expected one configured Sprint branch in BACKLOG.md.")
     print(branches[0])
     return 0
 
 
-def eligible_items(content: str) -> tuple[list[dict], list[tuple[dict, list[str]]]]:
+def sprint_outcomes(sprint_ref: str) -> set[str]:
+    result = subprocess.run(["git", "show", f"{sprint_ref}:BACKLOG.md"],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise ValueError("Cannot read BACKLOG.md from the fetched sprint.")
+    return {task_key(item) for item in get_items(result.stdout) if item["status"] == "x"}
+
+
+def eligible_items(content: str, sprint_ref: str | None = None) -> tuple[list[dict], list[tuple[dict, list[str]]]]:
     """Ready items whose declared dependencies are already complete in this backlog."""
     items = get_items(content)
-    by_id = {match.group(1).casefold(): item for item in items
-             if (match := ID_PATTERN.match(item["title"]))}
+    by_id = {task_key(item): item for item in items}
+    by_id.update({item["title"].casefold(): item for item in items})
     ready, waiting = [], []
+    integrated = sprint_outcomes(sprint_ref) if sprint_ref else set()
     for item in items:
         if item["status"] != " ":
             continue
-        matches = DEPENDENCY_PATTERN.findall(item["body"])
+        matches = DEPENDENCY_PATTERN.findall(outside_fences(item["body"]))
         if len(matches) > 1:
-            raise ValueError(f"Multiple dependency declarations for {item['title']}")
+            waiting.append((item, ["multiple dependency declarations; needs reconciliation"]))
+            continue
         declaration = matches[0].strip() if matches else "None"
-        dependencies = [] if declaration.casefold() == "none" else [
-            part.strip() for part in declaration.split(",")]
+        dependencies = [] if declaration.casefold() in {"none", "n/a", ""} else [
+            part.strip().strip("`") for part in declaration.split(",")]
         if not all(dependencies):
-            raise ValueError(f"Invalid dependencies for {item['title']}")
+            waiting.append((item, ["invalid dependency declaration; needs reconciliation"]))
+            continue
         missing = []
         for identifier in dependencies:
             dependency = by_id.get(identifier.casefold())
             if dependency is None:
-                raise ValueError(f"Unknown dependency {identifier} for {item['title']}")
+                missing.append(identifier + " (unresolved reference; coordinator/tech-lead must reconcile)")
+                continue
             if dependency is item:
-                raise ValueError(f"Self-dependency for {item['title']}")
+                missing.append(identifier + " (self-dependency; needs reconciliation)")
+                continue
             if dependency["status"] != "x":
                 missing.append(identifier)
+            elif sprint_ref:
+                if task_key(dependency) not in integrated:
+                    missing.append(identifier + " (not verified integrated)")
         if missing:
             waiting.append((item, missing))
         else:
@@ -140,14 +189,14 @@ def eligible_items(content: str) -> tuple[list[dict], list[tuple[dict, list[str]
     return ready, waiting
 
 
-def cmd_count_eligible(path: str) -> int:
-    ready, _ = eligible_items(load(path))
+def cmd_count_eligible(path: str, sprint_ref: str | None = None) -> int:
+    ready, _ = eligible_items(load(path), sprint_ref)
     print(len(ready))
     return 0
 
 
-def cmd_list_waiting(path: str) -> int:
-    _, waiting = eligible_items(load(path))
+def cmd_list_waiting(path: str, sprint_ref: str | None = None) -> int:
+    _, waiting = eligible_items(load(path), sprint_ref)
     for item, missing in waiting:
         print(f"  [ ] {item['title']} (waiting for {', '.join(missing)})")
     if not waiting:
@@ -160,7 +209,7 @@ def print_assignment(items: list[dict]) -> None:
     print("These dependency-eligible items have been marked [~] by the runner.")
     print("Follow AGENTS.md, PROJECT.md, and the overnight agent's instructions.")
     print("Verified local task-branch commits are authorized unless project policy is stricter.")
-    print("Complete verification/review and the final affected-docs pass before marking work [x].")
+    print("Use focused checks and selective review; optional coverage/polish does not block delivery.")
     print("If a commit is required, verify that it succeeded before marking [x].")
     print("Mark blocked work [!] with a short reason and preserve useful partial changes.")
     print("Use the selected project workflow for branches, authorized pushes, and PR destinations.")
@@ -173,9 +222,13 @@ def print_assignment(items: list[dict]) -> None:
     print("Resetting [~] to [ ] does not erase partial code or previous attempts.")
 
 
-def cmd_claim_batch(path: str, n: int) -> int:
+def cmd_claim_batch(path: str, n: int, sprint_ref: str | None = None,
+                    resume_from: str | None = None) -> int:
     content = load(path)
-    eligible, _ = eligible_items(content)
+    eligible, _ = eligible_items(content, sprint_ref)
+    if resume_from:
+        resumed = {task_key(item) for item in get_items(load(resume_from)) if item["status"] == "~"}
+        eligible = [item for item in eligible if task_key(item) in resumed]
     claimed = eligible[:n]
     if not claimed:
         return 1
@@ -193,7 +246,7 @@ def cmd_next_batch(path: str, n: int) -> int:
     print("Follow AGENTS.md, PROJECT.md, and the overnight agent's instructions.")
     print("Validate dependencies; selection is by file order, not dependency-aware.")
     print("Verified local task-branch commits are authorized unless project policy is stricter.")
-    print("Complete verification/review and the final affected-docs pass before marking work [x].")
+    print("Use focused checks and selective review; optional coverage/polish does not block delivery.")
     print("If a commit is required, verify that it succeeded before marking [x].")
     print("Mark blocked work [!] with a short reason and preserve useful partial changes.")
     print("Use the selected project workflow for branches, authorized pushes, and PR destinations.")
@@ -232,6 +285,45 @@ def cmd_reset_running(path: str) -> int:
     return 0
 
 
+def cmd_reconcile(path: str, source: str) -> int:
+    """Carry terminal records forward by ID without replacing newer sprint content."""
+    content = load(path)
+    previous = get_items(load(source))
+    outcomes = {}
+    for item in previous:
+        if item["status"] in {"x", "!"}:
+            outcomes[task_key(item)] = item
+    items = get_items(content)
+    changed = 0
+    for index in reversed(range(len(items))):
+        item = items[index]
+        outcome = outcomes.get(task_key(item))
+        if outcome and item["status"] in {" ", "~"}:
+            end = item["section_end"]
+            section = content[item["header_start"]:end]
+            section = section[:4] + outcome["status"] + section[5:]
+            # Carry delivery metadata only; keep current scope, acceptance and group headings.
+            for field in ("Branch", "PR", "Blocked"):
+                pattern = rf"(?m)^[ \t]*(?:\*\*)?{field}:(?:\*\*)?[ \t]*(.*?)[ \t]*$"
+                value = re.search(pattern, outside_fences(outcome["body"]))
+                if value:
+                    line = f"{field}: {value[1]}"
+                    existing = re.search(pattern, outside_fences(section))
+                    if existing:
+                        section = section[:existing.start()] + line + section[existing.end():]
+                    else:
+                        if "\n" not in section:
+                            section += "\n"
+                        heading_end = section.index("\n") + 1
+                        section = section[:heading_end] + line + "\n" + section[heading_end:]
+            content = content[:item["header_start"]] + section + content[end:]
+            changed += 1
+    if changed:
+        save(path, content)
+    print(f"Reconciled {changed} terminal task record(s).")
+    return 0
+
+
 def cmd_list_blocked(path: str) -> int:
     blocked = [item for item in get_items(load(path)) if item["status"] == "!"]
     for item in blocked:
@@ -253,6 +345,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     functions = {"count": cmd_count, "count-outcomes": cmd_count_outcomes,
+                  "count-running": cmd_count_running,
+                  "reconcile": cmd_reconcile,
                   "sprint-branch": cmd_sprint_branch,
                   "count-eligible": cmd_count_eligible, "list-waiting": cmd_list_waiting,
                   "claim-batch": cmd_claim_batch,
@@ -262,11 +356,23 @@ def main() -> int:
     for name in functions:
         command = commands.add_parser(name)
         command.add_argument("path")
+        if name == "reconcile":
+            command.add_argument("source")
+        if name in {"claim-batch", "count-eligible", "list-waiting"}:
+            command.add_argument("--sprint-ref")
+        if name == "claim-batch":
+            command.add_argument("--resume-from")
         if name in {"claim-batch", "next-batch", "mark-running"}:
             command.add_argument("n", type=positive_integer)
     args = parser.parse_args()
     try:
         function = functions[args.command]
+        if args.command == "reconcile":
+            return function(args.path, args.source)
+        if args.command == "claim-batch":
+            return function(args.path, args.n, args.sprint_ref, args.resume_from)
+        if args.command in {"count-eligible", "list-waiting"}:
+            return function(args.path, args.sprint_ref)
         if hasattr(args, "n"):
             return function(args.path, args.n)
         return function(args.path)

@@ -1,0 +1,104 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - link "Impostr home" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f1e9]: Impostr
+    - generic [ref=f1e38]:
+      - generic [ref=f1e39]: m171d5e06af64e · Member
+      - button "Sign out" [ref=f1e40]
+  - main [ref=f1e10]:
+    - generic [ref=f1e41]:
+      - region [ref=f1e42]:
+        - generic [ref=f1e43]:
+          - paragraph [ref=f1e44]: Private workspace
+          - heading "Welcome, m171d5e06af64e" [level=1] [ref=f1e45]
+          - paragraph [ref=f1e46]: You can access project metadata created by your account.
+        - generic [ref=f1e47]: Member
+      - status [ref=f1e48]: Signed in as m171d5e06af64e.
+      - region [ref=f1e49]:
+        - generic [ref=f1e50]:
+          - generic [ref=f1e51]:
+            - paragraph [ref=f1e52]: Private project drafts
+            - heading "Projects" [level=2] [ref=f1e53]
+            - paragraph [ref=f1e54]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=f1e55]:
+            - generic [ref=f1e56]: Project name
+            - textbox "Project name" [ref=f1e57]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [ref=f1e58]
+          - generic [ref=f1e59]:
+            - generic [ref=f1e60]:
+              - heading "Your project list" [level=3] [ref=f1e85]
+              - generic [ref=f1e62]: 1 project
+            - list [ref=f1e86]:
+              - listitem [ref=f1e87]:
+                - button "Open project Synthetic final review" [pressed] [ref=f1e88]:
+                  - generic [ref=f1e89]:
+                    - generic [ref=f1e90]: Synthetic final review
+                    - generic [ref=f1e91]: Created Sep 29, 2026, 7:40 PM UTC
+                  - generic [aria-hidden] [ref=f1e92]: Open
+        - generic [ref=f1e93]:
+          - generic [ref=f1e94]:
+            - generic [ref=f1e95]:
+              - paragraph [ref=f1e96]: Synthetic final review
+              - heading "Planning drafts" [level=3] [ref=f1e97]
+              - paragraph [ref=f1e98]: Project created Sep 29, 2026, 7:40 PM UTC · changes create immutable drafts
+            - generic [ref=f1e99]: Human review · no chat
+          - region [ref=f1e100]:
+            - generic [ref=f1e101]:
+              - generic [ref=f1e102]:
+                - paragraph [ref=f1e103]: First-stage review
+                - heading "Approve the saved document pair" [level=4] [ref=f1e104]
+                - paragraph [ref=f1e105]: One human action approves exactly the current PROJECT.md and AGENTS.md saved revisions. Any later save needs a new review. This does not approve the backlog or include chat, model proposals, or exports.
+              - generic [ref=f1e106]: Not yet approved
+            - generic [ref=f1e107]:
+              - button "Reload saved pair and status" [ref=f1e108]
+              - paragraph [ref=f1e109]: Last checked 10:41:31 PM. Another tab may have saved since then. Reload checks both heads and approval; unsaved editor text is kept.
+            - generic [ref=f1e110]:
+              - generic [ref=f1e111]:
+                - term [ref=f1e112]: PROJECT.md
+                - definition [ref=f1e113]: Saved revision 2
+                - definition [ref=f1e114]: Revision ID 84ea71d2-d464-4393-902f-502adffeb98e
+              - generic [ref=f1e115]:
+                - term [ref=f1e116]: AGENTS.md
+                - definition [ref=f1e117]: Saved revision 1
+                - definition [ref=f1e118]: Revision ID f1fde49e-d446-4833-bac0-820efb784f1c
+            - paragraph [ref=f1e119]: No pair approval is recorded yet. Saving or viewing a draft does not approve it.
+            - button "Approve saved PROJECT.md + AGENTS.md pair" [ref=f1e121]
+          - tablist "Draft document switcher" [ref=f1e122]:
+            - tab "Project" [selected] [ref=f1e123]
+            - tab "Agent rules" [ref=f1e124]
+            - tab "Backlog" [ref=f1e125]
+          - tabpanel "Project" [ref=f1e126]:
+            - generic [ref=f1e127]:
+              - generic [ref=f1e128]:
+                - paragraph [ref=f1e129]: PROJECT.md · revision 2
+                - paragraph [ref=f1e130]: Saved human draft
+              - generic [ref=f1e131]: 921 / 131,072 bytes
+            - generic [ref=f1e132]: Edit PROJECT.md
+            - textbox "Edit PROJECT.md" [ref=f1e133]: "# Project: Synthetic review plan ## 1. Purpose and users — required - Summary: Synthetic review plan supports private planning. - Problem: Planning drafts need a human owner. - Primary users: The project owner. - Usage context: A private local planning browser. - Product outcomes: Reviewable private drafts. ## 2. Scope — required ### In scope - Versioned document review. ### Out of scope - Public deployment. ## 3. Behavior and domain rules — required A stale write reports a conflict; only saved versions can be approved. ## 4. Technology and environment — required Python 3.12 and PostgreSQL 17 store revisions. ## 5. Architecture and repository map — required The API owns persistence and the web editor calls it. ## 9. Decisions, risks, and open questions — required The owner reviews the pair before approval. ## 10. Definition of done — required A conflict leaves the editor intact."
+            - status [ref=f1e168]: Saved PROJECT.md as revision 2.
+            - generic [ref=f1e134]:
+              - button "Save draft" [disabled] [ref=f1e135]
+              - button "Discard editor changes" [disabled] [ref=f1e136]
+              - button "View history" [ref=f1e137]
+            - paragraph [ref=f1e138]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=f1e69]:
+        - paragraph [ref=f1e70]: Account security
+        - heading "Change your password" [level=2] [ref=f1e71]
+        - paragraph [ref=f1e72]: Changing your password signs out every other active session.
+        - generic [ref=f1e73]:
+          - generic [ref=f1e74]:
+            - generic [ref=f1e75]: Current password
+            - generic [ref=f1e76]:
+              - textbox "Current password" [ref=f1e77]
+              - button "Show" [ref=f1e78]
+          - generic [ref=f1e79]:
+            - generic [ref=f1e80]: New password
+            - generic [ref=f1e81]:
+              - textbox "New password" [ref=f1e82]
+              - button "Show" [ref=f1e83]
+          - button "Update password" [ref=f1e84]
+  - contentinfo [ref=f1e14]:
+    - generic [ref=f1e15]: Private project access
+    - generic [ref=f1e16]: Cookie session · Operator-provisioned accounts

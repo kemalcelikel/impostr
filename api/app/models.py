@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -196,6 +197,13 @@ class ProjectDocumentPairApproval(Base):
             "agents_revision_id",
             name="uq_project_pair_approval_revisions",
         ),
+        UniqueConstraint(
+            "id",
+            "project_id",
+            "project_revision_id",
+            "agents_revision_id",
+            name="uq_project_pair_approval_snapshot",
+        ),
         Index(
             "ix_project_pair_approvals_project_created",
             "project_id",
@@ -229,6 +237,54 @@ class ProjectDocumentPairApproval(Base):
     )
     agents_revision: Mapped[ProjectDocumentRevision] = relationship(
         foreign_keys=[agents_revision_id]
+    )
+
+
+class ProjectApprovalManifest(Base):
+    __tablename__ = "project_approval_manifests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["pair_approval_id", "project_id", "project_revision_id", "agents_revision_id"],
+            [
+                "project_document_pair_approvals.id",
+                "project_document_pair_approvals.project_id",
+                "project_document_pair_approvals.project_revision_id",
+                "project_document_pair_approvals.agents_revision_id",
+            ],
+            ondelete="CASCADE",
+            name="fk_project_approval_manifests_pair_snapshot",
+        ),
+        UniqueConstraint(
+            "project_id",
+            "pair_approval_id",
+            "backlog_revision_id",
+            name="uq_project_approval_manifest_snapshot",
+        ),
+        Index(
+            "ix_project_approval_manifests_project_created",
+            "project_id",
+            "created_at",
+            "id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    pair_approval_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    project_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    agents_revision_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    backlog_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("project_document_revisions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

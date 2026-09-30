@@ -183,9 +183,125 @@ describe("account access", () => {
       target: { value: "# New text\n" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
-    expect(confirm).toHaveBeenCalledWith("Unsaved draft text will be lost. Sign out anyway?");
+    expect(confirm).toHaveBeenCalledWith(
+      "Unsaved draft or task edits will be lost. Sign out anyway?",
+    );
     expect(fetchMock.mock.calls.some(([path]) => pathOf(path) === "/api/auth/logout")).toBe(false);
     expect(screen.getByRole("textbox", { name: "Edit project.md" })).toHaveValue("# New text\n");
+  });
+
+  it("warns before signing out with unsaved task details", async () => {
+    const project = {
+      id: "00000000-0000-4000-8000-000000000061",
+      name: "Task edit plan",
+      owner_user_id: admin.id,
+      created_at: admin.created_at,
+    };
+    const backlogContent =
+      "# Task plan\n\n## [-] TASK-201 — Draft task\n\n**Depends on:** None\n\nTask body.\n";
+    const drafts = (["project", "agents", "backlog"] as const).map((kind) => ({
+      id: kind,
+      kind,
+      filename: kind === "project" ? "PROJECT.md" : kind === "agents" ? "AGENTS.md" : "BACKLOG.md",
+      content:
+        kind === "backlog"
+          ? backlogContent
+          : kind === "project"
+            ? "# Project draft\n"
+            : "# Agent rules draft\n",
+      revision_number: 1,
+      content_sha256: "sha256-rev-1",
+      origin: "template",
+      author_user_id: null,
+      created_at: admin.created_at,
+      template_source: `${kind}.example`,
+      template_sha256: `template-${kind}`,
+    }));
+    const taskSnapshot = {
+      revision_number: 1,
+      content_sha256: "sha256-rev-1",
+      content: backlogContent,
+      tasks: [
+        {
+          id: "TASK-201",
+          status: "-",
+          title: "Draft task",
+          dependencies: [],
+          body: "\n**Depends on:** None\n\nTask body.\n",
+          acceptance: null,
+          verification: null,
+          ready: false,
+          eligible: false,
+          waiting_on: [],
+        },
+      ],
+      summary: { draft_count: 1, ready_count: 0, eligible_count: 0, waiting_count: 0 },
+    };
+    const approvalStatus = {
+      current_project_revision: {
+        id: "project-revision-1",
+        revision_number: 1,
+        content_sha256: "sha256-rev-1",
+      },
+      current_agents_revision: {
+        id: "agents-revision-1",
+        revision_number: 1,
+        content_sha256: "sha256-rev-1",
+      },
+      approved: false,
+      latest_approval: null,
+      approvals: [],
+      approval_offset: 0,
+      approval_has_more: false,
+      approval_next_cursor: null,
+    };
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path === "/api/auth/csrf") return Promise.resolve(jsonResponse({ csrf_token: "csrf" }));
+      if (path === "/api/auth/session")
+        return Promise.resolve(jsonResponse({ detail: "Authentication required" }, 401));
+      if (path === "/api/auth/login")
+        return Promise.resolve(jsonResponse({ user: admin, csrf_token: "session-csrf" }));
+      if (path === "/api/projects") return Promise.resolve(jsonResponse([project]));
+      if (path.startsWith("/api/admin/users")) return Promise.resolve(jsonResponse([]));
+      if (path.endsWith("/documents")) return Promise.resolve(jsonResponse(drafts));
+      if (path.endsWith("/backlog/tasks")) return Promise.resolve(jsonResponse(taskSnapshot));
+      if (path.includes("/document-pair-approval") && method === "GET")
+        return Promise.resolve(jsonResponse(approvalStatus));
+      if (path === "/api/auth/logout") return Promise.resolve(jsonResponse(undefined, 204));
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("Username"), {
+      target: { value: admin.username },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct passphrase" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open project Task edit plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("tab", { name: "Backlog" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select task TASK-201: Draft task" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+      target: { value: "Unsent task idea" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Unsaved draft or task edits will be lost. Sign out anyway?",
+    );
+    expect(fetchMock.mock.calls.some(([input]) => pathOf(input) === "/api/auth/logout")).toBe(
+      false,
+    );
+    expect(screen.getByRole("textbox", { name: "Task title" })).toHaveValue("Unsent task idea");
   });
 
   it("ignores a late project create from account A after account B signs in", async () => {

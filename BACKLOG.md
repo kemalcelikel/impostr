@@ -2,514 +2,519 @@
 
 - Base branch: origin/v1
 - Sprint branch: v1
-- Work branch: feature/impostr-v1 (create after approved plan is published)
+- Work branch: feature/impostr-v1
 - Final PR: feature/impostr-v1 → development (human merge)
 - Version control: GitHub
 
-Canonical scope/contracts: `PROJECT.md`; execution/check policy: `AGENTS.md`.
-The owner approved all 12 slices and one final merge. This workflow transition
-and its `[ ]` markers must be published before running; dependency eligibility
-and real checks still gate work. The `Sprint branch` field retains the declared
-planning-publication target from the previous workflow; the new runner uses the
-work branch and does not select sprint mode. Permanent IDs and
-`## [state] ID — Title` headings follow the root helper's format.
-`[-]` draft/deferred; `[ ]` owner-approved ready;
-`[~]` runner claimed; `[x]` verified delivered under project policy; `[!]`
-blocked/incomplete with recovery decision. A first-release Impostr user can only
-toggle a project task between draft and ready, not invent runner outcomes.
+## How to use this backlog
 
-Dependency lines are comma-separated IDs; the helper selects dependency-eligible
-`[ ]` tasks in file order only when prerequisites are `[x]` on the same work
-branch. The non-sprint runner can continue independently eligible tasks after a
-blocker; it stops when nothing eligible remains and never skips a prerequisite.
-These IDs are for building **Impostr**, not pre-filled tasks for the projects it
-will create.
-App commands below are not invented: where no command exists, verification names
-the evidence to establish during implementation. No runner assignments exist yet.
-Queueing every item does not guarantee overnight completion: actual checks,
-isolation and operator inputs remain gates at the relevant item.
+Product and security contracts: `PROJECT.md`. Setup, focused checks, selective
+review, permissions and Git limits: `AGENTS.md`. Full previous task specifications,
+owner decisions and attempt/delivery evidence: [backlog history](docs/backlog-history.md).
+The earlier simplification changed no IDs, task order, dependencies, readiness or budgets.
+The owner-requested runner preparation below promotes the already approved split
+after source proof and applies its approved consumer dependency rewiring.
 
----
+Markers: `[-]` draft/deferred; `[ ]` owner-approved ready; `[~]` claimed;
+`[x]` locally verified and committed; `[!]` blocked. The root parser selects ready
+tasks in file order only when all dependencies are `[x]` in the same work branch.
+Ready does not mean currently eligible. Human project editors control draft/ready
+only, never runner outcomes. These tasks build Impostr, not its users' projects.
+
+This is **single-branch mode**, not sprint mode; the Sprint branch field is retained
+for compatibility with the earlier planning baseline. Preserve dirty IMP-009/014,
+other existing changes and private logs. No concurrent runner, automatic restart,
+new push or merge is authorized by this document edit.
+
+## Current position
+
+- Delivered locally: app/database, login, private projects/drafts, pair approval,
+  backlog task API and disposable authenticated browser fixture.
+- Approval/download API remains blocked after ten substantive attempts. The approved
+  IMP-020/021 split has three shared additional attempts (#11–13), all unused;
+  exact initial standalone-source proof passed; IMP-020 is next for execution,
+  not accepted. New/changed execution inputs need updated source mapping.
+- IMP-014 has partial UI/tests but awaits a verified approval commit and its own
+  exact-candidate authenticated rendered review. Existing pass counts are not acceptance.
+- Chat is blocked by IMP-002 isolation/relay proof. Media/private HTTPS work remains
+  draft. Fresh worktree API builds are broken by root-template deletion; IMP-022
+  is deferred. No chat, approved downloads or release-readiness claim is valid.
 
 ## [x] IMP-001 — Bootstrap app and database baseline
 
-Type: feature
 **Depends on:** None
-**Scope:** Impostr frontend/API skeleton, PostgreSQL Docker service, Nginx routing,
-Alembic migration baseline and reproducible development checks; do not add project
-or OpenCode behavior yet.
-**Required capabilities:** Operator-provisioned Docker/Compose on a development
-host (verified in this checkout); pinned Python/Node dependencies.
 
-### Done looks like
-- A Vite/React/Tailwind client reaches a Python/FastAPI health endpoint through
-  the planned origin; PostgreSQL starts with a migration baseline and no database
-  port or privileged agent endpoint exposed to the browser.
-- Exact install, start, migration, test, lint, format, typecheck, build and container
-  commands, runtime versions and configuration-example names are verified and
-  recorded in AGENTS.md; secrets are not committed.
-
-### Verification
-- On the provisioned host, exercise service start, migration on an empty database,
-  API/client smoke, restart and the recorded checks; record failures honestly.
-
-**Documentation impact:** AGENTS.md environment/command table and operator setup.
-**Open decisions:** Actual host paths, TLS/domain and secret provisioning belong to
-the operator; no deployment address or credentials may be guessed.
-**Verified commit:** `af0c9e7` on `feature/impostr-v1` (local only); bootstrap and
-recovery checks passed. No shared-server release or Python dependency audit claimed.
-
----
+Delivered frontend/API/PostgreSQL/Nginx skeleton, Alembic baseline and pinned local
+setup/checks. Verified local commit `af0c9e7`; bootstrap, restart and recovery passed.
+Commands and environment limits are in `docs/local-development.md` and `AGENTS.md`.
+No shared-server release or Python dependency audit claimed.
 
 ## [!] IMP-002 — Prove safe OpenCode web-session integration
 
-Type: feature
 **Depends on:** IMP-001
-**Scope:** Bounded integration experiment/contract for project-scoped `tech-lead`
-sessions and isolation; do not expose a shared-host agent endpoint yet.
-**Required capabilities:** Working host-configured OpenCode model/auth, installed
-`tech-lead` definition, isolated runtime facility and test projects.
+**Scope:** Prove project-scoped `tech-lead` sessions and fail-closed worker isolation
+before exposing a product-agent gateway.
 
-### Done looks like
-- Demonstrate a pinned, documented integration that starts/resumes a session,
-  streams answers, handles a question/permission request and reads the agent's
-  proposed file changes. Record actual protocol and failure/reconnect behavior.
-- Demonstrate that a session cannot read a sibling workspace, host home/secrets,
-  database socket or Docker socket; if this is not achievable, record blocker and
-  do not claim shared-server readiness or implement an unsafe fallback.
+### Acceptance
 
-### Verification
-- Automated adapter contract tests plus a manual live `tech-lead` transcript and
-  denial tests on the intended host; identify version and tested config without
-  logging credentials.
+- A pinned integration starts/resumes, streams, handles questions/permissions,
+  imports proposals and documents reconnect/error behavior.
+- Per-project workers cannot access siblings, host home/secrets, Docker/DB sockets
+  or unintended network destinations. Relay/isolation failure denies chat; no host fallback.
 
-**Documentation impact:** AGENTS.md verified integration setup, PROJECT.md
-boundary changes only if the proven contract differs.
-**Open decisions:** Runtime/API mechanism depends on measured OpenCode behavior;
-do not assume `opencode run` or a JS SDK is a resumable Python web adapter.
-**Blocker:** No approved secret-safe model access or proven isolated agent runtime;
-live session protocol and containment tests remain unverified. No shared-host endpoint.
-**Checkpoint:** One bounded probe: OpenCode 1.18.32/`tech-lead` available;
-`bwrap` 0.6.1 empty namespace smoke passed, but no live model session or agent
-denial tests ran. Resume only with an approved broker and fail-closed runtime.
+### Verification and next step
 
----
+Use adapter tests plus bounded synthetic live sessions and child-tool denial tests
+under the actual launcher identity. Owner chose `bwrap`-first workers with a trusted
+host model-only relay; host OpenCode auth stays outside worker/repo/DB/browser/logs.
+Establish actual safe setup before asking the owner for operator actions.
+
+**Blocker:** CLI/agents available; `bwrap` 0.6.1 bare namespace smoke passed, but no
+relay, secret-safe channel, usable isolated worker or live protocol/denial proof.
+Owner permits independently eligible human-only development, not unconfined product
+agents. The runner's optional `sbx` copies host auth and can fall back to host execution;
+it is not this boundary. Keep blocked until revised readiness is explicitly approved.
 
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
-Type: feature
 **Depends on:** IMP-001
-**Scope:** Users/admin bootstrap, no-signup login/logout, admin user management,
-server sessions, project creator/administrator policy and minimal accessible UI.
-**Required capabilities:** Migrated PostgreSQL, operator-controlled initial admin.
 
-### Done looks like
-- Operator can bootstrap an admin offline; signed-in admin can add, deactivate and
-  reset user credentials; there is no public user-creation route. Passwords are
-  hashed, sessions expire/revoke, and auth mutations enforce CSRF/rate controls.
-- Two distinct users cannot enumerate or access each other's private projects,
-  including guessed IDs; administrator access is explicit and auditable.
+Delivered offline admin bootstrap/recovery, no-signup login/logout, admin user
+management, expiring/revocable sessions, CSRF/rate controls and private-project
+authorization. Verified local commit `e4558ae`; API, PostgreSQL, web, toolkit and
+browser checks passed. TLS/proxy, agent isolation, restore and audit remain release work.
 
-### Verification
-- Automated login failure/session-expiry, CSRF, unauthorized user-management,
-  cross-project access and deactivation tests; browser check for login/admin flow.
+## [x] IMP-004 — Seed projects and versioned Markdown drafts
 
-**Documentation impact:** Operator bootstrap/recovery instructions (without
-passwords or test credentials in Git).
-**Open decisions:** None for first-release behavior; establish real bootstrap/check
-commands under IMP-001 before promoting implementation.
-**Verified commit:** `e4558ae` on `feature/impostr-v1` (local only); API,
-PostgreSQL migration/integration, web, toolkit, and local browser checks passed.
-External proxy/TLS, agent isolation, backup/restore, and dependency audit remain
-release gates, not shared-server readiness.
+**Depends on:** IMP-001, IMP-003, IMP-015
 
----
+Delivered private project creation, immutable starter provenance and three DB-backed
+Markdown drafts with expected-revision/conflict/history behavior. No repo initialization
+or runner launch. Local commit `60e9480`, after six implementation attempts and a
+rendered-review retry; prior findings/authorizations remain in history.
 
-## [ ] IMP-004 — Seed projects and versioned Markdown drafts
-
-Type: feature
-**Depends on:** IMP-001, IMP-003
-**Scope:** Authenticated project creation and DB document history for the three
-root starter examples; no Git/repo initialization or runner launch.
-**Required capabilities:** Root `.example` files accessible to server; DB and
-private project workspace storage.
-
-### Done looks like
-- Creating a named project records opaque ID, name, UTC creation time, creator and
-  template provenance; three draft documents are available. Duplicate/invalid
-  names fail visibly; names cannot select paths or overwrite another project.
-- Human or agent draft edits create immutable versions with expected-revision
-  checks; simultaneous stale edits are rejected with both versions recoverable.
-  Workspace changes are proposals, never automatic DB approval.
-
-### Verification
-- DB migration and create/reload/restart tests, template provenance and
-  traversal/symlink denial tests, two-tab revision race and cross-user checks.
-
-**Documentation impact:** Data model and backup/restore notes at stable batch end.
-**Open decisions:** None; use PROJECT.md as the canonical draft/workspace contract.
-
----
+Independent review APPROVED. Exact candidate `a7675f6d…168737c0`, migration `0004`,
+normal synthetic Member browser/designer PASS at 1440/1024/768/375, cross-Member
+denial and owned cleanup passed. API 51/9 skipped, PostgreSQL 9, web 35 and toolkit
+98/1 skipped plus applicable static/build checks passed. Existing starter provenance
+remains immutable; selected-template integration is IMP-022.
 
 ## [ ] IMP-005 — Project-scoped resumable planning chats
 
-Type: feature
 **Depends on:** IMP-002, IMP-004
-**Scope:** Authenticated API gateway for `tech-lead` plus separate project session
-tabs; import proposed document diffs as versioned drafts, not approvals.
-**Required capabilities:** Proven isolation and session protocol from IMP-002.
+**Scope:** Authenticated `tech-lead` gateway and project session tabs; proposals
+become versioned drafts, never approvals.
 
-### Done looks like
-- Project opens its last used conversation by default, allows new-session tabs,
-  streams responses and resumes history after restart/reconnect without crossing
-  project boundaries. Users can answer agent questions; permission requests obey
-  a bounded server policy, with sensitive requests denied by default.
-- Concurrent file-writing turns on the same project cannot silently overwrite
-  direct edits or each other; an agent error/timeout preserves chat and draft text.
+### Acceptance
+
+- Open last-used chat, create tabs, stream/resume after restart/reconnect and answer
+  questions under a bounded, default-deny permission policy.
+- Session boundaries and serialized file-writing turns preserve human revisions;
+  errors/timeouts preserve chat and draft text.
 
 ### Verification
-- Adapter-backed integration and browser reconnect tests; forged cross-user
-  session/event/reply IDs denied; race and timeout tests preserve DB revisions.
 
-**Documentation impact:** Operator agent-runtime support and failure diagnostics.
-**Open decisions:** None after IMP-002 establishes compatible transport/isolation.
+Adapter/browser reconnect, forged cross-user session/event/reply denials, concurrent
+edits and timeout preservation. Requires IMP-002's proven transport/isolation.
 
----
+## [ ] IMP-006 — Integrate chat with first-stage document review
 
-## [ ] IMP-006 — Review and jointly approve first two documents
+**Depends on:** IMP-005, IMP-013
+**Scope:** Add chat/proposals beside the delivered human pair-review surface.
 
-Type: feature
-**Depends on:** IMP-004, IMP-005
-**Scope:** Stage-aware dark UI for chat beside PROJECT.md/AGENTS.md, direct Markdown
-review/edit and API for atomic, human-initiated version-bound pair approval.
-**Required capabilities:** Rendered browser review with `ui-designer`.
+### Acceptance
 
-### Done looks like
-- User sees clear revision/diff/unsaved status for each file, can ask `tech-lead`
-  for changes, and approves the exact pair only after invalid starter placeholders
-  and unresolved setup notes are removed. Later edits invalidate the prior pair
-  approval; an agent message can never approve it.
-- Stage 1 supports desktop and narrow layouts, keyboard-only review/approval and
-  meaningful saving, streaming, conflict, error and approval-pending states.
+- Proposed revisions cannot overwrite newer human edits or silently invalidate/approve
+  them. Chat, questions, review and approval work together during conflicts/reconnect.
+- Desktop/narrow layouts remain accessible during streaming and approval-pending states.
 
 ### Verification
-- Approval transaction/stale-revision/unauthorized tests; rendered checks around
-  1440/1024/768/375px, keyboard, contrast and reduced motion.
 
-**Documentation impact:** User guide for project setup at stable UI batch end.
-**Open decisions:** Final design tokens follow `ui-designer` review; product behavior
-is specified in PROJECT.md.
+Proposal/human-revision/approval races and authorization; authenticated rendered
+chat/review spot-checks at 1440/1024/768/375, keyboard, contrast and reduced motion.
+Reuse IMP-013 approval evidence; do not count its delivered UI again.
 
----
+## [x] IMP-007 — Validate and edit runner-compatible backlog
 
-## [ ] IMP-007 — Validate and edit runner-compatible backlog
+**Depends on:** IMP-004, IMP-013
 
-Type: feature
-**Depends on:** IMP-004, IMP-006
-**Scope:** Backlog document API, parser-compatible task model, direct task edits
-and human-only `[-]`/`[ ]` readiness transitions; no runner outcome management.
-**Required capabilities:** Root `scripts/backlog.py` as compatibility oracle.
+Delivered parser-compatible task API and draft/ready edits with unique IDs,
+dependency validation, stale-revision handling and preservation of surrounding
+Markdown/runner metadata. Root `scripts/backlog.py` remains the compatibility oracle;
+no runner outcome management or live-agent integration.
 
-### Done looks like
-- Tasks have stable unique IDs, editable title/body/dependencies, acceptance and
-  verification fields; generated items remain `[-]`. Reject malformed headings,
-  duplicate IDs/titles, unknown/self/cyclic dependencies and stale revisions.
-- Ready and dependency-eligible are displayed separately. Preserve Markdown
-  outside edited tasks and any pre-existing `[~]`/`[x]`/`[!]`/Branch/PR metadata;
-  browser may not synthesize execution outcomes.
+Verified local commit `e2cabfd`. Independent review APPROVED; API 177/11 skipped,
+PostgreSQL migration `0005`/11 tests, web 62, toolkit 128/1 skipped and applicable
+checks passed. Exact candidate `a2621b7…d4a2e` passed synthetic authenticated
+rendering/designer review, authorization denials and owned cleanup. Interrupted work,
+boundary/metadata repair findings and candidate authorizations remain in history.
 
-### Verification
-- Fixture tests against root helper for heading/dependency semantics; API tests
-  for forbidden transitions, round-trips, conflicts and dependency badges.
+## [ ] IMP-008 — Integrate live chat with backlog planning layout
 
-**Documentation impact:** Backlog editing/status help (not a copy of templates).
-**Open decisions:** None; treat cycle rejection as an additional editor safeguard
-  beyond the helper's current eligibility checks.
+**Depends on:** IMP-005, IMP-006, IMP-014
+**Scope:** Add chat and agent-added/updated task indicators beside IMP-014's rail.
 
----
+### Acceptance
 
-## [ ] IMP-008 — Live chat and collapsible backlog planning layout
-
-Type: feature
-**Depends on:** IMP-005, IMP-006, IMP-007
-**Scope:** Stage 2 UI: standard chat next to collapsible task rail with on-row
-draft/ready toggles, expand/edit task detail, and live agent-change indicators.
-**Required capabilities:** Rendered browser review with `ui-designer`.
-
-### Done looks like
-- Agent-added/updated tasks appear without losing the active chat composer or
-  direct edit; user can collapse the list, expand a task, change its title/body,
-  and toggle only draft/ready on the row. Conflict explains which version won
-  without dropping unsaved text.
-- Empty, waiting-on-dependencies, saving, streaming, validation and disconnect
-  states remain usable on desktop and narrow screens; no horizontal overflow at
-  the agreed viewport fixtures.
+- Agent updates preserve active composer/manual edits; conflicts explain the saved
+  version without dropping text. Direct-edit and readiness controls keep working.
+- Empty, dependency-waiting, saving, streaming, validation and disconnect states
+  remain usable on desktop/narrow screens without overflow.
 
 ### Verification
-- Browser interaction tests for agent update/direct edit/status toggle/collapse,
-  focus order and screen-reader states; rendered desktop/mobile design review.
 
-**Documentation impact:** Stage 2 task-list guidance with IMP-006 UI batch.
-**Open decisions:** None for state authority; only the owner decides task readiness.
+Updates during edits, focus/screen-reader states and authenticated rendered chat/rail
+review. Reuse IMP-014's direct-edit/collapse/status checks, not duplicate delivery.
 
----
+## [-] IMP-009 — Approve backlog and serve immutable downloads
 
-## [ ] IMP-009 — Approve backlog and serve immutable downloads
+**Depends on:** IMP-013, IMP-007
+**Scope:** Human final backlog approval and immutable manifest/downloads for exactly
+the approved PROJECT.md, AGENTS.md and BACKLOG.md tuple; no repo writes/draft downloads.
 
-Type: feature
-**Depends on:** IMP-006, IMP-007
-**Scope:** Human backlog approval, snapshot manifest, and individual file downloads
-for approved `PROJECT.md`, `AGENTS.md`, `BACKLOG.md` versions; no repo write.
-**Required capabilities:** Versioned document and authorization contracts.
+### Acceptance
 
-### Done looks like
-- Human approves exactly one valid backlog revision after the first two files are
-  approved. Any changed member of the approved three-file set makes final handoff
-  pending re-review. No inherited template placeholders or invalid task metadata
-  can be presented as a runnable approved document.
-- Downloads use the recorded three-revision manifest and exact UTF-8 filenames;
-  repeated downloads match bytes. Draft/foreign/stale revisions cannot be fetched
-  through a changed URL or guessed ID.
+- Only valid current revisions can be approved after pair approval. Changed members
+  invalidate final handoff; placeholders/incomplete task evidence cannot be approved.
+- Downloads enforce current approval/authorization and exact bytes/UTF-8 filenames;
+  stale, draft and foreign revisions fail. Actor/time and manifest are recorded.
 
 ### Verification
-- Revision race, mutation invalidation, access denial, invalid backlog and
-  deterministic download hash/filename tests; audit approval actor/timestamp.
 
-**Documentation impact:** Explain approval versus runner readiness to users.
-**Open decisions:** None; first release has no draft downloads or automatic exports
-  into Git checkouts.
+Actual invalid/valid approval HTTP, status/audit/download invariants, access denials,
+stale revisions, save races and deterministic bytes. Remaining work is specified in
+IMP-020/021; no split task is complete merely because its label changed.
 
----
+**Latest blocker:** Ten substantive attempts exhausted. A read-only synthetic HTTP
+probe confirmed all six checked/unchecked metadata cases can supply absent Scope,
+Acceptance or Verification, wrongly returning approval 200, creating a manifest and
+enabling all three downloads. Passing intermediate tests do not waive this bypass.
+Dirty API/model/migration/tests remain; HEAD `e2cabfd`, no delivery commit.
+
+**Recovery history:** Initial #1–3; additional #4–6; structural #7–8; interactive
+#9–10. Findings and exact authorizations/results are preserved in history. Owner
+approved replacements with shared #11–13 budget, not a reset. Superseded by IMP-020
+and IMP-021 after verified source preparation below. This is not completion: ten
+failed attempts and partial work remain history; never mark `[x]` from splitting.
+
+## [ ] IMP-020 — Verify inert three-document manifest persistence
+
+**Depends on:** IMP-013
+**Scope:** Verify preserved manifest ORM/migration without registering final-approval,
+status or download routes. Preserve `20260930_0006` and parent `20260929_0005`.
+
+### Acceptance
+
+- Fresh/populated-0005 upgrade and disposable downgrade/re-upgrade preserve pair
+  approvals/history; no final-approval backfill. ORM/schema agree and PostgreSQL
+  verifies pair-snapshot composite FK and uniqueness, including invalid inserts.
+- Existing auth/drafts/task edits/pair approval still work on the standalone slice;
+  final approval/download routes remain unavailable.
+- Revision existence is not project/kind authorization; IMP-021 enforces locked
+  authorized heads. Persistence alone does not unblock IMP-014 or deliver downloads.
+
+### Verification and boundaries
+
+Independent review against `e2cabfd`, exact standalone-source mapping, fresh owned
+PostgreSQL migration/preservation/constraint checks, relevant existing API behavior
+and changed-Python static checks. Toolkit tests only for helper/fixture changes;
+record actual snapshot commands once proved and verify owned cleanup.
+
+Owned paths: `api/app/models.py`, migration
+`api/migrations/versions/20260930_0006_project_approval_manifests.py`,
+`api/tests/test_migrations.py`, `api/tests/test_postgres_integration.py`, and proposed
+`api/tests/test_project_approval_manifest_schema_postgres.py`. Leave main.py route
+activation, approval module and HTTP/concurrency tests for IMP-021. Document schema,
+no backfill and disposable downgrade limits after delivery; task commit precedes `[x]`.
+
+**Authorization:** Owner approved “Yes, finish it”: initially direct tech-lead coordination,
+senior implementation, separate review, bounded non-serving `/tmp/opencode/` snapshot,
+disposable DB checks and selective local commits. Shared #11–13 ceiling: at most one
+persistence/test-hardening and two enforcement attempts. New expectations/schema/logic
+consume attempts; packaging/formatting/reruns/docs/delivery do not. No unrelated work,
+push/PR/merge/deploy, real data, installation, new browser profile or runner restart.
+
+**Runner handoff (owner requested preparation):** `overnight` is the sole execution
+coordinator for the next root-runner batch; tech-lead stops interactive implementation
+coordination before launch. Delegate implementation to senior-developer and independent
+review to reviewer. Local task/bookkeeping commits and bounded owned DB/source setup
+remain authorized; no task push/PR, merge, deployment or installation. No concurrent
+writer. Root helper assigns one eligible item per session; preserve cumulative attempts
+across sessions, at most one persistence/test-hardening attempt and two enforcement
+attempts (#11–13 total). Other ready items retain their actual prerequisites/gates.
+
+**Verified preparation, not acceptance:** Coordinator pinned branch `feature/impostr-v1`
+at full baseline `e2cabfdc42f6a6a84ea0dcb85cdbd36f0927dccf`. Allowed helper
+`/tmp/opencode/impostr-imp020-prereq-20260930/prepare_snapshot.py` (SHA-256
+`5602f458a203e6c33f1246a0ba4e7507f0dd8e59c7f5471da9861a8f5844bd02`)
+ran `inventory`, then `prepare --summary` and `verify --summary` with full HEAD,
+archive SHA-256 and four coordinator-measured overlay SHA-256 pins. Both source
+operations returned `exact-source-bytes-match`; no app/DB tests or #11 logic attempt.
+Independent in-repo preparation review returned READY FOR EXECUTION, not final acceptance.
+
+- Owned archive: `/tmp/opencode/impostr-imp020-prereq-20260930/baseline.tar`, SHA-256
+  `f3960928a0ccc991bdd4205df0a725702a560c5a5e987bc9bf9e549583a59ec8`;
+  generated by coordinator's `git archive --format=tar --output=<archive> <full HEAD>`
+  with exactly the 57 paths emitted by helper `inventory` (not a full repo archive).
+- Read-only `baseline/` and `frozen/` trees under that same directory contain 57 and
+  58 files. Frozen inventory SHA-256:
+  `6b461659415bc2ec45928de9c9a9ebaf61a2431e153fe109c592554c527b8cb5`.
+- `--overlay-sha256` pins for that initial snapshot:
+  `api/app/models.py=55830d86896d600807ad0a831ddc190ae82d96d71508e0e918809528f32f8d0c`;
+  `api/migrations/versions/20260930_0006_project_approval_manifests.py=88ee12bb30817f57d37c2b54bade9c2ff1bf2ccc41e0cec99ee04199dbb54433`;
+  `api/tests/test_migrations.py=e13ca8859d4b0f374db355f3c27dbee1e8ed96e577d165c157d3f6c9727c7ead`;
+  `api/tests/test_postgres_integration.py=8428b357a3a8f266b41ca7c92be18157d8fc0c61c2b3c42fdc1d14a1194b352a`.
+
+This is API-only source proof: Compose/DB inputs are not included/pinned. During
+execution, pin the necessary committed Compose/DB build inputs separately and prepare
+the owned non-serving check setup; do not build the dirty checkout or copy its `.env`.
+The proposed new persistence PostgreSQL test is execution work; include it and any
+changed task input in refreshed exact-source proof before checks/delivery. The initial
+helper is exclusive/no-overwrite and accepts only four overlays; it is not an
+unchanging universal profile for future inputs. Preserve earlier artifacts, reconcile
+any expanded task-test inventory, and record new actual hashes rather than reuse old ones.
+
+Reviewer reads assigned in-repo code/tests only; the denied temporary marker remains
+off limits. Coordinator owns actual baseline/overlay/frozen-byte mapping and sanitized
+checks. Do not forward denied contents or bypass the denial. If source mapping or
+essential checks cannot be performed through permitted tools, stop with that blocker.
+
+Historical templates may remain **inside the committed-baseline snapshot only**;
+do not restore deleted root files or adopt new templates. This allows baseline-scoped
+checks without IMP-022, but current-worktree builds/release remain broken.
+
+## [ ] IMP-021 — Enforce valid approval and immutable three-file downloads
+
+**Depends on:** IMP-020, IMP-007
+**Scope:** Finish preserved validation/approval/status/download code as one contract;
+fix checkbox normalization, not shared parsers, pair approval, UI or a new architecture.
+
+### Acceptance
+
+- Checked/unchecked canonical metadata cannot supply absent Scope/Acceptance/Verification.
+  Boundary/evidence normalization agree without literal-string exceptions. Genuine
+  checkbox/multiline/colon/list/table evidence, completed headings, masked examples
+  and draft saves still work.
+- Invalid current approval returns `422`, stays unapproved, creates no manifest or
+  success audit, revision/head change/conflict proposal; all downloads return `409`.
+  Required rate-limit writes/admin-access audits remain allowed.
+- Invalid existing manifests fail closed on status, idempotent POST and every download.
+  Preserve current-pair/exact-backlog preconditions, stale `409`, identical-byte-save
+  invalidation, duplicate approval idempotence and one success audit.
+- Exact tuple bytes/canonical filenames, account/session/project/CSRF/Origin checks,
+  changed-access/foreign/history denials, transaction/commit-failure safety and
+  PostgreSQL approval/save concurrency hold. No UI/chat/release completion claim.
+
+### Verification and next step
+
+Actual save → pair approval → invalid final approval → status/persistence/download
+denials, positive repeated bytes/hash/filename and relevant regressions. Independent
+review covers combined IMP-020/021 material from `e2cabfd`; run focused API/static
+checks and fresh owned PostgreSQL `0006`/schema/concurrency checks with cleanup.
+Toolkit checks only if helpers/fixtures change; earlier skipped tests are not acceptance.
+
+Owned paths: `api/app/project_approval_manifests.py`, `api/app/main.py`,
+`api/tests/test_project_approval_manifests.py`,
+`api/tests/test_project_approval_manifests_postgres.py`, and affected local-development
+docs after stabilization. Reconcile out-of-scope changes, do not assume extra budget.
+Update durable PROJECT.md/AGENTS.md claims only after selective verified local delivery.
+
+**Readiness:** Ready under IMP-020's runner handoff/shared limits, but waits for
+committed IMP-020 and its own refreshed exact integrated source proof. At most two enforcement attempts within #11–13;
+exhaustion, missing capability or changed scope stops work.
+**Consumer rewiring:** IMP-010/011 and IMP-014's execution-only base gate now depend
+on IMP-021. Preserve IMP-014's entire candidate-review contract.
 
 ## [ ] IMP-010 — Three-file final review experience
 
-Type: feature
-**Depends on:** IMP-008, IMP-009
-**Scope:** Stage 3 version/status overview with three simultaneous desktop document
-panes and accessible narrower-screen review/download flow.
-**Required capabilities:** Rendered browser review with `ui-designer`.
+**Depends on:** IMP-014, IMP-021
+**Scope:** Stage 3 version/status overview: three simultaneous desktop panes and
+accessible narrow-screen review/download flow.
 
-### Done looks like
-- User can compare all three approved revisions side by side at wide desktop
-  width, identify readiness versus approval state, and download each individually.
-  If revisions change, downloads disable with a precise return-to-review path.
-- Narrow screen navigation preserves position and focus, with readable document
-  measures, text status indicators, no covered controls and no horizontal overflow.
+### Acceptance
+
+- Compare three approved revisions, distinguish readiness/approval and download
+  individually. Changes disable downloads with a clear return-to-review path.
+- Narrow navigation preserves position/focus and readable text; no hidden controls
+  or horizontal overflow.
 
 ### Verification
-- End-to-end browser approve/edit-invalidates/re-approve/download flow and
-  rendered viewport, keyboard, reduced-motion and contrast review.
 
-**Documentation impact:** First-release user handoff guide with final UI batch.
-**Open decisions:** None.
+Authenticated approve → edit-invalidates → reapprove → download browser flow;
+rendered desktop/narrow, keyboard, contrast and reduced-motion review. Update user guide.
 
----
+## [-] IMP-011 — One-owner private-access release and recovery acceptance
 
-## [ ] IMP-011 — Shared-server security and recovery acceptance
+**Depends on:** IMP-003, IMP-005, IMP-008, IMP-021, IMP-010, IMP-016, IMP-018
+**Scope:** Full planning/chat/media/approval/download flow on this PC for one owner
+through verified private HTTPS; not multi-user server qualification.
 
-Type: feature
-**Depends on:** IMP-003, IMP-005, IMP-008, IMP-009, IMP-010
-**Scope:** Integrated release verification, independent security/design review,
-backups/restore, operational documentation and gates; fix defects in owning slices
-or track them explicitly rather than treating this as a substitute for unit checks.
-**Required capabilities:** Private TLS-capable deployment host, container runtime,
-isolated OpenCode model access, two provisioned test accounts and browser tools.
+### Acceptance
 
-### Done looks like
-- Two-user walkthrough covers private projects, admin provisioning, resume/new
-  session tabs, pair/backlog approval, editing/conflict states and byte-identical
-  approved downloads; no cross-user access or host credential leakage.
-- Restart and restore retain revision/approval/chat history; negative security
-  tests, real OpenCode isolation evidence, dependency/secret checks and operator
-  runbook pass, or each unavailable gate is explicitly blocked before release.
+- PC and real phone/other-device walkthrough covers private projects, resumed/new-tab
+  chat, actual image/text/PDF/DOCX model inclusion, approvals/conflicts and exact downloads.
+- Restart and synthetic DB/media restore preserve history/content. Private HTTPS,
+  Origin/CSRF, worker/model limits, upload abuse/authorization denials, dependency/secret
+  checks and operator runbook pass. Missing release capability blocks release.
 
-### Verification
-- Run recorded app/unit/integration/browser/security checks on delivered revision,
-  independent reviewer and `ui-designer` sign-off, backup/restore drill and an
-  operator-led smoke on the private server.
+### Verification and readiness
 
-**Documentation impact:** Final operations, recovery and user guides for the
-stable release; do not store secrets or private chat in reports.
-**Open decisions:** Operator must provision deployment host, credentials, TLS and
-agreed security tooling; release cannot be called ready until these are tested.
-
----
+Delivered-revision app/integration/browser/security checks, independent security and
+design sign-off, two synthetic accounts/projects for denials, restore and agent failure/
+escape drills, and actual remote-device HTTPS smoke. Never expose DB/Docker/worker/relay.
+Owner approved draft scope only; route/certificate/proxy commands and restore procedure
+are unverified. Fix owning slices rather than replacing their acceptance here.
 
 ## [ ] IMP-012 — Verify work branch and open single development PR
 
 Type: release-finalization
 **Depends on:** IMP-011
-**Scope:** Integrated checks and the one GitHub PR from `feature/impostr-v1` to
-`development`; no implementation on `v1` and no automated merge.
-**Required capabilities:** All in-scope feature items verified and locally
-committed in the same branch, actual app checks, independent review, and usable
-GitHub branch push/PR tooling and auth.
+**Scope:** Verify integrated one-owner release and deliver one review-ready GitHub PR.
 
-### Done looks like
-- All intended feature outcomes are `[x]` and integrated on the current feature
-  branch (or the owner explicitly removed an item from scope). Verify that exact
-  branch head with established tests and security/UI gates; a moved head requires
-  retest. A `[!]` prerequisite cannot be passed off as delivered.
-- Push only the checked feature branch and open/reuse a normal review-ready PR
-  with explicit source `feature/impostr-v1` and destination `development`; record
-  URL and evidence and leave merge to a human. If push or PR submission fails,
-  preserve local commits and report blocked delivery rather than claiming success.
+### Acceptance and verification
 
-### Verification
-- Inspect commits and outcomes on the work branch, run full release checks on
-  its current head, verify the published head and confirm PR base/head and content.
-
-**Documentation impact:** Release summary and outstanding owner merge action.
-**Open decisions:** GitHub CLI/auth are verified for read access here; branch
-push/PR-write access remains to be proven at delivery without bypasses.
-
----
+All intended features are verified/committed in `feature/impostr-v1` (or explicitly
+removed by owner); inspect full branch and run release checks on that exact head.
+A moved head requires retest; blocked prerequisites are not delivered. Only authorized
+finalization may push the checked feature branch, verify published head and open/reuse
+the PR to `development`. Record URL/content; humans merge. Auth/write capability is
+not proved (latest GitHub read returned 401); failures preserve local work and block
+delivery. No `v1` implementation/push, force-push or automated merge.
 
 ## [x] IMP-013 — Human-only first-stage document review and pair approval
 
-Type: feature
 **Depends on:** IMP-004
-**Scope:** Extract the direct PROJECT.md/AGENTS.md review, edit,
-diff and atomic human pair approval from IMP-006. No OpenCode session, model
-credential or agent proposal may be assumed; this is a partial product slice,
-not a chat-enabled first release.
 
-### Done looks like
-- Authorized creator/admin can compare saved versions, edit both drafts, and
-  approve exactly the current pair after starter validation; stale saves or
-  approvals fail without losing either edit, and later changes invalidate approval.
-- Accessible desktop/narrow review and conflict states work without agent chat.
-  IMP-006 is narrowed to chat integration; pair approval is not delivered or
-  counted twice.
+Delivered direct PROJECT.md/AGENTS.md review/edit/diff and atomic current-pair approval,
+authorization, invalidation and stale-conflict protection. Required decisions use
+bounded substantive Markdown evidence, not code/comments/raw HTML. Original stale pair
+is preserved and displayed saved heads advance monotonically; unsaved text is retained.
 
-### Verification
-- Authorization, stale-version and atomic approval tests plus rendered keyboard,
-  viewport and conflict review. No model or live-session claim.
+Verified local commit `888e53c` (bookkeeping `31d0f8f`). Independent code/evidence review
+APPROVED; exact candidate `9afbbc5e…859b6`, fresh `0005`, PostgreSQL 10, API 81/10
+skipped, web 60, toolkit 116/1 skipped plus checks, synthetic Member viewport/two-tab
+conflict review and owned cleanup passed. Failed recoveries and settled evidence-rule
+decisions remain in history. Human-only intermediate slice, not IMP-006 chat or release.
 
-**Documentation impact:** Explain partial human-only workflow and later chat gate.
-**Decision:** Owner approved this extraction and IMP-006/007/009 dependency
-changes on 2026-09-25. This is a verifiable intermediate slice, not the complete
-chat-enabled first release; do not mark IMP-006 delivered from this item's work.
-**Blocker (2026-09-29):** Independent full-diff re-review still NEEDS WORK: a
-required decision wrapped in paired custom HTML can approve `TBD`, and a pair
-refresh racing history can regress the clean editor's saved head. Existing
-uncommitted implementation, migration, fixture and tests are preserved; reported
-API 63/10 skipped, isolated PostgreSQL 10, web 47 and toolkit 117/1 skipped
-passed at different repair checkpoints, not final acceptance. The last repair
-changed candidate inputs; fresh preflight, authenticated rendered review, docs,
-final gates and commit remain pending. Stop dependent work pending owner decision.
-**Local human-only recovery proposal (not requeued):** Reuse IMP-013 and its
-preserved partial work; no model credential, relay or product-agent integration
-is needed. Regression-test rejection of undecided required decisions inside
-paired custom HTML and the reverse-order history/pair-refresh response race
-without regressing legitimate markup, immutable revisions or unsaved edits.
-Obtain independent full-diff re-review, then fingerprint and review the exact
-final candidate through normal synthetic Member sign-in and rendered viewports;
-finish affected docs and actual API/PostgreSQL/web/toolkit gates before a
-verified commit. Keep `[!]` until the owner explicitly approves another bounded
-attempt; do not start IMP-007/014 or count passing intermediate checks as done.
-**Bounded recovery blocker (2026-09-29):** Focused custom-HTML TBD and pair-refresh/history race repairs and regressions remain uncommitted. Independent full-diff review NEEDS WORK: four-space-indented code can satisfy required approval decisions, and a delayed stale-approval conflict response can regress a head already advanced by history. Developer-reported API 63 passed/10 skipped with static checks and web 49 passed with checks are not final acceptance. Per the owner stop rule, no further repair, fresh candidate preflight/authenticated rendered review, docs, isolated PostgreSQL or toolkit/final coordinator gates were attempted. Preserve the existing partial work and all prior attempts; keep dependents blocked pending owner decision.
-**Owner-authorized bounded continuation (2026-09-29; one attempt, no runner requeue):**
-Preserve the same IMP-013 ID, uncommitted implementation and all failed-review
-evidence. Repair and regression-test both new review findings: four-space-indented
-Markdown code must not satisfy required decisions in either document (while real
-prose, lists and tables still can), and a delayed stale-approval `409` must not
-move any visible saved head behind a revision already found by history. Preserve
-the original stale pair for comparison, unsaved editor text, explicit reapply,
-authorization and atomic approval semantics. Obtain independent review of the
-whole baseline-to-result diff before further acceptance work. If it passes,
-preflight and authenticate the exact final candidate for rendered review, then
-finish affected docs and actual API, isolated PostgreSQL, web and toolkit gates
-before any verified commit/outcome. Any failed gate stops this attempt with a
-new checkpoint; prior passing checkpoints are not final evidence. No IMP-002,
-chat, host-secret setup, dependent work, push or PR. Keep `[!]` while this
-manual recovery is in progress; the coordinator, not a developer subagent, owns
-status and delivery after all required gates pass. Do not start another root
-runner against this partial checkout.
-**Continuation blocker (2026-09-29):** Focused indented-code and delayed-409 repairs with regressions remain uncommitted. Independent full-diff review NEEDS WORK: HTML comment-only sections/fields can still satisfy required decisions, and a later saved-pair refresh replaces the original submitted stale pair in the conflict comparison. Developer-reported API 64 passed/10 PostgreSQL-only skipped with static checks and web 51 with checks passed, but are not final acceptance. Stopped before fresh preflight, authenticated rendered review, affected docs, isolated PostgreSQL, toolkit and coordinator final gates. Preserve all partial work and prior attempts; IMP-013 and dependents remain blocked pending owner decision.
-**Owner-directed immediate recovery (2026-09-29; same ID, manual continuation):**
-Prioritize finishing IMP-013 on this host without another owner-approval round
-for each ordinary, in-scope review defect. Before patching individual examples,
-establish one reviewable contract and regression matrix: only visible, substantive
-Markdown decisions may satisfy required sections/fields (not fenced/indented
-code, HTML comments, markup-only or undecided values); genuine visible prose,
-lists, tables and legitimate markup must remain usable. Keep the originally
-submitted stale pair immutable for comparison, advance current saved heads
-monotonically across history, pair refresh and approval responses, and reset
-review confirmation when the latest comparison target changes; never erase
-unsaved text or silently rebase a save. Repair and independently re-review the
-whole diff against that contract. Correctable in-scope NEEDS WORK findings may
-be repaired and re-reviewed in this same authorized continuation, rather than
-stopping for another owner permission; stop for an unresolved product decision,
-unavailable capability, unsafe access or an acceptance gate that cannot pass.
-After APPROVED review, rerun exact-candidate preflight and authenticated rendered
-review, affected docs and actual API/isolated PostgreSQL/web/toolkit/final gates.
-The owner requested speed and offered to accept risk, but no specific change to
-approval/version safety requirements was agreed: do not bypass validation,
-conflict protection or failed gates, or claim an unsafe implementation complete.
-Preserve the `[!]` checkpoint and all partial work while recovering; no root
-runner, unrelated IMP-002 work, dependent tasks, push or PR. Only the coordinator
-records a verified IMP-013 outcome after its actual acceptance passes.
-**Interrupted continuation checkpoint (2026-09-29):** Independent review then
-found that `opacity:0` and `font-size:0` could conceal text counted as required
-decisions. The follow-up repair handoff was cancelled; the current dirty tree
-contains HTML-scanner/style tests, but there is no evidence that this snapshot
-passed review or any final gate. Fresh candidate preflight, authenticated
-rendered review, docs, isolated PostgreSQL and toolkit remain outstanding.
-**Owner-approved fail-closed evidence boundary (2026-09-29; not a requeue):**
-The required-decision check is a bounded Markdown evidence rule, not an HTML/CSS
-visibility detector. Save raw HTML in drafts unchanged, but text inside *any*
-raw HTML element, including an unstyled paired custom tag, never supplies a
-required PROJECT.md or AGENTS.md decision. Supported Markdown-native headings,
-prose, lists and table data, including ordinary inline formatting and link
-labels, may supply evidence; code examples, comments, attributes, image alt
-text, reference definitions, undecided values and ambiguous constructs do not.
-An explicit undecided required value still blocks approval. This supersedes the
-earlier expectation that text inside legitimate raw HTML could satisfy a
-decision; revise those positive tests rather than adding more CSS synonyms.
-Before further review, test a compact positive/negative matrix in both documents
-and verify that raw HTML alone fails approval while substantive Markdown outside
-it remains eligible. Keep approval, current approval status, immutable revisions
-and stale-conflict behavior aligned; independently review the whole resulting
-diff before candidate/browser/docs/isolated-PostgreSQL/toolkit/final gates.
-The interrupted local checkout contains unverified scanner and style/class tests;
-do not treat those edits or earlier test counts as accepted or discard them
-without inspecting the diff. Existing IMP-013 `[!]`, attempts and dependency
-blocks remain; the prior owner-directed manual continuation may proceed under
-this now-settled boundary, not through an automatic root-runner requeue.
-**Verified local checkpoint (2026-09-29):** The existing dirty implementation now
-follows the bounded Markdown rule; independent full-diff code and final-evidence
-reviews returned APPROVED. Exact-candidate fingerprint `9afbbc5e…859b6` passed
-fresh `0005` preflight, normal synthetic Member rendered review at 1440/1024/768/
-375 px, real two-tab stale-save conflict review, and owned cleanup. Final isolated
-PostgreSQL migration and 10 tests, API 81 passed/10 profile-skipped plus static
-checks, web 60 plus static/build, and toolkit 116 passed/1 gated skip all passed;
-affected operator docs were updated. No commit was requested in this continuation,
-so this verified candidate is still uncommitted and IMP-013 stays `[!]` pending
-explicit local delivery authorization. Do not start dependents; no push or PR.
-**Owner local-delivery authorization (2026-09-29; outcome still pending):** The
-runner/coordinator may commit the verified IMP-013 implementation, migration,
-tests, fixture, affected local-development docs and narrowly relevant planning/
-outcome hunks on the existing `feature/impostr-v1` branch. First inspect the
-current diff and evidence against the exact reviewed candidate; if runtime
-inputs changed or a gate cannot be substantiated, stop rather than commit from
-stale evidence. Exclude unrelated dirty planning edits, `.opencode` logs,
-browser state and credentials. Record `[x]` only as part of a successfully
-verified local delivery commit, preserving the earlier blocker/attempt history;
-if commit fails, leave `[!]` and report it. After the verified local commit, the
-runner may continue dependency-eligible work under the existing single-branch
-batch rules. This authorizes no push, PR, merge or first-release claim. A
-planning note alone does not complete IMP-013 or make dependents eligible.
-**Verified local delivery (2026-09-29):** Commit `888e53c` on
-`feature/impostr-v1` contains the exact reviewed approval API/migration/tests,
-candidate fixture, responsive UI, operator docs and bounded Markdown contract.
-The pre-commit IMP-013 candidate fingerprint matched the reviewed
-`9afbbc5e3083f3dde00822e27bfc198fea8511da2454f7e312da723d638859b6`;
-the commit's app/docs paths have no post-commit worktree changes. Independent
-full-diff and final evidence reviews APPROVED. Fresh migration `0005`, 10 isolated
-PostgreSQL tests, API 81 passed/10 profile skips plus checks, web 60 plus checks,
-toolkit 116/1 gated skip, normal synthetic Member rendered review at
-1440/1024/768/375, two-tab stale-save conflict and owned cleanup passed. Earlier
-failed attempts and blockers above remain history, not current defects. This is
-local human-only approval, not chat, exports, agent isolation or release readiness;
-no push/PR/merge.
+## [ ] IMP-014 — Human-only collapsible backlog planning layout
+
+**Depends on:** IMP-007, IMP-013, IMP-021
+**Scope:** Direct task rail, title/body/dependency edits, draft/ready toggles and
+conflicts; no chat or agent-update delivery.
+**Execution ordering:** IMP-021 is a committed candidate-base prerequisite, not a
+product dependency. Never include its unresolved dirty approval code in preview.
+
+### Acceptance
+
+- Rail/document agree at saved revision; conflicts retain edits and cannot synthesize
+  execution outcomes. Collapsible desktop/narrow keyboard layouts handle empty,
+  saving, invalid and readiness states. IMP-008 retains live-agent integration.
+- Reviewed exact-input profile, pinned preflight, normal generated Member sign-in,
+  authenticated rendered interaction/designer sign-off, denials and owned cleanup pass.
+
+### Verification and next step
+
+After the verified approval commit, reconcile full dirty diff and build/review a
+profile over that actual committed base. Approved inventory: runtime
+`web/src/{App,ProjectWorkspace,BacklogPlanning}.tsx`; corresponding `.test.tsx` files;
+host fixture `scripts/local_browser_fixture.py` and `scripts/test_local_browser_fixture.py`.
+Retain size/path/secret/fingerprint/cleanup guards. Changed inputs require fresh
+preflight/rendering at 1440/1024/768/375 and keyboard/focus review; old profiles/HEAD
+are not evidence. Unprovable profile blocks, never waives rendering.
+
+Focused web editing/readiness/conflict/navigation checks, helper tests for fixture
+changes, API only for affected behavior; selective independent UI/fixture review,
+useful docs and verified local commit before `[x]`.
+**Checkpoint:** Dirty UI/tests passed 71 web tests plus checks; code re-review found
+no remaining defect but was INCOMPLETE without rendering. Owner approved profile
+extension and up to three additional substantive attempts; profile not yet built.
+Keep ready but waiting. No push/PR, runner restart or chat claim.
+
+## [ ] IMP-022 — Integrate the simplified nested project templates
+
+**Depends on:** IMP-004, IMP-007, IMP-013
+**Scope:** Adopt owner-selected `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example`
+for new projects without changing existing immutable starters/history/approvals.
+
+### Acceptance
+
+- Discovery/narrow Docker packaging loads exactly those inputs; canonical export
+  filenames stay unchanged. No unrelated toolkit config/credentials enter images.
+- Legacy/new approval profiles enforce substantive decisions, placeholder rejection
+  and bounded Markdown evidence. Select by immutable provenance, not user headings
+  or installed bundle; unknown/inconsistent profiles fail closed, existing seeds stay intact.
+- Simplified scope/acceptance/verification work consistently in task editor/approval,
+  preserving IDs/planning markers and root parser semantics. Snapshot inventories
+  require coherent reviewed inputs/fresh fingerprints, not old-profile reuse.
+
+### Verification and readiness
+
+Discovery/packaging, exact seeds/digests, frozen legacy/new valid and missing/undecided/
+hidden-evidence rejection, edit preservation, authorization/stale revisions and
+restart preservation. Independent profile/build-boundary review; focused Python/helper
+checks on owned synthetic storage. Draft only: owner deferred execution for approval
+work first. Root deletion breaks fresh API builds; path redirection alone is insufficient.
+Coordinate with IMP-020/021 without expanding its budget/permissions or restoring roots.
+
+## [ ] IMP-016 — Prove private HTTPS LAN access
+
+**Depends on:** IMP-001, IMP-003
+**Scope:** One-owner phone/other-PC access through operator-managed private HTTPS;
+keep DB/backend/worker/relay off LAN ingress, no public raw-HTTP shortcut.
+
+### Acceptance and verification
+
+Approved same-origin auth/API, secure cookies, Origin/CSRF, Host/forwarded-header and
+logout work; unapproved origins/HTTP/privileged ingress fail and loopback dev remains.
+Test real-device positive/negative access, phone layout and eventual chat streaming;
+document actual setup/revocation. Draft scope approved, provisioning deferred. No
+verified origin/certificate/proxy/firewall route or network-change authorization.
+
+## [ ] IMP-017 — Ingest and privately store project attachments
+
+**Depends on:** IMP-004
+**Scope:** Private project PNG/JPEG, UTF-8 text/Markdown, selectable-text PDF and
+text-only DOCX intake/storage/processing; model inclusion belongs to IMP-018.
+
+### Acceptance and verification
+
+Opaque IDs/server auth protect upload/status/fetch/delete. Retain originals/derived
+text privately until deletion and include media in synthetic restore. Validate bytes/
+types and bounded sizes; reject traversal/symlinks/active content/macros/archives and
+parser abuse. Restricted networkless resource-bounded extraction only; no remote fetch,
+scanned-PDF or DOCX-image understanding. Test cross-project/session denial, spoofing,
+exhaustion/failure cleanup, retention/deletion/restore; independently review lifecycle.
+Draft scope/retention approved; numeric file/turn/page/pixel/storage caps and processing
+boundary must be measured/chosen before readiness. Upload success is not model proof.
+
+## [ ] IMP-018 — Attach verified media to planning chat
+
+**Depends on:** IMP-005, IMP-017
+**Scope:** Accessible composer and authorized session/model handoff of selected,
+validated media under IMP-002's measured input contract.
+
+### Acceptance and verification
+
+Show uploading/processing/ready/failed, retry/remove and bounds; distinguish stored
+from actually included/not included using real gateway results. Explain text-only
+PDF/DOCX limits and irreversible prior model sends. Resume/reconnect preserves server
+state without duplicate turns; deleted/foreign IDs and unsupported inputs fail honestly.
+Prove synthetic pixel-only questions and extracted PDF/DOCX/text live turns, scan/
+embedded-image failures, delete/revoke/reconnect/authorization, and rendered accessible
+desktop/phone review. No media in Markdown downloads. Draft scope/synthetic tests
+approved, but no actual image/attachment model transport is verified yet.
+
+## [ ] IMP-019 — Qualify a later multi-user shared-server release
+
+Type: release-hardening
+**Depends on:** IMP-011
+**Scope:** Later real-user/server qualification, not this personal-release PR.
+
+### Acceptance and verification
+
+On the actual provisioned server/service identity, prove worker/tenant/session/model-
+secret/ingress denials, bounded resources, dependency/secret checks, synthetic restore,
+runbook and independent security review. Two-user private project/chat/media/approval/
+download end-to-end denials must pass. Preserve role/ownership rules; local browser
+risk acceptance and LAN smoke are not server proof. Deferred until separate owner
+release approval, actual server/TLS/relay/isolation and recovery resources exist.

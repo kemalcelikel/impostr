@@ -1,0 +1,144 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, m10e381cd3a7e3" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access project metadata created by your account.
+        - generic [ref=e44]: Member
+      - status [ref=e45]: Signed in as m10e381cd3a7e3.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Private project drafts
+            - heading "Projects" [level=2] [ref=e50]
+            - paragraph [ref=e51]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=e52]:
+            - generic [ref=e53]: Project name
+            - textbox "Project name" [ref=e54]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Your project list" [level=3] [ref=e82]
+              - generic [ref=e59]: 1 project
+            - list [ref=e83]:
+              - listitem [ref=e84]:
+                - button "Open project Synthetic approval review" [pressed] [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: Synthetic approval review
+                    - generic [ref=e88]: Created Sep 29, 2026, 7:23 PM UTC
+                  - generic [aria-hidden] [ref=e89]: Open
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: Synthetic approval review
+              - heading "Planning drafts" [level=3] [ref=e94]
+              - paragraph [ref=e95]: Project created Sep 29, 2026, 7:23 PM UTC · changes create immutable drafts
+            - generic [ref=e96]: Human review · no chat
+          - region [ref=e97]:
+            - generic [ref=e98]:
+              - generic [ref=e99]:
+                - paragraph [ref=e100]: First-stage review
+                - heading "Approve the saved document pair" [level=4] [ref=e101]
+                - paragraph [ref=e102]: One human action approves exactly the current PROJECT.md and AGENTS.md saved revisions. Any later save needs a new review. This does not approve the backlog or include chat, model proposals, or exports.
+              - generic [ref=e103]: Re-review required
+            - generic [ref=e104]:
+              - button "Reload saved pair and status" [ref=e105]
+              - paragraph [ref=e106]: Last checked 10:26:43 PM. Another tab may have saved since then. Reload checks both heads and approval; unsaved editor text is kept.
+            - generic [ref=e1783]:
+              - generic [ref=e1784]:
+                - term [ref=e1785]: PROJECT.md
+                - definition [ref=e1786]: Saved revision 2
+                - definition [ref=e1787]: Revision ID ca04d1c5-0b06-403c-9d84-b7da57cc6763
+              - generic [ref=e1788]:
+                - term [ref=e1789]: AGENTS.md
+                - definition [ref=e1790]: Saved revision 3
+                - definition [ref=e1791]: Revision ID f2ecfa51-50f7-43f5-9c74-8281eb9d73a8
+            - generic [ref=e1792]:
+              - paragraph [ref=e1793]: Latest approval · Sep 29, 2026, 7:24 PM UTC
+              - paragraph [ref=e1794]: PROJECT.md revision 2 · AGENTS.md revision 2 · older pair
+              - generic [ref=e1795]:
+                - code [ref=e1796]: PROJECT.md ID ca04d1c5-0b06-403c-9d84-b7da57cc6763
+                - code [ref=e1797]: AGENTS.md ID 3e3c754e-55a2-4c27-9907-60dbac3d4294
+            - generic [ref=e117]:
+              - button "Approve saved PROJECT.md + AGENTS.md pair" [ref=e1824]
+              - group [ref=e1799]:
+                - generic "Immutable pair approval history (1 shown)" [ref=e1800] [cursor=pointer]
+          - tablist "Draft document switcher" [ref=e119]:
+            - tab "Project" [ref=e120]
+            - tab "Agent rules" [selected] [ref=e121]
+            - tab "Backlog" [ref=e122]
+          - tabpanel "Agent rules" [ref=e176]:
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - paragraph [ref=e126]: AGENTS.md · revision 3
+                - paragraph [ref=e127]: Saved human draft
+              - generic [ref=e128]: 448 / 131,072 bytes
+            - generic [ref=e129]: Edit AGENTS.md
+            - textbox "Edit AGENTS.md" [ref=e177]: "# Repository Agent Rules: Synthetic review ## Sources of truth and scope PROJECT.md defines the product and the owner chooses approved work. ## Setup and verification commands Run `python3 -m pytest` from api/ after installing locked dependencies. ## Security and hardening workflow Keep secrets out of Git; deny cross-project access. ## Git and task-state ownership The owner controls task state and integration. Synthetic revision note."
+            - status [ref=e1825]: Saved AGENTS.md as revision 3.
+            - generic [ref=e131]:
+              - button "Save draft" [disabled] [ref=e132]
+              - button "Discard editor changes" [disabled] [ref=e133]
+              - button "Hide history" [expanded] [ref=e218]
+            - region [ref=e190]:
+              - generic [ref=e191]:
+                - generic [ref=e192]:
+                  - paragraph [ref=e193]: Immutable records
+                  - heading "AGENTS.md history" [level=4] [ref=e194]
+                - generic [ref=e1826]: Current revision 3
+              - generic [ref=e1827]:
+                - heading "Saved revisions" [level=5] [ref=e1828]
+                - list [ref=e1829]:
+                  - listitem [ref=e1830]:
+                    - generic [ref=e1831]:
+                      - generic [ref=e1832]: Revision 3 · current
+                      - generic [ref=e1833]: Human edit · Sep 29, 2026, 7:26 PM UTC
+                    - generic [ref=e1834]:
+                      - button "Compare revision 3" [ref=e1835]
+                      - button "Reapply revision 3 in editor" [ref=e1836]
+                  - listitem [ref=e1837]:
+                    - generic [ref=e1838]:
+                      - generic [ref=e1839]: Revision 2
+                      - generic [ref=e1840]: Human edit · Sep 29, 2026, 7:24 PM UTC
+                    - generic [ref=e1841]:
+                      - button "Compare revision 2" [ref=e1842]
+                      - button "Reapply revision 2 in editor" [ref=e1843]
+                  - listitem [ref=e1844]:
+                    - generic [ref=e1845]:
+                      - generic [ref=e1846]: Revision 1
+                      - generic [ref=e1847]: Starter template · Sep 29, 2026, 7:23 PM UTC
+                    - paragraph [ref=e1848]: Source AGENTS.md.example · SHA-256 e256dc7a1088dfc829ed40716ff99b018a08a6d95e2dc64b6987194ac613fe82
+                    - generic [ref=e1849]:
+                      - button "Compare revision 1" [ref=e1850]
+                      - button "Reapply revision 1 in editor" [ref=e1851]
+              - generic [ref=e1852]:
+                - heading "Conflict proposals" [level=5] [ref=e1853]
+                - paragraph [ref=e1854]: No rejected edits. If another tab saves first, the attempted text is kept here.
+            - paragraph [ref=e135]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=e66]:
+        - paragraph [ref=e67]: Account security
+        - heading "Change your password" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Changing your password signs out every other active session.
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Current password
+            - generic [ref=e73]:
+              - textbox "Current password" [ref=e74]
+              - button "Show" [ref=e75]
+          - generic [ref=e76]:
+            - generic [ref=e77]: New password
+            - generic [ref=e78]:
+              - textbox "New password" [ref=e79]
+              - button "Show" [ref=e80]
+          - button "Update password" [ref=e81]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts

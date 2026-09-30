@@ -1,0 +1,3 @@
+[      75ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/auth/session:0
+[   16020ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://127.0.0.1:8080/api/auth/csrf:0
+[   22170ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/auth/session:0

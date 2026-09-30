@@ -206,14 +206,78 @@ describe("private project drafts", () => {
   ])(
     "explains owner task readiness and backlog approval (draft count: $draftCount)",
     async ({ draftCount, message }) => {
-      const backlogContent = "# Saved plan\n\n## [x] TASK-001 — Complete\n\n**Depends on:** None\n";
+      const taskDescriptions = [
+        { id: "TASK-001", status: "x", title: "Complete", dependencies: [], body: "Completed." },
+        {
+          id: "TASK-002",
+          status: " ",
+          title: "Ready and eligible",
+          dependencies: [],
+          body: "Independent work.",
+        },
+        {
+          id: "TASK-003",
+          status: " ",
+          title: "Ready and waiting",
+          dependencies: ["TASK-004"],
+          body: "Wait for the prerequisite.",
+        },
+        {
+          id: "TASK-004",
+          status: "-",
+          title: "Draft prerequisite",
+          dependencies: [],
+          body: "Draft.",
+        },
+        ...(draftCount === 2
+          ? [
+              {
+                id: "TASK-005",
+                status: "-",
+                title: "Second draft",
+                dependencies: [],
+                body: "Draft two.",
+              },
+            ]
+          : []),
+      ];
+      const statusById = new Map(taskDescriptions.map((task) => [task.id, task.status]));
+      const tasks = taskDescriptions.map((task, index) => {
+        const ready = task.status === " ";
+        const waiting_on = ready
+          ? task.dependencies.filter((dependency) => statusById.get(dependency) !== "x")
+          : [];
+        const dependencyLine = task.dependencies.length ? task.dependencies.join(", ") : "None";
+        return {
+          id: task.id,
+          status: task.status,
+          title: task.title,
+          dependencies: task.dependencies,
+          body: `\n**Depends on:** ${dependencyLine}\n\n${task.body}\n${
+            index < taskDescriptions.length - 1 ? "\n" : ""
+          }`,
+          acceptance: null,
+          verification: null,
+          ready,
+          eligible: ready && waiting_on.length === 0,
+          waiting_on,
+        };
+      });
+      const backlogContent = `# Saved plan\n\n${tasks
+        .map((task) => `## [${task.status}] ${task.id} — ${task.title}${task.body}`)
+        .join("")}`;
       const backlog = makeDocument("backlog", backlogContent, 3);
       const taskSnapshot = {
         revision_number: 3,
-        content: backlogContent,
+        content: backlog.content,
         content_sha256: backlog.content_sha256,
-        tasks: [],
-        summary: { draft_count: draftCount, ready_count: 2, eligible_count: 1, waiting_count: 1 },
+        tasks,
+        summary: {
+          draft_count: tasks.filter((task) => task.status === "-").length,
+          ready_count: tasks.filter((task) => task.status === " ").length,
+          eligible_count: tasks.filter((task) => task.eligible).length,
+          waiting_count: tasks.filter((task) => task.status === " " && !task.eligible).length,
+        },
       };
       const fetchMock = vi.fn((input: RequestInfo | URL) => {
         const path = pathOf(input);
@@ -249,6 +313,127 @@ describe("private project drafts", () => {
       );
     },
   );
+
+  it("keeps task edits pending until saved and mirrors the returned backlog revision into Markdown", async () => {
+    const backlogContent =
+      "# Planning draft\n\n## [-] TASK-101 — Existing task\n\n**Depends on:** None\n\nInitial task body.\n";
+    const updatedContent =
+      "# Planning draft\n\n## [-] TASK-101 — Updated task\n\n**Depends on:** None\n\nInitial task body.\n";
+    let backlog = makeDocument("backlog", backlogContent, 3);
+    let taskSnapshot = {
+      revision_number: 3,
+      content_sha256: "sha256-rev-3",
+      content: backlogContent,
+      tasks: [
+        {
+          id: "TASK-101",
+          status: "-",
+          title: "Existing task",
+          dependencies: [],
+          body: "\n**Depends on:** None\n\nInitial task body.\n",
+          acceptance: null,
+          verification: null,
+          ready: false,
+          eligible: false,
+          waiting_on: [],
+        },
+      ],
+      summary: { draft_count: 1, ready_count: 0, eligible_count: 0, waiting_count: 0 },
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/documents")) {
+        return Promise.resolve(
+          jsonResponse([initialDocuments.project, initialDocuments.agents, backlog]),
+        );
+      }
+      if (path.endsWith("/documents/backlog") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as { content: string };
+        const content = payload.content;
+        backlog = makeDocument("backlog", content, 5);
+        taskSnapshot = {
+          revision_number: 5,
+          content_sha256: backlog.content_sha256,
+          content,
+          tasks: [
+            {
+              ...taskSnapshot.tasks[0],
+              title: "Markdown title",
+            },
+          ],
+          summary: taskSnapshot.summary,
+        };
+        return Promise.resolve(jsonResponse(backlog));
+      }
+      if (path.endsWith("/backlog/tasks") && method === "GET") {
+        return Promise.resolve(jsonResponse(taskSnapshot));
+      }
+      if (path.endsWith("/backlog/tasks/TASK-101") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as {
+          expected_revision: number;
+          title: string;
+          status: "-" | " ";
+        };
+        expect(payload).toMatchObject({
+          expected_revision: 3,
+          title: "Updated task",
+          status: "-",
+        });
+        backlog = makeDocument("backlog", updatedContent, 4);
+        taskSnapshot = {
+          revision_number: 4,
+          content_sha256: backlog.content_sha256,
+          content: updatedContent,
+          tasks: [
+            {
+              ...taskSnapshot.tasks[0],
+              title: "Updated task",
+            },
+          ],
+          summary: taskSnapshot.summary,
+        };
+        return Promise.resolve(jsonResponse(taskSnapshot));
+      }
+      throw new Error(`Unexpected request ${path} ${method}`);
+    });
+    renderWorkspace(fetchMock);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("tab", { name: "Backlog" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select task TASK-101: Existing task" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+      target: { value: "Updated task" },
+    });
+
+    expect(screen.getByRole("tab", { name: "Project" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save task changes" }));
+    expect(await screen.findByText("Saved TASK-101 to BACKLOG.md revision 4.")).toBeInTheDocument();
+    expect(screen.getByText("BACKLOG.md · revision 4")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(screen.getByRole("textbox", { name: "Edit BACKLOG.md" })).toHaveValue(updatedContent);
+
+    const markdownUpdate = updatedContent.replace("Updated task", "Markdown title");
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit BACKLOG.md" }), {
+      target: { value: markdownUpdate },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(await screen.findByText("Saved BACKLOG.md as revision 5.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    expect(
+      await screen.findByRole("button", { name: "Select task TASK-101: Markdown title" }),
+    ).toBeInTheDocument();
+    const taskWrite = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        pathOf(input).endsWith("/backlog/tasks/TASK-101") && init?.method === "PUT",
+    );
+    expect(new Headers(taskWrite?.[1]?.headers).get("X-CSRF-Token")).toBe("csrf-test-token");
+  });
 
   it.each(["dirty", "saving"])(
     "keeps the open %s draft when a project create response arrives late",
@@ -3142,6 +3327,7 @@ describe("private project drafts", () => {
       screen.getByRole("heading", { name: "Saved pair changed before approval" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Backlog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Edit BACKLOG.md" }), {
       target: { value: "# Separate backlog update\n" },
     });

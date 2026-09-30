@@ -1,0 +1,127 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Impostr home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e9]: Impostr
+    - button "Sign out" [ref=e37]
+  - main [ref=e10]:
+    - generic [ref=e38]:
+      - region [ref=e39]:
+        - generic [ref=e40]:
+          - paragraph [ref=e41]: Private workspace
+          - heading "Welcome, m13579ebc6390c" [level=1] [ref=e42]
+          - paragraph [ref=e43]: You can access project metadata created by your account.
+        - generic [ref=e44]: Member
+      - status [ref=e45]: Signed in as m13579ebc6390c.
+      - region [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - paragraph [ref=e49]: Private project drafts
+            - heading "Projects" [level=2] [ref=e50]
+            - paragraph [ref=e51]: Each project begins with three editable drafts. Names are private labels, never workspace paths.
+          - generic [ref=e52]:
+            - generic [ref=e53]: Project name
+            - textbox "Project name" [ref=e54]:
+              - /placeholder: e.g. Customer research plan
+            - button "Create project" [disabled] [ref=e55]
+          - generic [ref=e56]:
+            - generic [ref=e57]:
+              - heading "Your project list" [level=3] [ref=e82]
+              - generic [ref=e59]: 1 project
+            - list [ref=e83]:
+              - listitem [ref=e84]:
+                - button "Open project Synthetic planning review" [disabled] [pressed] [ref=e85]:
+                  - generic [ref=e86]:
+                    - generic [ref=e87]: Synthetic planning review
+                    - generic [ref=e88]: Created Sep 29, 2026, 11:14 AM UTC
+                  - generic [aria-hidden] [ref=e89]: Open
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - paragraph [ref=e93]: Synthetic planning review
+              - heading "Planning drafts" [level=3] [ref=e94]
+              - paragraph [ref=e95]: Project created Sep 29, 2026, 11:14 AM UTC · changes create immutable drafts
+            - generic [ref=e96]: Draft only
+          - tablist "Draft documents" [ref=e97]:
+            - tab "Project" [disabled] [ref=e98]
+            - tab "Agent rules" [disabled] [ref=e99]
+            - tab "Backlog" [disabled] [selected] [ref=e100]
+          - tabpanel "Backlog" [ref=e173]:
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - paragraph [ref=e104]: BACKLOG.md · revision 2
+                - paragraph [ref=e105]: Saved human draft
+              - generic [ref=e106]: 35 / 131,072 bytes
+            - generic [ref=e107]: Edit BACKLOG.md
+            - textbox "Edit BACKLOG.md" [ref=e174]: "# Synthetic backlog from first tab"
+            - status [ref=e175]: Another tab saved a newer revision. Your attempted text was preserved as a conflict proposal.
+            - generic [ref=e109]:
+              - button "Save draft" [ref=e110]
+              - button "Discard editor changes" [ref=e111]
+              - button "Hide history" [expanded] [ref=e176]
+              - generic [ref=e177]: Unsaved editor text · save before switching drafts
+            - region [ref=e208]:
+              - generic [ref=e209]:
+                - heading "Compare Conflict proposal with saved revision 2" [level=4] [ref=e210]
+                - button "Close comparison" [ref=e211]
+              - generic [ref=e212]:
+                - article [ref=e213]:
+                  - heading "Saved revision 2" [level=5] [ref=e214]
+                  - generic [ref=e215]: "# Synthetic backlog from second tab"
+                - article [ref=e216]:
+                  - heading "Conflict proposal" [level=5] [ref=e217]
+                  - generic [ref=e218]: "# Synthetic backlog from first tab"
+              - paragraph [ref=e219]: Unsaved editor text is not shown in this comparison.
+            - region [ref=e178]:
+              - generic [ref=e116]:
+                - generic [ref=e117]:
+                  - paragraph [ref=e118]: Immutable records
+                  - heading "BACKLOG.md history" [level=4] [ref=e179]
+                - generic [ref=e180]: Current revision 2
+              - generic [ref=e181]:
+                - heading "Saved revisions" [level=5] [ref=e182]
+                - list [ref=e183]:
+                  - listitem [ref=e184]:
+                    - generic [ref=e185]:
+                      - generic [ref=e186]: Revision 2 · current
+                      - generic [ref=e187]: Human edit · Sep 29, 2026, 11:17 AM UTC
+                    - generic [ref=e188]:
+                      - button "Compare revision 2" [ref=e189]
+                      - button "Reapply revision 2 in editor" [ref=e190]
+                  - listitem [ref=e191]:
+                    - generic [ref=e192]:
+                      - generic [ref=e193]: Revision 1
+                      - generic [ref=e194]: Starter template · Sep 29, 2026, 11:14 AM UTC
+                    - paragraph [ref=e195]: Source BACKLOG.md.example · SHA-256 aa2f4000af2318242ad410ea6b32602611636e3f0399b7a677d42a06a883eb2d
+                    - generic [ref=e196]:
+                      - button "Compare revision 1" [ref=e197]
+                      - button "Reapply revision 1 in editor" [ref=e198]
+              - generic [ref=e199]:
+                - heading "Conflict proposals" [level=5] [ref=e200]
+                - list [ref=e201]:
+                  - listitem [ref=e202]:
+                    - paragraph [ref=e203]: Conflict proposal · expected revision 1, newer revision 2
+                    - paragraph [ref=e204]: Saved Sep 29, 2026, 11:17 AM UTC
+                    - generic [ref=e205]:
+                      - button "Compare conflict proposal" [active] [ref=e206]
+                      - button "Reapply conflict proposal in editor" [ref=e207]
+            - paragraph [ref=e113]: Drafts and conflict proposals are saved privately. Workspace files are temporary copies; PostgreSQL is the source of truth. No draft is approved by saving or reapplying it.
+      - region [ref=e66]:
+        - paragraph [ref=e67]: Account security
+        - heading "Change your password" [level=2] [ref=e68]
+        - paragraph [ref=e69]: Changing your password signs out every other active session.
+        - generic [ref=e70]:
+          - generic [ref=e71]:
+            - generic [ref=e72]: Current password
+            - generic [ref=e73]:
+              - textbox "Current password" [ref=e74]
+              - button "Show" [ref=e75]
+          - generic [ref=e76]:
+            - generic [ref=e77]: New password
+            - generic [ref=e78]:
+              - textbox "New password" [ref=e79]
+              - button "Show" [ref=e80]
+          - button "Update password" [ref=e81]
+  - contentinfo [ref=e32]:
+    - generic [ref=e33]: Private project access
+    - generic [ref=e34]: Cookie session · Operator-provisioned accounts
