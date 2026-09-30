@@ -197,7 +197,7 @@ approved replacements with shared #11–13 budget, not a reset. Superseded by IM
 and IMP-021 after verified source preparation below. This is not completion: ten
 failed attempts and partial work remain history; never mark `[x]` from splitting.
 
-## [ ] IMP-020 — Verify inert three-document manifest persistence
+## [!] IMP-020 — Verify inert three-document manifest persistence
 
 **Depends on:** IMP-013
 **Scope:** Verify preserved manifest ORM/migration without registering final-approval,
@@ -282,6 +282,18 @@ essential checks cannot be performed through permitted tools, stop with that blo
 Historical templates may remain **inside the committed-baseline snapshot only**;
 do not restore deleted root files or adopt new templates. This allows baseline-scoped
 checks without IMP-022, but current-worktree builds/release remain broken.
+
+**Execution blocker (2026-09-30):** Actual branch HEAD is `e2412b1`, whose owner
+commit includes formerly partial IMP-009/014 code, including the final-router import
+and registration in `api/app/main.py`. Senior reconciliation and independent reviewer
+confirm that this violates IMP-020's route-unavailability acceptance; testing only
+`e2cabfd` plus persistence overlays cannot establish an inert current branch.
+There is no repair within IMP-020's owned paths. Owner authorization is needed for
+a narrow forward change deferring those two `main.py` additions to IMP-021 while
+preserving all other code. No application changes, DB/app tests or new snapshots
+were made; #11–13 remain unused. Existing source artifacts and code are preserved;
+IMP-021 remains dependency-blocked. Affected-docs assessment found no delivered
+schema behavior to document yet. No push/PR, merge, deployment or runner restart.
 
 ## [ ] IMP-021 — Enforce valid approval and immutable three-file downloads
 
