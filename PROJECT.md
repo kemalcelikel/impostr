@@ -43,7 +43,7 @@ collaboration/invitations, public signup, and importing runner outcomes. Downloa
 files are planning artifacts, not evidence that a repository is ready to run. The
 owner continues to prepare application repositories and launch the runner manually.
 
-### Current implementation boundary (through IMP-007 on work branch)
+### Current implementation boundary (human-only approval API on work branch)
 
 The checkout has a limited application slice; the first-release scope above is
 not yet implemented. The current UI supports operator-provisioned sign-in,
@@ -55,16 +55,19 @@ signup or network recovery route. Administrators can create, reset, and deactiva
 accounts. Members can access projects they own; administrators can access all
 projects, and administrator access is audited. Consult `docs/local-development.md`
 for implemented project, revision, workspace-cache, and operator behavior and
-`BACKLOG.md` for the committed IMP-004/013/007 delivery outcomes and uncommitted
-IMP-009/014 partial work. This work branch is not a merged release; pair
-approval is local human-only functionality, not final backlog approval or
-approved downloads. Do not infer chat or an agent gateway from it.
+`BACKLOG.md` for committed delivery outcomes. The owner committed prior IMP-009/014
+partial work in `e2412b1`; that was not acceptance. Subsequent IMP-020/021 recovery
+verified persistence and human-only final approval/status/exact-download API behavior.
+IMP-014 UI still lacks final candidate/rendered acceptance. This work branch is not
+a merged release; do not infer chat, agent gateway or release readiness from it.
 
 The owner approved splitting blocked IMP-009 into independently verified
 persistence and integrated enforcement slices. IMP-020 adds only inert
 manifest schema; IMP-021 finishes valid final approval and exact downloads.
-Neither is delivered or executable: exact-source snapshot access was denied,
-so both retain draft markers and the shared #11–13 ceiling. The split changes delivery
+The recovery used #11 for persistence and #12 for enforcement; #13 was not needed.
+Independent combined review and focused actual API/PostgreSQL checks passed; current
+BACKLOG.md records verified local commits. Historical snapshot access denial remains
+history, not an active reviewer-folder gate. The split changes delivery
 boundaries, not the product's approval, authorization or Markdown-evidence rules;
 schema-only delivery must not enable unfinished final-approval routes. See
 BACKLOG.md for preserved partial work, attempts and the capability checkpoint.

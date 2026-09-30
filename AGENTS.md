@@ -2,6 +2,16 @@
 
 ## Sources and current state
 
+**Latest verified recovery:** After the stopped runner, owner requested repair.
+IMP-020 persistence was verified/committed in `d556043` (outcome `24fbd39`); #11
+consumed. IMP-021's #12 checkbox-evidence repair passed independent combined review,
+focused API/static and fresh owned PostgreSQL tests; consult its current BACKLOG.md
+outcome for delivery. #13 was not needed. Older readiness/unused-budget and dirty-code
+summaries below are historical; the owner committed that partial material in `e2412b1`,
+which was not acceptance. Local bounded test-harness templates do not fix ordinary
+worktree builds. Runner is stopped; interactive coordinator owns this repair and
+must hand back coordination before any later owner-started runner.
+
 **Current task authority and runner handoff:** Use the current `BACKLOG.md` for
 scope/readiness/dependencies and the latest checkpoint; `docs/backlog-history.md`
 preserves earlier specifications/attempts, not competing active task states. The

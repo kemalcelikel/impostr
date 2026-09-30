@@ -19,6 +19,7 @@ from app.config import AppSettings
 from app.main import create_app
 from app.models import (
     AuditEvent,
+    DocumentConflictProposal,
     ProjectApprovalManifest,
     ProjectDocument,
     ProjectDocumentRevision,
@@ -1081,6 +1082,12 @@ def _assert_backlog_http_boundary(
         saved_backlog=backlog,
     )
     approval_path = f"/api/projects/{project_id}/final-approval"
+    with Session(engine) as db:
+        heads_before = set(
+            db.execute(select(ProjectDocument.id, ProjectDocument.head_revision_number)).all()
+        )
+        revisions_before = set(db.execute(select(ProjectDocumentRevision.id)).all())
+        conflicts_before = set(db.execute(select(DocumentConflictProposal.id)).all())
 
     # A jointly approved pair is not sufficient: without a manifest every file
     # remains unavailable, regardless of whether this backlog will validate.
@@ -1120,6 +1127,25 @@ def _assert_backlog_http_boundary(
                 )
                 is None
             )
+            assert (
+                db.scalar(
+                    select(AuditEvent.id).where(
+                        AuditEvent.project_id == uuid.UUID(project_id),
+                        AuditEvent.action == "project.approval_manifest.approved",
+                    )
+                )
+                is None
+            )
+            assert (
+                set(
+                    db.execute(
+                        select(ProjectDocument.id, ProjectDocument.head_revision_number)
+                    ).all()
+                )
+                == heads_before
+            )
+            assert set(db.execute(select(ProjectDocumentRevision.id)).all()) == revisions_before
+            assert set(db.execute(select(DocumentConflictProposal.id)).all()) == conflicts_before
         return
 
     manifest = decision.json()
@@ -1147,6 +1173,74 @@ def _assert_backlog_http_boundary(
         repeated_download = client.get(f"{approval_path}/files/{kind}")
         assert repeated_download.status_code == 200
         assert repeated_download.content == downloaded.content
+    with Session(engine) as db:
+        assert (
+            db.scalar(
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.project_id == uuid.UUID(project_id),
+                    AuditEvent.action == "project.approval_manifest.approved",
+                )
+            )
+            == 1
+        )
+
+
+def _checkbox_metadata_backlog(section: str, checkbox: str, *, evidence: bool = False) -> str:
+    metadata = (
+        f"- [{checkbox}] **Documentation impact:** Explain approved downloads.\n"
+        "  The guide describes the saved snapshot."
+    )
+    original = {
+        "Scope": "**Scope:** api/app/project_approval_manifests.py; no repository writes.",
+        "acceptance": "- The manifest refers to the exact approved document revisions.",
+        "verification": "- Run the focused manifest approval tests.",
+    }[section]
+    replacement = "**Scope:**\n" if section == "Scope" else ""
+    if evidence:
+        replacement += {
+            "Scope": "- [x] API: Record the three immutable revisions.\n"
+            "  Export: Serve only those approved bytes.\n",
+            "acceptance": "- [ ] The manifest refers to the exact approved revisions.\n",
+            "verification": "| Check | Evidence |\n| --- | --- |\n"
+            "| Approval | Run the focused approval tests. |\n",
+        }[section]
+    return READY_BACKLOG.replace(original, replacement + metadata, 1)
+
+
+@pytest.mark.parametrize("section", ["Scope", "acceptance", "verification"])
+@pytest.mark.parametrize("checkbox", ["x", " "], ids=["checked", "unchecked"])
+def test_checkbox_metadata_cannot_supply_missing_task_evidence_http(
+    client: TestClient,
+    engine,
+    account_factory,
+    section: str,
+    checkbox: str,
+) -> None:
+    _assert_backlog_http_boundary(
+        client,
+        engine,
+        account_factory,
+        _checkbox_metadata_backlog(section, checkbox),
+        422,
+        f"substantive {section}",
+    )
+
+
+@pytest.mark.parametrize("section", ["Scope", "acceptance", "verification"])
+def test_real_evidence_before_checkbox_metadata_remains_downloadable_http(
+    client: TestClient,
+    engine,
+    account_factory,
+    section: str,
+) -> None:
+    _assert_backlog_http_boundary(
+        client,
+        engine,
+        account_factory,
+        _checkbox_metadata_backlog(section, "x", evidence=True),
+        200,
+        None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1669,6 +1763,11 @@ def test_approval_accepts_ready_tasks_with_real_table_data_cells(
             "- The manifest refers to the exact approved document revisions.",
             "`Documentation impact:` Explain approved downloads in the user guide.",
         ),
+        *(
+            _checkbox_metadata_backlog(section, checkbox)
+            for section in ("Scope", "acceptance", "verification")
+            for checkbox in ("x", " ")
+        ),
     ],
     ids=[
         "pending-child-verification",
@@ -1680,6 +1779,12 @@ def test_approval_accepts_ready_tasks_with_real_table_data_cells(
         "scope-before-code-colon-metadata",
         "verification-metadata-only",
         "acceptance-metadata-only",
+        "scope-checked-metadata",
+        "scope-unchecked-metadata",
+        "acceptance-checked-metadata",
+        "acceptance-unchecked-metadata",
+        "verification-checked-metadata",
+        "verification-unchecked-metadata",
     ],
 )
 def test_existing_manifest_does_not_grandfather_an_invalid_backlog(

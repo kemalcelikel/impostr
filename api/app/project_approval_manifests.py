@@ -314,13 +314,19 @@ def _retains_starter_guidance(template: str, content: str) -> bool:
     return False
 
 
+def _strip_checkbox_prefix(line: str) -> str:
+    # _markdown_lines already removes list markers. Use the same remaining
+    # framing normalization for metadata boundaries and substantive evidence.
+    return re.sub(r"^\[[ xX]\][ \t]+", "", line)
+
+
 def _is_task_metadata_field(line: str) -> bool:
     # Inspect the visible label, not a particular placement of emphasis around
     # its colon. The caller has already masked examples/HTML and stripped list
     # framing. Only canonical labels end Scope; API: / Export: prose stays usable.
     # Decode before splitting: the colon can itself be inside a code span or
     # emphasized label. Splitting first would leave an unmatched Markdown opener.
-    visible, ambiguous = _visible_markdown_text(line)
+    visible, ambiguous = _visible_markdown_text(_strip_checkbox_prefix(line))
     if ambiguous:
         return False
     label, separator, _value = visible.partition(":")
@@ -409,7 +415,7 @@ def _has_substantive_text(value: str | None) -> bool:
                 index += 1
                 continue
         # Markdown checkboxes are list-item framing, not part of the answer.
-        line = re.sub(r"^\[[ xX]\][ \t]+", "", line)
+        line = _strip_checkbox_prefix(line)
         visible, ambiguous = _visible_markdown_text(line)
         if ambiguous:
             return False

@@ -14,9 +14,9 @@ delivered release. Consult `BACKLOG.md` for task outcomes.
 
 Migration `20260930_0006`, following `20260929_0005`, adds the three-document
 manifest table and pair-snapshot constraint without backfilling approvals or changing
-existing pair approvals/document history. Final approval/status/download routes are
-deliberately unregistered until IMP-021 passes integrated enforcement verification.
-Persistence is not approved-download delivery.
+existing pair approvals/document history. IMP-020 verified persistence with routes
+unregistered; IMP-021 subsequently verified and enabled the final approval/status/
+download routes. Persistence alone was not approved-download delivery.
 
 Fresh owned PostgreSQL checks verified upgrade, populated-0005 preservation, pair
 snapshot foreign-key/uniqueness failures and disposable downgrade/re-upgrade. A
@@ -33,6 +33,24 @@ the ordinary worktree build works or that simplified templates were integrated.
 The helper/source map is local evidence, not a reusable unpinned setup command;
 refresh exact inputs before checking changed code. Reviewer uses in-repo material,
 not the denied temporary marker or snapshot content.
+
+## Human-only final approval and downloads (IMP-021)
+
+Final approval requires the current approved PROJECT.md/AGENTS.md pair and exact
+current BACKLOG.md revision with substantive task evidence. A ready task marker is
+not final approval or proof that its dependencies are complete. Metadata-only or
+otherwise invalid required evidence returns `422`, creates no manifest/success audit
+or document mutation, and leaves status unapproved with downloads unavailable (`409`).
+Stale pair/backlog expectations return `409`; changing any saved member invalidates
+the handoff, including saving identical bytes as a new revision. Review the current
+pair/backlog and explicitly approve again; historical invalid manifests fail closed.
+
+Authorized downloads return the recorded current tuple's exact UTF-8 bytes with
+canonical PROJECT.md, AGENTS.md and BACKLOG.md filenames. They do not initialize a
+repository, run a task or enable chat. These API checks do not deliver final-review
+UI, private HTTPS/media, agent isolation or release readiness. The ordinary-worktree
+template/build blocker remains. Local synthetic checks used the refreshed
+`check_imp021_12.py` harness in the same owned directory, not real project storage.
 
 ## Prerequisites and pinned runtimes
 

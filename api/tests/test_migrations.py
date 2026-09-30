@@ -34,7 +34,7 @@ def _alembic_config() -> Config:
     return config
 
 
-def test_manifest_persistence_does_not_expose_final_approval_routes(
+def test_enabled_manifest_routes_require_a_current_valid_approval(
     client: TestClient, engine, account_factory
 ) -> None:
     account_factory("inert-owner", "inert manifest test passphrase")
@@ -57,7 +57,10 @@ def test_manifest_persistence_does_not_expose_final_approval_routes(
         revisions_before = db.execute(select(ProjectDocumentRevision.id)).all()
 
     path = f"/api/projects/{project_id}/final-approval"
-    assert client.get(path).status_code == 404
+    status_response = client.get(path)
+    assert status_response.status_code == 200
+    assert status_response.json()["approved"] is False
+    assert status_response.json()["current_manifest"] is None
     assert (
         client.post(
             path,
@@ -67,10 +70,10 @@ def test_manifest_persistence_does_not_expose_final_approval_routes(
             },
             headers=headers,
         ).status_code
-        == 404
+        == 409
     )
     for kind in ("project", "agents", "backlog"):
-        assert client.get(f"{path}/files/{kind}").status_code == 404
+        assert client.get(f"{path}/files/{kind}").status_code == 409
 
     with Session(engine) as db:
         assert db.scalar(select(ProjectApprovalManifest.id)) is None
