@@ -30,10 +30,9 @@ new push or merge is authorized by this document edit.
 
 - Delivered locally: app/database, login, private projects/drafts, pair approval,
   backlog task API and disposable authenticated browser fixture.
-- Approval/download API remains blocked after ten substantive attempts. The approved
-  IMP-020/021 split has three shared additional attempts (#11–13), all unused;
-  exact initial standalone-source proof passed; IMP-020 is next for execution,
-  not accepted. New/changed execution inputs need updated source mapping.
+- Approval/download API is locally verified through IMP-020/021 after the preserved
+  ten failed attempts. #11 persistence and #12 enforcement passed; #13 was not needed.
+  Local commits are not merged release or ordinary-worktree build readiness.
 - IMP-014 has partial UI/tests but awaits a verified approval commit and its own
   exact-candidate authenticated rendered review. Existing pass counts are not acceptance.
 - Chat is blocked by IMP-002 isolation/relay proof. Media/private HTTPS work remains
@@ -312,7 +311,7 @@ Legacy templates are harness-only, not restored or integrated. Initial schema se
 needed the generated disposable owner role; final owned check passed without widening
 app-role grants. Historical runner blocker above is resolved, not erased. No push/restart.
 
-## [ ] IMP-021 — Enforce valid approval and immutable three-file downloads
+## [x] IMP-021 — Enforce valid approval and immutable three-file downloads
 
 **Depends on:** IMP-020, IMP-007
 **Scope:** Finish preserved validation/approval/status/download code as one contract;
@@ -353,6 +352,22 @@ committed IMP-020 and its own refreshed exact integrated source proof. At most t
 exhaustion, missing capability or changed scope stops work.
 **Consumer rewiring:** IMP-010/011 and IMP-014's execution-only base gate now depend
 on IMP-021. Preserve IMP-014's entire candidate-review contract.
+
+**Verified repair/delivery:** Local code/affected-doc commit `2e7a0e9` after committed
+IMP-020. #12 fixed shared checkbox framing normalization for metadata boundaries and
+substantive evidence; #13 unused. Restored only the two router lines after enforcement
+passed and updated the prior inert-route regression to require current valid approval.
+Before repair, 12 metadata-only HTTP cases failed while 3 valid controls passed;
+after repair, 384 focused API tests plus Ruff/format/mypy passed. Fresh owned PostgreSQL
+upgrade `0006`, 12 integration tests including concurrent approval/save, and 2 schema/
+preservation/constraint tests passed; containers/volumes/networks cleanup verified.
+Independent combined IMP-020/021 in-repo review APPROVED; coordinator exact current
+API/Compose/DB byte verification passed with source-map SHA-256
+`67194881602d79a1a93c193227e35d5bb4b8267dd3f90605e2b7fe8b63a33b02` via local
+`check_imp021_12.py verify` (helper SHA-256
+`3bfb80848ec567db63ab849e2ee86877b07959774a8bc1321bb7faf38009d331`).
+Historical templates stayed harness-only: ordinary worktree build/template adoption
+remain unresolved. No chat, UI/rendered acceptance, release, push or runner restart.
 
 ## [ ] IMP-010 — Three-file final review experience
 
