@@ -27,6 +27,27 @@ receive them. Record proved commands and missing operator capabilities, not inve
 provider settings. Current BACKLOG.md records the detailed checkpoint; this section
 supersedes historical runner-only handoffs for this assignment only.
 
+**Later owner decision:** For this personal, non-serving prototype, defer aggregate
+memory/CPU/process/scratch quota checks. Owner accepts possible host resource
+exhaustion and disruption; do not require cgroup inspection/provisioning to proceed.
+This supersedes the resource-control prerequisite above, not denied-path rules or
+filesystem/credential/socket/network isolation. Retain practical time/output/relay
+bounds where available, without claiming aggregate containment. No broader release
+or attachment safety requirement is waived. Runner remains stopped until an actual
+executable handoff exists; this decision alone does not complete or requeue IMP-002.
+
+**Verified prototype checkpoint:** The four IMP-002 operator script/test files passed
+independent synthetic-only review and coordinator checks (9 unit tests and all four
+launcher modes). Three substantive attempts are consumed; no further implementation
+within this budget. Existing worker launch/stub relay is real, but live model transport
+and full session/proposal acceptance are absent. Keep IMP-002 blocked and runner stopped;
+next work requires renewed bounded authorization. Verified non-serving commands:
+`/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp002_*.py'` and
+`/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic` (also `probes`,
+`outage`, `timeout`). Runtime pins require UID/GID 1000:1000, bwrap 0.6.1,
+OpenCode 1.18.34 and measured executable/library digests; mismatch fails closed.
+No live mode or credential input exists; do not replace synthetic settings with secrets.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement

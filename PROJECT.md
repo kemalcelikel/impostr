@@ -88,6 +88,17 @@ isolated agent integration. Local setup and account recovery instructions are in
 reverse-proxy, backup/restore, production, or shared-server readiness from this
 slice.
 
+An operator-only synthetic worker/relay prototype now exists under
+`scripts/imp002_*.py`. Pinned bwrap/OpenCode launch, synthetic file/socket/network
+denials, configuration-injection denial, stub inference, outage/timeout and owned
+cleanup passed focused checks and independent synthetic-only review. It has no live
+upstream or credential resolver and is not integrated with the app. Its bounded SSE
+response is buffered; real streaming, resume/questions/permissions and revision-safe
+proposal import remain unproved. The owner accepts aggregate resource-exhaustion
+risk and defers memory/CPU/process/scratch quotas for this non-serving prototype
+only. This does not waive credential/project isolation or release/attachment rules.
+See BACKLOG.md for the exhausted three-attempt checkpoint and continuation scope.
+
 ### Current implementation versus planned application
 
 - This checkout contains root `scripts/backlog.py` and `run-tonight.sh`, plus an

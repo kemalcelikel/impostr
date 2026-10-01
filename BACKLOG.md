@@ -120,6 +120,44 @@ operator-supplied results. Establish enforceable memory/PID/CPU and bounded scra
 before execution. Missing delegation then requires operator provisioning, not host
 fallback or Docker access. Runner remains ineligible; 0/3 attempts used.
 
+**Later owner decision:** Owner explicitly declined resource-quota checks for this
+personal non-serving prototype and accepts possible PC freeze/resource exhaustion,
+to address if it occurs. Aggregate memory/CPU/process/scratch verification and
+provisioning are no longer a prerequisite for this prototype; the earlier checkpoint
+is history, not a demand for operator cgroup access. Keep practical time/output/relay
+bounds where available and report aggregate containment as unproved. File, credential,
+socket/network isolation, no host fallback, synthetic testing and pre-live independent
+review remain required; denied reads remain denied. This does not waive release or
+attachment-processing requirements. Worker/relay implementation and actual protocol
+proof are still missing; zero runner-eligible tasks and 0/3 attempts used.
+
+**Preparation outcome (2026-10-01, local task commit `ae1fab8`):** Implemented `scripts/imp002_prototype.py`,
+`imp002_worker.py`, `imp002_relay.py` and `test_imp002_prototype.py`. Coordinator
+independently passed 9 focused unit tests and `synthetic`, `probes`, `outage`,
+`timeout` launcher modes; all report owned-state removal. Independent review
+APPROVED **synthetic-only**, with no important reproduced defect. Actual runtime
+is UID/GID 1000:1000, bwrap 0.6.1, Python 3.10.12 and OpenCode 1.18.34, with binary
+and library digests pinned in the launcher (OpenCode `9ca0b995…64c4c2`).
+
+Attempt 1 established mandatory namespace/minimal-runtime containment and stub
+relay; read-only config avoided dependency setup, while measured route differed
+from the assumed query route. Attempt 2 matched `POST /openai/v1/responses` and
+native text/cache-hint shapes; inference/outage/timeout passed, but a project plugin
+executed despite disable flags. Attempt 3 masked `.opencode`, `.claude`, `.agents`
+with empty read-only mounts; the injection regression and all focused checks passed.
+Budget now exhausted: **3/3 substantive attempts**; earlier 0/3 entries are history.
+
+This is an executable synthetic-check handoff, not runner readiness. No credentials,
+live provider, app gateway or host fallback; SSE is bounded/buffered, not actual
+incremental chat streaming. Full start/resume/questions/permissions and revision-safe
+proposal import remain missing. IMP-002 stays `[!]`; root eligibility is still zero.
+Next proposed continuation: bounded text-only operator live relay with privately
+established fixed HTTPS endpoint/route/deployment/API-version/auth mechanism,
+normalized inference-only traffic, streamed cancellation/error handling, separate
+pre-live review and one isolated synthetic live turn. Settings/auth are unknown;
+do not invent them or request secrets in chat. Renewed scope/budget authorization
+is required before further implementation. No runner launch, push/PR or deployment.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001
