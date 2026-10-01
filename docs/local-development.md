@@ -10,6 +10,31 @@ shared-server release. Candidate review evidence applies only to the exact
 reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
 delivered release. Consult `BACKLOG.md` for task outcomes.
 
+## Operator-only chat-safety prototype (IMP-002)
+
+The prototype is synthetic and has no live-model mode, credential resolver or app
+gateway. Do not put real credentials/project data into it. It requires this host's
+measured UID/GID 1000:1000 and pinned bwrap 0.6.1/OpenCode 1.18.34/runtime digests;
+changed binaries fail closed, rather than falling back to the host. `/tmp/opencode`
+must already exist as the permitted scratch parent. From the repository root:
+
+```sh
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp002_*.py'
+/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic
+/usr/bin/python3 -I -B scripts/imp002_prototype.py probes
+/usr/bin/python3 -I -B scripts/imp002_prototype.py outage
+/usr/bin/python3 -I -B scripts/imp002_prototype.py timeout
+```
+
+Verified: 9 tests and all four modes passed, including synthetic file/socket/network
+denials, clean environment, read-only runtime/config/discovery, native Responses
+stub decoding, fail-closed relay outage, timeout/descendant pipe EOF and owned-state
+removal. Reports contain synthetic protocol shape/digests, not live credentials.
+Independent review approved only this synthetic scope. The owner defers aggregate
+resource quotas and accepts host disruption risk; time/output/relay bounds do not
+prove aggregate containment. SSE responses are buffered and full session/proposal
+behavior is unproved. These commands do not make the runner or product chat ready.
+
 ## Manifest persistence verification (IMP-020)
 
 Migration `20260930_0006`, following `20260929_0005`, adds the three-document
