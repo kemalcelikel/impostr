@@ -37,7 +37,47 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+
+**Latest verified delivery / runner continuation:** Phase two code/docs are committed
+in `a39a2f4`. Owner-approved additional repair **1/3 used**, with historical phase-two
+**5/5 preserved**; two extra repair attempts unused, not a budget renewal. Coordinator
+executed `/usr/bin/python3 -I -B scripts/imp024_verify.py`: build/migration, focused
+API tests, Ruff lint/format and mypy passed; seven actual joined checks and three actual
+lifecycle checks passed, including post-restart native question/permission progression,
+concurrent human save/import provenance, approval invalidation, uncertain start/reply
+crashes without duplicates, active revocation, broker/worker replacement and DB/channel
+outage recovery. All owned containers/volumes/networks/images/children/channel/generated
+inputs were removed and verified. Independent affected repair/orchestration review
+passed; final pure regressions 63 IMP-024 + 21 IMP-023 + 51 IMP-002 passed.
+
+Repair uses the remaining original product-event deadline instead of inherited idle
+timeout and tests actual recovered poll/reply ACK rather than stale running state or
+queued202. Historical cause is not conclusively isolated. Mechanical harness/static
+corrections did not consume substantive attempts; no real provider or private inputs
+were used. Older incomplete-backend stop statements below preserve history, not gates.
+
+**Next manual runner:** start phase three on committed backend `a39a2f4`: integrate
+chat into existing review/backlog UI, dedicated authorized Nginx stream handling and
+fresh exact-input candidate profile/normal synthetic Member rendered review, then
+phase-four integrated proof and ONE reviewed human-only model setup/acceptance command.
+Phase one remains delivered, phases three/four **0/5 each**; same owner-approved scope,
+no additional decision needed for synthetic implementation. Preserve remaining logs/
+browser artifacts; no reimplementation, private diagnostics, live operator execution,
+installations, push/PR or automatic start. Whole IMP-024 stays incomplete until phases
+three/four pass. IMP-002/005/006/008 live gates are unchanged.
+
+**Latest owner repair approval:** Owner chose finish rather than archiving chat and
+authorized best-judgment interactive repair/preparation from `0e94e09`. New focused
+phase-two budget: **three additional attempts, 0/3 used**, preserving exhausted **5/5**
+and all prior checkpoints. Delivered phase one stays delivered; phases three/four
+remain **0/5 each**. Tech-lead coordinates senior implementation and affected review;
+runner stays stopped until verified backend acceptance and a fresh owner-started handoff.
+First determine actual failure after API restart/question reply; inspect lease/recovered
+pump progress and product event waiting, not merely retained running state or queued202.
+Pass joined flow/save-import concurrency/no-duplicate lifecycle/revocation acceptance;
+reuse valid existing evidence, never remove failure assertions or broaden permissions.
+Selective verified local commits authorized; no push/PR/private modes or auto-start.
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 

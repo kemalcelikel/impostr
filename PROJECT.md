@@ -2,6 +2,15 @@
 
 ## Purpose and release boundary
 
+**Current verified chat backend:** IMP-024 phases one/two are delivered locally
+(backend `a39a2f4`): confined planning interactions/proposals plus authenticated durable
+API/DB/broker flow, actual restart/outage/no-duplicate recovery, concurrent human-save
+protection, approval invalidation and active revocation. Joined synthetic acceptance
+and owned cleanup passed. Chat UI/front-door stream rendering and final operator
+handoff remain phase-three/four work; no live model/account acceptance or release claim.
+Older prototype-only/nonintegrated wording below records previous checkpoints, not
+the current backend capability. Default Compose still has no live chat activation.
+
 **Latest approved preparation:** Build the complete local text-chat path through
 synthetic end-to-end verification (IMP-024), reusing delivered IMP-023. Live access
 remains disabled until a reviewed human-operated fixed model connection and existing

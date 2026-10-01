@@ -2,6 +2,39 @@
 
 ## Current complete-chat runner handoff (IMP-024)
 
+**Verified backend delivery and next manual run:** Phase two is delivered in
+`a39a2f4`, following the owner-approved interactive repair. Prior 5/5 retained;
+additional repair 1/3 used, two unused (not a renewed general phase budget).
+Coordinator's actual `imp024_verify.py` passed build/migration/API/static checks,
+all seven joined flow/concurrency/revocation/crash checks, all three broker/worker/DB
+lifecycle/outage checks and owned cleanup. Independent substantive repair and
+orchestration reviews passed. Historical timeout cause was not isolated; corrected
+waiting/progress assertions now pass the real recovery path.
+
+Next owner-started root run resumes **phase three**, not backend troubleshooting:
+chat UI, Nginx streaming and freshly reviewed exact-input synthetic browser fixture
+over committed backend base `a39a2f4`, then phase-four integrated proof and reviewed
+human operator entrypoint. Phases three/four remain 0/5 each; phase one is delivered.
+Do not rebuild delivered phases or consume unused repair attempts as free renewals.
+`overnight` takes sole coordination at launch; interactive implementation stops here.
+Prior stopped/nonaccepted-backend instructions below are history, superseded by this
+verified delivery. Live disabled/default, credentials/cleanup/Git limits unchanged.
+
+**Latest interactive repair authorization:** After the joined test failure at
+`0e94e09`, owner chose “finish” and requested a verified manual-runner handoff.
+Interactive tech-lead now coordinates the focused phase-two repair; runner remains
+stopped. Senior-developer implements; preserve the full candidate and delivered phase
+one. New finite repair budget: three additional substantive attempts (0/3 initially),
+retaining phase-two 5/5 and all other history. Phases three/four retain 0/5 each.
+Diagnose actual post-API-restart question/reply and missing permission progression,
+including persisted pump leases and product event-stream waiting; do not assume the
+timeout hypothesis proved. Fix concrete failures and pass joined/concurrency/recovery/
+revocation acceptance, with affected independent review. Local verified task/bookkeeping
+commits authorized; no pushes/private operator modes/runner launch. Once backend
+acceptance is delivered, prepare the owner-started continuation into phases three/four.
+This supersedes the exhausted phase-two stop and earlier runner-only coordination
+for this repair, not safety requirements or live acceptance.
+
 **Latest owner-authorized continuation:** Owner increased IMP-024 to **five attempts
 per phase** and requested preparation for another owner-started run. Preserve used
 attempts: phase one is delivered (3/5 used, do not reopen it); phase two is 3/5 used
