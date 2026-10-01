@@ -31,12 +31,99 @@ function pathOf(input: RequestInfo | URL): string {
   return String(input);
 }
 
+function stubAppFetch(fetchMock: ReturnType<typeof vi.fn>): void {
+  const original = fetchMock.getMockImplementation() as (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>;
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    if (/^\/api\/projects\/[^/]+\/chat$/.test(pathOf(input)) && (init?.method ?? "GET") === "GET") {
+      return Promise.resolve(jsonResponse({ conversations: [], last_conversation_id: null }));
+    }
+    return original(input, init);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+}
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
 
 describe("account access", () => {
+  it.each(["same", "different"])(
+    "restores retained editor text only for the %s revalidated account",
+    async (account) => {
+      const other = { ...admin, id: "other-user", username: "other", role: "user" as const };
+      let activeUser = admin;
+      let revoked = false;
+      const projectFor = (owner: TestUser) => ({
+        id: owner.id === admin.id ? "retained-project" : "other-project",
+        name: owner.id === admin.id ? "Retained plan" : "Other plan",
+        owner_user_id: owner.id,
+        created_at: admin.created_at,
+      });
+      const drafts = (owner: TestUser) =>
+        (["project", "agents", "backlog"] as const).map((kind) => ({
+          id: `${owner.id}-${kind}`,
+          kind,
+          filename: `${kind.toUpperCase()}.md`,
+          content: `# Saved ${owner.username} ${kind}\n`,
+          revision_number: 1,
+        }));
+      const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const path = pathOf(input);
+        if (path === "/api/auth/csrf") return Promise.resolve(jsonResponse({ csrf_token: "csrf" }));
+        if (path === "/api/auth/session") return Promise.resolve(jsonResponse({ user: admin }));
+        if (path === "/api/auth/login") {
+          activeUser = account === "same" ? admin : other;
+          revoked = false;
+          return Promise.resolve(jsonResponse({ user: activeUser, csrf_token: "session-csrf" }));
+        }
+        if (path === "/api/projects")
+          return Promise.resolve(jsonResponse([projectFor(activeUser)]));
+        if (path.startsWith("/api/admin/users")) return Promise.resolve(jsonResponse([]));
+        if (path.endsWith("/documents"))
+          return Promise.resolve(
+            revoked
+              ? jsonResponse({ detail: "Authentication required" }, 401)
+              : jsonResponse(drafts(activeUser)),
+          );
+        if (path.includes("/document-pair-approval"))
+          return Promise.resolve(jsonResponse({ detail: "No fixture approval" }, 503));
+        throw new Error(`Unexpected request ${path} ${init?.method ?? "GET"}`);
+      });
+      stubAppFetch(fetchMock);
+      render(<App />);
+      fireEvent.click(await screen.findByRole("button", { name: "Open project Retained plan" }));
+      fireEvent.change(await screen.findByRole("textbox", { name: "Edit PROJECT.md" }), {
+        target: { value: "# Private unsent editor\n" },
+      });
+      revoked = true;
+      fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
+      expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+      expect(screen.queryByRole("textbox", { name: "Edit PROJECT.md" })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Private unsent editor/)).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("Username"), {
+        target: { value: account === "same" ? admin.username : other.username },
+      });
+      fireEvent.change(screen.getByLabelText("Password"), {
+        target: { value: "synthetic passphrase" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+      if (account === "different")
+        fireEvent.click(await screen.findByRole("button", { name: "Open project Other plan" }));
+      const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      await waitFor(() =>
+        expect(editor).toHaveValue(
+          account === "same" ? "# Private unsent editor\n" : "# Saved other project\n",
+        ),
+      );
+      if (account === "different")
+        expect(screen.queryByText(/Private unsent editor/)).not.toBeInTheDocument();
+    },
+  );
+
   it.each(["dirty", "saving"])(
     "keeps the %s editor through project-list refresh even when the new page omits it",
     async (state) => {
@@ -75,7 +162,7 @@ describe("account access", () => {
         if (path.endsWith("/documents/project") && init?.method === "PUT") return saved;
         throw new Error(`Unexpected request ${path}`);
       });
-      vi.stubGlobal("fetch", fetchMock);
+      stubAppFetch(fetchMock);
       render(<App />);
       fireEvent.click(await screen.findByRole("button", { name: "Open project Open plan" }));
       const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
@@ -133,12 +220,13 @@ describe("account access", () => {
       if (path.startsWith("/api/admin/users")) return Promise.resolve(jsonResponse([]));
       throw new Error(`Unexpected request ${path}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Open project Plan 0" }));
     expect(await screen.findByRole("textbox", { name: "Edit project.md" })).toHaveValue(
       "# project page one\n",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Show project list" }));
     fireEvent.click(await screen.findByRole("button", { name: "Next projects" }));
     expect(
       await screen.findByRole("button", { name: "Open project Plan 101" }),
@@ -176,7 +264,7 @@ describe("account access", () => {
       if (path === "/api/auth/logout") return Promise.resolve(jsonResponse(undefined, 204));
       throw new Error(`Unexpected request ${path} ${init?.method ?? "GET"}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Open project Pending plan" }));
     fireEvent.change(await screen.findByRole("textbox", { name: "Edit project.md" }), {
@@ -274,7 +362,7 @@ describe("account access", () => {
       if (path === "/api/auth/logout") return Promise.resolve(jsonResponse(undefined, 204));
       throw new Error(`Unexpected request ${path} ${method}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Username"), {
@@ -381,7 +469,7 @@ describe("account access", () => {
         return Promise.resolve(jsonResponse([]));
       throw new Error(`Unexpected request ${path} ${method}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
     render(<App />);
 
     async function signIn(username: string): Promise<void> {
@@ -429,6 +517,7 @@ describe("account access", () => {
       ([path, options]) => pathOf(path) === "/api/projects" && options?.method === "POST",
     );
     expect(createCall?.[1]?.signal?.aborted).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Show project list" }));
     expect(screen.getByRole("button", { name: "Open project Bob private plan" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -466,7 +555,7 @@ describe("account access", () => {
       }
       throw new Error(`Unexpected request: ${path} ${init?.method ?? "GET"}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
 
@@ -509,7 +598,7 @@ describe("account access", () => {
       }
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Username"), {
@@ -541,7 +630,7 @@ describe("account access", () => {
       }
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
 
@@ -611,7 +700,7 @@ describe("account access", () => {
       }
       throw new Error(`Unexpected request: ${path} ${method}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Username"), {
@@ -708,7 +797,7 @@ describe("account access", () => {
       }
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Username"), {
@@ -767,7 +856,7 @@ describe("account access", () => {
       }
       throw new Error(`Unexpected request: ${path} ${method}`);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    stubAppFetch(fetchMock);
 
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Username"), {

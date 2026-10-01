@@ -22,6 +22,7 @@ import pty
 import re
 import secrets
 import select
+import selectors
 import shlex
 import shutil
 import signal
@@ -255,6 +256,46 @@ SNAPSHOT_TEMPLATE_FILES = frozenset((*LEGACY_TEMPLATE_PATHS, *NESTED_TEMPLATE_PA
 # from the root build context. It is archived only as explicit candidate support;
 # the committed-HEAD browser fixture does not add scripts to its snapshot.
 APP_SNAPSHOT_SUPPORT_FILES = frozenset({"scripts/backlog.py"})
+# 1121bb3 changes only BACKLOG.md/DONE.md from 4a4d820; every scoped runtime,
+# build, test and host-helper blob/mode is identical. Keep this exact HEAD pin.
+IMP024_CANDIDATE_BASE_COMMIT = "1121bb3314c7f298a16854f2f21ac084b13b44ae"
+# Exact delivered backend helpers. No resolver, host config/auth, phase-four
+# operator code or arbitrary script directory is copied into the host snapshot.
+IMP024_HOST_INPUTS = (
+    "scripts/imp002_prototype.py", "scripts/imp002_worker.py", "scripts/imp002_relay.py",
+    "scripts/imp023_worker.py", "scripts/imp024_protocol.py", "scripts/imp024_inference.py",
+    "scripts/imp024_worker.py", "scripts/imp024_product_worker.py", "scripts/imp024_broker.py",
+)
+IMP024_RUNTIME_INPUTS = (
+    ("web/src/App.tsx", "modified"), ("web/src/ProjectWorkspace.tsx", "modified"),
+    ("web/src/BacklogPlanning.tsx", "modified"), ("web/src/FinalReview.tsx", "modified"),
+    ("web/src/ProjectChat.tsx", "added"), ("web/src/chat.ts", "added"),
+    ("web/nginx/default.conf", "modified"),
+)
+IMP024_COMMITTED_INVENTORY = (
+    ".dockerignore", "compose.yaml", "compose.chat-synthetic.yaml",
+    "db/Dockerfile", "db/init/10-create-app-role.sql",
+    "api/Dockerfile", "api/requirements.lock", "api/requirements-dev.lock",
+    "api/pyproject.toml", "api/alembic.ini", "api/migrations/env.py",
+    *tuple("api/app/" + name + ".py" for name in (
+        "__init__", "admin", "audit", "auth", "backlog_markdown", "backlog_tasks",
+        "bootstrap_admin", "chat", "chat_broker", "chat_dispatch", "chat_protocol", "chat_state",
+        "config", "database", "db", "dependencies", "document_contract", "document_pair_approvals",
+        "main", "models", "operator", "passwords", "project_approval_manifests", "project_documents",
+        "project_names", "project_templates", "projects", "rate_limit", "security", "task_sections",
+        "template_profiles", "workspaces",
+    )),
+    *tuple("api/migrations/versions/" + name for name in (
+        "20260925_0001_initial_baseline.py", "20260925_0002_identity_and_project_metadata.py",
+        "20260925_0003_project_document_revisions.py", "20260925_0004_bounded_project_name_keys.py",
+        "20260929_0005_document_pair_approvals.py", "20260930_0006_project_approval_manifests.py",
+        "20261001_0007_durable_chat.py",
+    )),
+    "web/Dockerfile", "web/.dockerignore", "web/.npmrc", "web/package.json", "web/package-lock.json",
+    "web/index.html", "web/tsconfig.json", "web/tsconfig.app.json", "web/tsconfig.node.json", "web/vite.config.ts",
+    "web/src/api.ts", "web/src/main.tsx", "web/src/index.css", "web/src/vite-env.d.ts",
+    "scripts/backlog.py", *IMP024_HOST_INPUTS, *NESTED_TEMPLATE_PATHS,
+)
 CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
     (".dockerignore", "added"),
     ("api/Dockerfile", "modified"),
@@ -618,6 +659,8 @@ REVIEW_IMAGE_SERVICES = ("db", "api", "frontdoor")
 REVIEW_IMAGE_TAG = "fixture"
 MEMBER_RECOVERY_FILE = "member-recovery.json"
 APPROVED_HANDOFF_DIRECTORY = Path("/tmp/opencode/impostr-review-handoff")
+# Owner-accepted local development risk, not a generic private-directory policy.
+DEVELOPMENT_MEMBER_HANDOFF_DIRECTORY = Path("/tmp/opencode/impostr-review-handoff")
 MEMBER_HANDOFF_FILE = "member-login.json"
 CLEANUP_STATUS_FILE = "cleanup-status.json"
 CONTROL_DIRECTORY_PREFIX = "impostr-browser-review-control-"
@@ -692,6 +735,7 @@ class CandidatePreviewPolicy:
     allowed_test_literal_digests: tuple[tuple[str, str, str], ...] = ()
     committed_support_paths: tuple[str, ...] = ()
     required_snapshot_paths: tuple[str, ...] = ()
+    host_inputs: tuple[str, ...] = ()
 
 
 CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
@@ -755,6 +799,39 @@ IMP010_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
 )
 
 
+IMP024_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=IMP024_CANDIDATE_BASE_COMMIT,
+    reviewed_inputs=IMP024_RUNTIME_INPUTS,
+    nonruntime_test_changes=(("web/src/ProjectChat.test.tsx", "added"), ("web/src/chat.test.ts", "added"),
+                            ("web/src/App.test.tsx", "modified"), ("web/src/ProjectWorkspace.test.tsx", "modified")),
+    fingerprint_test_changes=True, strict_scope=True,
+    # Existing UI tests use these exact synthetic response/request literals;
+    # pin path/name/value rather than exempting the file from secret checks.
+    allowed_test_literal_digests=(
+        ("web/src/App.test.tsx", "csrf_token", "4fad1d39fc3e247a5b3ec6df0ca7aecdf93b137b256cc5ab3262703d12be9ad6"),
+        ("web/src/App.test.tsx", "password", "5eb6112da82593728387cc0dcf40d308924aa77c9a4dd6cdd95102ac79836802"),
+        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "e4eada162d4496107d413f4af9c90e0d53512bf874548c68abddc947edfabd23"),
+        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "c1497906d2da8b30fc3e4e89cae4537a8a8c01fe46fadf5d7a3a60eb084f7acf"),
+        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "41b10626ff104fc15c3c463d0c75cdbb952000f8a69e703f4b5e5851d24032cf"),
+        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "d9819f97c00543ed0a6ea4c55d883b9bfd888f0cfc230a6cdcc62aca3082ea09"),
+    ),
+    status_paths=(*CANDIDATE_STATUS_PATHS, "scripts", "compose.chat-synthetic.yaml"),
+    harness_changes=(("scripts/local_browser_fixture.py", "modified"),
+                     ("scripts/imp024_browser.py", "added"),
+                     ("scripts/test_imp024_browser_fixture.py", "added")),
+    fingerprint_harness_changes=True,
+    committed_support_paths=(".dockerignore", "scripts/backlog.py", *IMP024_HOST_INPUTS),
+    required_snapshot_paths=(
+        "compose.yaml", "api/Dockerfile", "web/Dockerfile", "web/package-lock.json",
+        "api/app/chat.py", "api/app/chat_broker.py", "api/app/chat_dispatch.py",
+        "api/app/chat_protocol.py", "api/app/chat_state.py", "api/app/models.py",
+        "api/app/config.py", "api/app/main.py",
+        "api/migrations/versions/20261001_0007_durable_chat.py", *NESTED_TEMPLATE_PATHS,
+    ),
+    host_inputs=IMP024_HOST_INPUTS,
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CandidateInputRecord:
     path: str
@@ -784,8 +861,9 @@ def _validate_private_directory(
     directory: Path,
     *,
     approved_directory: Path | None = None,
+    member_handoff: bool = False,
 ) -> Path:
-    """Require an owner-only, non-symlink directory before handling credentials."""
+    """Require private storage, or the exact accepted synthetic handoff exception."""
     try:
         if not directory.is_absolute():
             raise FixtureError("The private handoff directory must be an absolute path.")
@@ -800,7 +878,7 @@ def _validate_private_directory(
         stat.S_ISLNK(info.st_mode)
         or not stat.S_ISDIR(info.st_mode)
         or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o700
+        or not _private_directory_mode_allowed(directory, info, member_handoff=member_handoff)
         or resolved != directory
     ):
         raise FixtureError("The private handoff directory must be owned and mode 0700.")
@@ -809,18 +887,35 @@ def _validate_private_directory(
     return directory
 
 
-def validate_approved_handoff_directory(directory: Path) -> Path:
-    """Restrict credential publication to the owner-approved private channel."""
-    return _validate_private_directory(
-        directory,
-        approved_directory=APPROVED_HANDOFF_DIRECTORY,
+def _private_directory_mode_allowed(
+    directory: Path, info: os.stat_result, *, member_handoff: bool
+) -> bool:
+    if stat.S_IMODE(info.st_mode) == 0o700:
+        return True
+    # No other path, identity or permissive mode is accepted, even if a caller
+    # selects a different approved directory. Generic private I/O never opts in.
+    return (
+        member_handoff
+        and directory == APPROVED_HANDOFF_DIRECTORY == DEVELOPMENT_MEMBER_HANDOFF_DIRECTORY
+        and os.geteuid() == info.st_uid == info.st_gid == 1000
+        and stat.S_IMODE(info.st_mode) == 0o775
     )
 
 
-def _open_private_directory(directory: Path) -> int:
-    _validate_private_directory(directory)
+def validate_approved_handoff_directory(directory: Path) -> Path:
+    """Restrict synthetic Member publication to the owner-approved channel."""
+    return _validate_private_directory(
+        directory,
+        approved_directory=APPROVED_HANDOFF_DIRECTORY,
+        member_handoff=True,
+    )
+
+
+def _open_private_directory(directory: Path, *, member_handoff: bool = False) -> int:
+    _validate_private_directory(directory, member_handoff=member_handoff)
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
+        before = directory.lstat()
         descriptor = os.open(directory, flags)
     except OSError:
         raise FixtureError("The private fixture directory could not be opened safely.") from None
@@ -828,7 +923,8 @@ def _open_private_directory(directory: Path) -> int:
     if (
         not stat.S_ISDIR(info.st_mode)
         or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o700
+        or not _private_directory_mode_allowed(directory, info, member_handoff=member_handoff)
+        or (info.st_dev, info.st_ino) != (before.st_dev, before.st_ino)
     ):
         os.close(descriptor)
         raise FixtureError("The private fixture directory changed during validation.")
@@ -854,10 +950,14 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _read_private_json(directory: Path, filename: str, *, maximum_bytes: int) -> Any:
-    if Path(filename).name != filename:
+def _read_private_json(
+    directory: Path, filename: str, *, maximum_bytes: int, member_handoff: bool = False
+) -> Any:
+    if Path(filename).name != filename or (
+        member_handoff and filename not in {MEMBER_HANDOFF_FILE, CLEANUP_STATUS_FILE}
+    ):
         raise FixtureError("A private fixture file name is invalid.")
-    directory_fd = _open_private_directory(directory)
+    directory_fd = _open_private_directory(directory, member_handoff=member_handoff)
     file_fd = -1
     try:
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -891,9 +991,12 @@ def _atomic_write_private_json(
     *,
     replace_existing: bool,
     maximum_bytes: int = MAX_CHANNEL_JSON_BYTES,
+    member_handoff: bool = False,
 ) -> None:
     """Publish one mode-0600 JSON value with a same-directory atomic rename."""
-    if Path(filename).name != filename:
+    if Path(filename).name != filename or (
+        member_handoff and filename not in {MEMBER_HANDOFF_FILE, CLEANUP_STATUS_FILE}
+    ):
         raise FixtureError("A private fixture file name is invalid.")
     try:
         content = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode(
@@ -904,7 +1007,7 @@ def _atomic_write_private_json(
     if len(content) > maximum_bytes:
         raise FixtureError("A private fixture record exceeded its size limit.")
 
-    directory_fd = _open_private_directory(directory)
+    directory_fd = _open_private_directory(directory, member_handoff=member_handoff)
     temporary_name = f".{filename}.{secrets.token_hex(12)}.tmp"
     file_fd = -1
     try:
@@ -952,10 +1055,12 @@ def _atomic_write_private_json(
         os.close(directory_fd)
 
 
-def _unlink_private_file(directory: Path, filename: str) -> bool:
-    if Path(filename).name != filename:
+def _unlink_private_file(directory: Path, filename: str, *, member_handoff: bool = False) -> bool:
+    if Path(filename).name != filename or (
+        member_handoff and filename not in {MEMBER_HANDOFF_FILE, CLEANUP_STATUS_FILE}
+    ):
         raise FixtureError("A private fixture file name is invalid.")
-    directory_fd = _open_private_directory(directory)
+    directory_fd = _open_private_directory(directory, member_handoff=member_handoff)
     try:
         try:
             info = os.stat(filename, dir_fd=directory_fd, follow_symlinks=False)
@@ -995,6 +1100,7 @@ def write_member_handoff(directory: Path, username: str, password: str) -> None:
         MEMBER_HANDOFF_FILE,
         payload,
         replace_existing=False,
+        member_handoff=True,
     )
 
 
@@ -1005,12 +1111,13 @@ def remove_member_handoff(directory: Path, username: str, password: str) -> bool
             directory,
             MEMBER_HANDOFF_FILE,
             maximum_bytes=MAX_CHANNEL_JSON_BYTES,
+            member_handoff=True,
         )
     except FileNotFoundError:
         return False
     if payload != {"username": username, "password": password}:
         raise FixtureError("The private Member handoff changed during the fixture run.")
-    return _unlink_private_file(directory, MEMBER_HANDOFF_FILE)
+    return _unlink_private_file(directory, MEMBER_HANDOFF_FILE, member_handoff=True)
 
 
 def initial_cleanup_status() -> dict[str, Any]:
@@ -1096,6 +1203,7 @@ def read_cleanup_status(directory: Path) -> dict[str, Any] | None:
             directory,
             CLEANUP_STATUS_FILE,
             maximum_bytes=MAX_CHANNEL_JSON_BYTES,
+            member_handoff=True,
         )
     except FileNotFoundError:
         return None
@@ -1109,6 +1217,7 @@ def write_cleanup_status(directory: Path, payload: Mapping[str, Any]) -> None:
         CLEANUP_STATUS_FILE,
         clean_payload,
         replace_existing=True,
+        member_handoff=True,
     )
 
 
@@ -1118,8 +1227,10 @@ def prepare_handoff_channel(
     approved_directory: Path = APPROVED_HANDOFF_DIRECTORY,
 ) -> None:
     """Fail closed on an unclean prior run before creating replacement credentials."""
-    _validate_private_directory(directory, approved_directory=approved_directory)
-    directory_fd = _open_private_directory(directory)
+    _validate_private_directory(
+        directory, approved_directory=approved_directory, member_handoff=True
+    )
+    directory_fd = _open_private_directory(directory, member_handoff=True)
     try:
         try:
             os.stat(MEMBER_HANDOFF_FILE, dir_fd=directory_fd, follow_symlinks=False)
@@ -2193,8 +2304,10 @@ def _read_candidate_file_with_mode(
     *,
     maximum_bytes: int,
     allowed_modes: frozenset[int] = frozenset({0o644}),
+    allowed_owners: frozenset[int] | None = None,
 ) -> tuple[bytes, int]:
     """Read one plain candidate file without following path links."""
+    owners = allowed_owners if allowed_owners is not None else frozenset({os.geteuid()})
     relative = PurePosixPath(relative_path)
     if (
         relative.is_absolute()
@@ -2227,7 +2340,7 @@ def _read_candidate_file_with_mode(
         before = os.stat(file_name, dir_fd=parent_fd, follow_symlinks=False)
         if (
             not stat.S_ISREG(before.st_mode)
-            or before.st_uid != os.geteuid()
+            or before.st_uid not in owners
             or before.st_nlink != 1
             or stat.S_IMODE(before.st_mode) not in allowed_modes
             or before.st_size < 0
@@ -2242,7 +2355,7 @@ def _read_candidate_file_with_mode(
         opened = os.fstat(file_fd)
         if (
             not stat.S_ISREG(opened.st_mode)
-            or opened.st_uid != os.geteuid()
+            or opened.st_uid not in owners
             or opened.st_nlink != 1
             or stat.S_IMODE(opened.st_mode) not in allowed_modes
             or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
@@ -2489,6 +2602,8 @@ def _collect_candidate_worktree_inputs(
     private_home: Path,
     policy: CandidatePreviewPolicy,
 ) -> tuple[tuple[CandidateInputRecord, ...], dict[str, bytes]]:
+    if policy.host_inputs and (policy.base_commit != IMP024_CANDIDATE_BASE_COMMIT or policy.host_inputs != IMP024_HOST_INPUTS):
+        raise FixtureError("The candidate host-helper inventory is not the reviewed profile.")
     reviewed_paths = validate_candidate_reviewed_paths(
         tuple(path for path, _status in policy.reviewed_inputs),
         policy=policy,
@@ -2504,7 +2619,7 @@ def _collect_candidate_worktree_inputs(
         or set(expected).intersection(nonruntime)
         or set(expected).intersection(harness)
         or set(nonruntime).intersection(harness)
-        or any(status != "modified" for status in harness.values())
+        or any(status not in {"modified", "added"} for status in harness.values())
         or (policy.fingerprint_harness_changes and not harness)
         or any(
             path not in nonruntime
@@ -2600,6 +2715,24 @@ def _collect_candidate_worktree_inputs(
                 sha256=hashlib.sha256(content).hexdigest(),
             )
         )
+    for path in (IMP024_COMMITTED_INVENTORY if policy.host_inputs else ()):
+        # Three delivered lockfiles are root-owned mode0644 in this checkout.
+        # Read-only committed inventory only: never permit dirty/root-owned UI or
+        # host helpers; no chmod, symlinks, multiple links or writable root files.
+        locked = path in {"api/requirements.lock", "api/requirements-dev.lock", "web/package-lock.json"}
+        content, mode = _read_candidate_file_with_mode(repository_root, path, maximum_bytes=policy.max_file_bytes,
+            allowed_modes=frozenset({0o644}) if locked else policy.allowed_input_modes,
+            allowed_owners=frozenset({0, os.geteuid()}) if locked else None)
+        # Immutable committed backend fixture code may contain synthetic literal
+        # test labels. Tokens/private keys remain denied; no resolver execution.
+        if path in IMP024_HOST_INPUTS:
+            _reject_candidate_harness_secrets(path, content, allowed_paths=frozenset(IMP024_HOST_INPUTS))
+        else:
+            _reject_candidate_secrets(path, content)
+        total_bytes += len(content)
+        if total_bytes > policy.max_total_bytes:
+            raise FixtureError("Candidate host inputs exceed the total size limit.")
+        records.append(CandidateInputRecord(path, "committed", len(content), mode, hashlib.sha256(content).hexdigest()))
     return tuple(records), contents
 
 
@@ -2725,7 +2858,7 @@ def validate_candidate_snapshot_tree(
 ) -> None:
     """Verify every reviewed source remains exact in its private snapshot."""
     for record in snapshot.records:
-        if record.path not in snapshot.runtime_paths:
+        if record.path not in snapshot.runtime_paths and record.status != "committed":
             continue
         expected_digest = record.sha256
         if prepared and record.path == "compose.yaml":
@@ -2817,8 +2950,21 @@ def archive_candidate_snapshot(
             maximum_bytes=policy.max_file_bytes,
         )
     runtime_paths = {path for path, _status in policy.reviewed_inputs}
+    if policy.host_inputs:
+        runtime_paths.add("scripts/imp024_browser.py")
+        # The synthetic overlay is inventory-only: preview generates its one
+        # validated API bind instead of executing the broader integration overlay.
+        # This is a public worktree inventory input, not an extracted snapshot
+        # file. Use the same reviewed modes as collection; snapshots stay 0644.
+        overlay, _mode = _read_candidate_file_with_mode(
+            repository,
+            "compose.chat-synthetic.yaml",
+            maximum_bytes=policy.max_file_bytes,
+            allowed_modes=policy.allowed_input_modes,
+        )
+        _write_candidate_snapshot_file(destination, "compose.chat-synthetic.yaml", overlay, status="added")
     for record in records:
-        if record.path not in runtime_paths:
+        if record.path not in runtime_paths or record.status == "committed":
             continue
         _write_candidate_snapshot_file(
             destination,
@@ -2843,7 +2989,7 @@ def archive_candidate_snapshot(
         base_commit=commit,
         fingerprint=fingerprint,
         records=records,
-        runtime_paths=tuple(path for path, _status in policy.reviewed_inputs),
+        runtime_paths=tuple(sorted(runtime_paths)),
         support_file_digests=support_file_digests,
     )
     validate_candidate_snapshot_tree(destination, candidate)
@@ -2862,6 +3008,7 @@ def validate_candidate_dockerignore(
     imp007: bool = False,
     imp014: bool = False,
     imp010: bool = False,
+    imp024: bool = False,
 ) -> None:
     """Keep each candidate's root-context build limited to its reviewed inputs."""
     try:
@@ -2877,9 +3024,9 @@ def validate_candidate_dockerignore(
         )
     except UnicodeDecodeError:
         raise FixtureError("The candidate root build ignore file is invalid.") from None
-    if sum((imp007, imp014, imp010)) > 1:
+    if sum((imp007, imp014, imp010, imp024)) > 1:
         raise FixtureError("The candidate root build profile is ambiguous.")
-    if imp010 or imp014:
+    if imp010 or imp014 or imp024:
         expected_rules = (
             IMP010_CANDIDATE_DOCKERIGNORE_RULES
             if imp010
@@ -2969,6 +3116,8 @@ def archive_head_snapshot(
 ) -> str:
     """Create an isolated source tree from one resolved HEAD commit, never the worktree."""
     allowed_support_files = APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES
+    if expected_commit == IMP024_CANDIDATE_BASE_COMMIT:
+        allowed_support_files |= frozenset(IMP024_HOST_INPUTS)
     if len(set(additional_paths)) != len(additional_paths) or any(
         path not in allowed_support_files for path in additional_paths
     ):
@@ -3590,12 +3739,13 @@ class ComposeController:
         imp007_candidate: bool = False,
         imp014_candidate: bool = False,
         imp010_candidate: bool = False,
+        imp024_candidate: bool = False,
         committed_migration_profile: str | None = None,
     ) -> None:
-        if sum((approval_candidate, imp007_candidate, imp014_candidate, imp010_candidate)) > 1:
+        if sum((approval_candidate, imp007_candidate, imp014_candidate, imp010_candidate, imp024_candidate)) > 1:
             raise FixtureError("A candidate snapshot cannot select two migration profiles.")
         if (
-            approval_candidate or imp007_candidate or imp014_candidate or imp010_candidate
+            approval_candidate or imp007_candidate or imp014_candidate or imp010_candidate or imp024_candidate
         ) and not candidate:
             profile = (
                 "IMP-013"
@@ -3626,6 +3776,7 @@ class ComposeController:
         self.imp007_candidate = imp007_candidate
         self.imp014_candidate = imp014_candidate
         self.imp010_candidate = imp010_candidate
+        self.imp024_candidate = imp024_candidate
         self.committed_migration_profile = committed_migration_profile
 
     def command(self, arguments: Sequence[str]) -> list[str]:
@@ -3801,6 +3952,12 @@ class ComposeController:
         )
 
     def migrate(self) -> str:
+        if self.imp024_candidate:
+            self.invoke(["run", "--rm", "api", "alembic", "upgrade", "head"], label="fresh chat migration", timeout=300)
+            current = self.invoke(["run", "--rm", "api", "alembic", "current"], label="chat migration head", capture_stdout=True)
+            if migration_revision_status(current, expected_revision="20261001_0007") != "expected":
+                raise FixtureError("The chat migration head is unexpected.")
+            return "0007 expected"
         if self.imp010_candidate:
             migration_profile = "imp010"
         elif self.imp014_candidate:
@@ -4235,8 +4392,19 @@ def validate_candidate_compose_config(
     config_text: str,
     identity: RunIdentity,
     source_dir: Path,
+    *,
+    chat_directory: Path | None = None,
 ) -> None:
     """Apply the committed fixture's safety checks plus the candidate root context."""
+    if chat_directory is not None:
+        # Remove ONLY the validated exception from a copy for the original full
+        # no-host-attachment checks. Unknown mounts/options still fail there.
+        config = json.loads(config_text)
+        validate_chat_bind(config, identity, chat_directory)
+        api = config["services"]["api"]
+        del api["volumes"]
+        del api["environment"]["IMPOSTR_CHAT_ENABLED"]
+        config_text = json.dumps(config)
     validate_compose_config(config_text, identity)
     try:
         config: Any = json.loads(config_text)
@@ -4363,6 +4531,38 @@ def validate_candidate_compose_config(
         raise
     except (AttributeError, KeyError, TypeError, ValueError, OSError):
         raise FixtureError("The candidate Compose configuration failed safety checks.") from None
+
+
+def validate_chat_bind(config: Any, identity: RunIdentity, directory: Path) -> None:
+    expected = Path("/tmp/opencode") / ("impostr-browser-chat-" + identity.run_id)
+    if directory != expected:
+        raise FixtureError("The chat bind is not this run's exact owned directory.")
+    try:
+        info = directory.lstat()
+        socket_info = (directory / "channel.sock").lstat()
+    except OSError:
+        raise FixtureError("The owned chat channel is unavailable.") from None
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 1000 or info.st_gid != 1000
+            or stat.S_IMODE(info.st_mode) != 0o711 or not stat.S_ISSOCK(socket_info.st_mode)
+            or socket_info.st_uid != 1000):
+        raise FixtureError("The chat channel ownership is invalid.")
+    try:
+        services = config["services"]
+        api = services["api"]
+        if api.get("environment", {}).get("IMPOSTR_CHAT_ENABLED") != "1":
+            raise FixtureError("The synthetic chat activation is invalid.")
+        mounts = api.get("volumes")
+        if (not isinstance(mounts, list) or len(mounts) != 1 or mounts[0] != {
+            "type": "bind", "source": str(directory), "target": "/run/impostr-broker",
+            "read_only": True, "bind": {"create_host_path": False},
+        }):
+            raise FixtureError("The synthetic chat bind is not exact/read-only.")
+        for name, service in services.items():
+            if name != "api" and (service.get("environment", {}).get("IMPOSTR_CHAT_ENABLED")
+                                   or any(mount.get("type") == "bind" for mount in service.get("volumes", []))):
+                raise FixtureError("Only the API can attach the synthetic broker.")
+    except (KeyError, TypeError, AttributeError):
+        raise FixtureError("The synthetic chat bind configuration is invalid.") from None
 
 
 def run_hidden_password_prompts(
@@ -4754,7 +4954,7 @@ class FixtureSupervisor:
             r"[0-9a-f]{64}", candidate_fingerprint
         ) is None:
             raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
-        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010"}:
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010", "imp024"}:
             raise FixtureError("The candidate review scope is invalid.")
         self.candidate_preflight = candidate_preflight
         self.candidate_fingerprint = candidate_fingerprint
@@ -4770,6 +4970,10 @@ class FixtureSupervisor:
             raise FixtureError("The IMP-014 candidate scope requires explicit opt-in.")
         if candidate_variant == "imp010" and not self.candidate_mode:
             raise FixtureError("The IMP-010 candidate scope requires explicit opt-in.")
+        if candidate_variant == "imp024" and not self.candidate_mode:
+            raise FixtureError("The IMP-024 candidate scope requires explicit opt-in.")
+        self.chat_guardian: subprocess.Popen[bytes] | None = None
+        self.chat_directory: Path | None = None
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -4886,9 +5090,12 @@ class FixtureSupervisor:
                 imp007=self.candidate_variant == "imp007",
                 imp014=self.candidate_variant == "imp014",
                 imp010=self.candidate_variant == "imp010",
+                imp024=self.candidate_variant == "imp024",
             )
             set_candidate_snapshot_loopback_host(self.source_dir, host)
             set_candidate_snapshot_review_images(self.source_dir, self.identity.project_name)
+            if self.candidate_variant == "imp024":
+                self._prepare_chat_broker()
             self.candidate_snapshot.prepared_compose_sha256 = hashlib.sha256(
                 _read_candidate_file(
                     self.source_dir,
@@ -4919,6 +5126,7 @@ class FixtureSupervisor:
             imp007_candidate=self.candidate_variant == "imp007",
             imp014_candidate=self.candidate_variant == "imp014",
             imp010_candidate=self.candidate_variant == "imp010",
+            imp024_candidate=self.candidate_variant == "imp024",
             committed_migration_profile=committed_migration_profile,
         )
 
@@ -4927,7 +5135,7 @@ class FixtureSupervisor:
         self.docker.probe_local_engine()
         config_text = self.compose.config_json()
         if self.candidate_mode:
-            validate_candidate_compose_config(config_text, self.identity, self.source_dir)
+            validate_candidate_compose_config(config_text, self.identity, self.source_dir, chat_directory=self.chat_directory)
         else:
             validate_compose_config(config_text, self.identity)
         del config_text
@@ -4993,8 +5201,12 @@ class FixtureSupervisor:
             self.candidate_snapshot,
             prepared=self.candidate_snapshot.prepared_compose_sha256 is not None,
         )
+        if self.candidate_variant == "imp024" and self.chat_guardian is not None and self.chat_guardian.poll() is not None:
+            raise FixtureError("The owned synthetic broker stopped unexpectedly.")
 
     def _candidate_policy(self) -> CandidatePreviewPolicy:
+        if self.candidate_variant == "imp024":
+            return IMP024_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp010":
             return IMP010_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp014":
@@ -5004,6 +5216,50 @@ class FixtureSupervisor:
         if self.candidate_variant == "imp007":
             return IMP007_CANDIDATE_PREVIEW_POLICY
         return CANDIDATE_PREVIEW_POLICY
+
+    def _prepare_chat_broker(self) -> None:
+        if self.source_dir is None or self.identity is None or self.state_dir is None:
+            raise FixtureError("Chat fixture state unavailable.")
+        if (os.getuid(), os.geteuid(), os.getgid()) != (1000, 1000, 1000):
+            raise FixtureError("Chat fixture requires measured UID/GID1000.")
+        self.chat_directory = Path("/tmp/opencode") / ("impostr-browser-chat-" + self.identity.run_id)
+        if self.chat_directory.exists() or self.chat_directory.is_symlink():
+            raise FixtureError("The generated chat directory already exists.")
+        self.chat_guardian = subprocess.Popen([
+            "/usr/bin/python3", "-I", "-B", str(self.source_dir / "scripts/imp024_browser.py"),
+            "--directory", str(self.chat_directory), "--lifetime", str(self.lifetime_minutes * 60 + STARTUP_TIMEOUT_SECONDS),
+        ], cwd=self.source_dir, env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.PIPE,
+           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True)
+        # One bounded, fixed readiness line, never broker/worker transcripts.
+        with selectors.DefaultSelector() as selector:
+            selector.register(self.chat_guardian.stdout, selectors.EVENT_READ)
+            if not selector.select(20) or os.read(self.chat_guardian.stdout.fileno(), 16) != b"READY\n":
+                raise FixtureError("The synthetic chat broker did not start.")
+        directory = self.chat_directory
+        def bind(text: str) -> str:
+            marker = "      IMPOSTR_WORKSPACE_ROOT: /workspaces\n"
+            if text.count(marker) != 3 or "  api:\n" not in text:
+                raise FixtureError("The chat Compose base changed.")
+            return text.replace(marker, marker + "      IMPOSTR_CHAT_ENABLED: '1'\n    volumes:\n      - type: bind\n        source: " + str(directory) + "\n        target: /run/impostr-broker\n        read_only: true\n        bind:\n          create_host_path: false\n", 1)
+        _rewrite_candidate_compose(self.source_dir, bind)
+
+    def _stop_chat_broker(self) -> None:
+        if self.chat_guardian is None:
+            return
+        process = self.chat_guardian
+        if process.stdin is not None:
+            process.stdin.close()  # EOF also covers an unexpected supervisor death.
+        try:
+            status = process.wait(timeout=90)
+        except subprocess.TimeoutExpired:
+            raise FixtureError("Owned chat broker cleanup did not finish.") from None
+        if process.stdout is not None:
+            process.stdout.close()
+        paths = (self.chat_directory, self.chat_directory.with_name(self.chat_directory.name + "-scratch")) if self.chat_directory else ()
+        if status != 0 or any(path.exists() or path.is_symlink() for path in paths):
+            raise FixtureError("Owned chat broker/channel/worker cleanup was not verified.")
+        self.chat_guardian = None
+        self._say("Owned synthetic broker, workers and Unix channel removed.")
 
     def _provision_and_verify_accounts(self, admin_password: str) -> None:
         """Authenticate normally, provision two members, and exercise auth denials."""
@@ -5175,7 +5431,7 @@ class FixtureSupervisor:
             raise FixtureError("Candidate project creation did not return three draft documents.")
         template_sources = (
             NESTED_TEMPLATE_PATHS
-            if self.candidate_variant in {"imp014", "imp010"}
+            if self.candidate_variant in {"imp014", "imp010", "imp024"}
             else LEGACY_TEMPLATE_PATHS
         )
         expected_sources = {
@@ -5287,6 +5543,15 @@ class FixtureSupervisor:
             raise FixtureError("A second candidate Member discovered a foreign approval status.")
 
         self._validate_candidate_preview()
+        if self.candidate_variant == "imp024":
+            chat = f"/api/projects/{project_id}/chat"
+            created = ApiClient._require_json_object(client.request("POST", chat, body={"title": "Synthetic planning"}, csrf_token=client.csrf_token), 201, "chat conversation")
+            conversation_id = created.get("id")
+            if not isinstance(conversation_id, str) or other_client.request("GET", chat).status != 404:
+                raise FixtureError("Chat conversation authorization failed.")
+            if client.request("GET", chat + "/" + conversation_id).status != 200:
+                raise FixtureError("Chat history unavailable.")
+            self._say("IMP-024 candidate: normal Member conversation/history and cross-Member denial passed; rendered/stream proof still required.")
         if self.candidate_variant == "imp013":
             self._say(
                 "IMP-013 candidate preflight passed: normal Member sign-in, owned project and "
@@ -6037,6 +6302,8 @@ Report only sanitized results and owned cleanup state.
         deadline = time.monotonic() + self.lifetime_minutes * 60
         input_open = True
         while time.monotonic() < deadline:
+            if self.chat_guardian is not None and self.chat_guardian.poll() is not None:
+                raise FixtureError("The synthetic broker stopped during browser review.")
             remaining = min(1.0, max(0.0, deadline - time.monotonic()))
             if not input_open:
                 time.sleep(remaining)
@@ -6251,6 +6518,19 @@ Report only sanitized results and owned cleanup state.
             self.cleanup_owned_images = "not-verified"
             errors.append("Owned Compose teardown could not be verified.")
 
+        # Member revocation above runs a disposable API container with this
+        # profile's read-only broker bind (create_host_path=False). Keep its
+        # source directory until those DB/HTTP checks and stack teardown finish;
+        # then reap the broker before deleting the snapshot it executes from.
+        chat_cleanup_verified = True
+        try:
+            self._stop_chat_broker()
+        except FixtureError as failure:
+            chat_cleanup_verified = False
+            errors.append(str(failure))
+        if not chat_cleanup_verified:
+            remove_state = False
+            self.cleanup_private_state = "retained-for-recovery"
         if self.state_dir is not None and remove_state:
             try:
                 shutil.rmtree(self.state_dir)
@@ -6389,7 +6669,12 @@ Report only sanitized results and owned cleanup state.
         for cleanup_error in cleanup_errors:
             self._say(f"Cleanup warning: {cleanup_error}")
         if self.candidate_preflight:
-            if self.candidate_variant == "imp013":
+            if self.candidate_variant == "imp024":
+                self._say("IMP024_CANDIDATE_PREFLIGHT_SCOPE=synthetic-chat-ui; browser/frontdoor incremental proof was not performed.")
+                fingerprint_label = "IMP024_CANDIDATE_FINGERPRINT"
+                result_label = "IMP024_CANDIDATE_PREFLIGHT_RESULT"
+                cleanup_label = "IMP024_CANDIDATE_CLEANUP"
+            elif self.candidate_variant == "imp013":
                 self._say(
                     "IMP013_CANDIDATE_PREFLIGHT_SCOPE=authenticated-api-approval; "
                     "rendered browser review was not performed."
@@ -6732,6 +7017,17 @@ def recover_registered_project(control_directory: Path) -> dict[str, str]:
 
     try:
         _validate_recovery_state_directory(state_dir)
+        if project_name is not None:
+            # EOF independently stops the owned chat watchdog after supervisor
+            # death. Do not certify private cleanup before its final rmdir,
+            # which occurs only after broker/worker descendants are reaped.
+            chat_directory = Path("/tmp/opencode") / ("impostr-browser-chat-" + project_name.removeprefix("impostr-review-"))
+            deadline = time.monotonic() + 90
+            scratch = chat_directory.with_name(chat_directory.name + "-scratch")
+            while any(path.exists() or path.is_symlink() for path in (chat_directory, scratch)) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if any(path.exists() or path.is_symlink() for path in (chat_directory, scratch)):
+                raise FixtureError("Owned chat watchdog cleanup remains unverified.")
         if not owned:
             if state_dir.exists():
                 shutil.rmtree(state_dir)
@@ -6866,6 +7162,7 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
                 "--imp013-candidate-fingerprint",
                 "--imp014-candidate-fingerprint",
                 "--imp010-candidate-fingerprint",
+                "--imp024-candidate-fingerprint",
             }
             and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
         )
@@ -7043,6 +7340,7 @@ def _remove_unexpected_member_handoff(directory: Path) -> str:
             directory,
             MEMBER_HANDOFF_FILE,
             maximum_bytes=MAX_CHANNEL_JSON_BYTES,
+            member_handoff=True,
         )
     except FileNotFoundError:
         return "not-created"
@@ -7051,7 +7349,7 @@ def _remove_unexpected_member_handoff(directory: Path) -> str:
     try:
         return (
             "removed"
-            if _unlink_private_file(directory, MEMBER_HANDOFF_FILE)
+            if _unlink_private_file(directory, MEMBER_HANDOFF_FILE, member_handoff=True)
             else "not-verified"
         )
     except FixtureError:
@@ -7163,6 +7461,7 @@ def _run_guardian(
                 "imp013": "--imp013-candidate-fingerprint",
                 "imp014": "--imp014-candidate-fingerprint",
                 "imp010": "--imp010-candidate-fingerprint",
+                "imp024": "--imp024-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -7297,8 +7596,8 @@ def launch_unattended(
     lock_fd = _open_control_lock(control_directory)
     guardian: subprocess.Popen[bytes] | None = None
     try:
-        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010"} or (
-            candidate_variant in {"imp007", "imp013", "imp014", "imp010"}
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010", "imp024"} or (
+            candidate_variant in {"imp007", "imp013", "imp014", "imp010", "imp024"}
             and candidate_fingerprint is None
         ):
             raise FixtureError("The candidate review scope requires a valid opt-in fingerprint.")
@@ -7333,6 +7632,7 @@ def launch_unattended(
                 "imp013": "--imp013-candidate-fingerprint",
                 "imp014": "--imp014-candidate-fingerprint",
                 "imp010": "--imp010-candidate-fingerprint",
+                "imp024": "--imp024-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -7612,6 +7912,7 @@ def _add_candidate_fingerprint_arguments(
     include_imp007: bool = False,
     include_imp014: bool = False,
     include_imp010: bool = False,
+    include_imp024: bool = False,
 ) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -7640,6 +7941,9 @@ def _add_candidate_fingerprint_arguments(
             type=_candidate_fingerprint_argument,
             help="opt into the pinned IMP-014 candidate after its UI preflight",
         )
+    if include_imp024:
+        group.add_argument("--imp024-candidate-fingerprint", type=_candidate_fingerprint_argument,
+                           help="opt into exact reviewed synthetic chat UI/broker candidate")
     if include_imp010:
         group.add_argument(
             "--imp010-candidate-fingerprint",
@@ -7650,6 +7954,9 @@ def _add_candidate_fingerprint_arguments(
 
 
 def _candidate_selection(parsed: argparse.Namespace) -> tuple[str | None, str]:
+    imp024_fingerprint = getattr(parsed, "imp024_candidate_fingerprint", None)
+    if imp024_fingerprint is not None:
+        return imp024_fingerprint, "imp024"
     imp010_fingerprint = getattr(parsed, "imp010_candidate_fingerprint", None)
     if imp010_fingerprint is not None:
         return imp010_fingerprint, "imp010"
@@ -7755,6 +8062,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "launch",
         help="start the detached PTY supervisor and publish a private Member handoff",
     )
+    subparsers.add_parser("imp024-candidate-preflight", help="build exact synthetic chat candidate with owned broker; no browser handoff")
     launch.add_argument(
         "--handoff-dir",
         type=Path,
@@ -7775,6 +8083,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         include_imp007=True,
         include_imp014=True,
         include_imp010=True,
+        include_imp024=True,
     )
     stop = subparsers.add_parser(
         "stop",
@@ -7806,6 +8115,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         include_imp007=True,
         include_imp014=True,
         include_imp010=True,
+        include_imp024=True,
     )
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
@@ -7816,6 +8126,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         include_imp007=True,
         include_imp014=True,
         include_imp010=True,
+        include_imp024=True,
     )
 
     parsed = parser.parse_args(arguments)
@@ -7893,6 +8204,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 candidate_preflight=True,
                 candidate_variant="imp010",
             ).run()
+        if parsed.command == "imp024-candidate-preflight":
+            return FixtureSupervisor(root, candidate_preflight=True, candidate_variant="imp024").run()
         candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
         supervisor = FixtureSupervisor(
             root,

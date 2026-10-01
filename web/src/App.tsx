@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, apiRequest } from "./api";
-import ProjectWorkspace, { type ProjectSummary } from "./ProjectWorkspace";
+import ProjectWorkspace, { type ProjectSummary, type WorkspaceMemory } from "./ProjectWorkspace";
 
 type Role = "admin" | "user";
 
@@ -196,6 +196,31 @@ export default function App() {
   const accountsHeadingRef = useRef<HTMLHeadingElement>(null);
   const deactivationDialogWasOpen = useRef(false);
   const sessionGenerationRef = useRef(0);
+  const retainedWorkspace = useRef<{ userId: string; memory: WorkspaceMemory } | null>(null);
+  const [workspaceMemory, setWorkspaceMemory] = useState<WorkspaceMemory>({ chats: {} });
+
+  const memoryForUser = useCallback((userId: string): WorkspaceMemory => {
+    const memory =
+      retainedWorkspace.current?.userId === userId
+        ? retainedWorkspace.current.memory
+        : { chats: {} };
+    retainedWorkspace.current = { userId, memory };
+    setWorkspaceMemory(memory);
+    return memory;
+  }, []);
+  const reportWorkspaceMemory = useCallback(
+    (snapshot: WorkspaceMemory) => {
+      const retained = retainedWorkspace.current;
+      if (
+        retained &&
+        retained.userId === user?.id &&
+        sessionGenerationRef.current === sessionGeneration
+      ) {
+        retainedWorkspace.current = { userId: retained.userId, memory: snapshot };
+      }
+    },
+    [user?.id, sessionGeneration],
+  );
 
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -313,6 +338,7 @@ export default function App() {
         advanceSessionGeneration();
         clearWorkspaceState();
         setUser(payload.user);
+        memoryForUser(payload.user.id);
         setPageState("authenticated");
         setError("");
       } catch (restoreError) {
@@ -331,7 +357,13 @@ export default function App() {
       active = false;
       controller.abort();
     };
-  }, [advanceSessionGeneration, clearSensitiveFormValues, clearWorkspaceState, sessionCheckNumber]);
+  }, [
+    advanceSessionGeneration,
+    clearSensitiveFormValues,
+    clearWorkspaceState,
+    memoryForUser,
+    sessionCheckNumber,
+  ]);
 
   useEffect(() => {
     if (pageState !== "authenticated" || user === null) return;
@@ -454,6 +486,7 @@ export default function App() {
       advanceSessionGeneration();
       clearWorkspaceState();
       setUser(response.user);
+      memoryForUser(response.user.id);
       setCsrfToken(response.csrf_token);
       setLoginPassword("");
       setPageState("authenticated");
@@ -482,6 +515,8 @@ export default function App() {
       });
       advanceSessionGeneration();
       clearWorkspaceState();
+      retainedWorkspace.current = null;
+      setWorkspaceMemory({ chats: {} });
       setUser(null);
       setCsrfToken("");
       setPageState("anonymous");
@@ -821,6 +856,8 @@ export default function App() {
 
             <ProjectWorkspace
               key={sessionGeneration}
+              memory={workspaceMemory}
+              onMemoryChange={reportWorkspaceMemory}
               csrfToken={csrfToken}
               loadError={workspaceError}
               loading={workspaceLoading}

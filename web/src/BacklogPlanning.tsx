@@ -47,6 +47,14 @@ type TaskDraft = {
   status: EditableTaskStatus;
 };
 
+export type TaskMemory = {
+  projectId?: string;
+  draft?: TaskDraft;
+  baseTask?: BacklogTask;
+  revision?: number;
+  conflict?: TaskConflict;
+};
+
 type TaskConflict = {
   state: "loading" | "ready" | "error";
   expectedRevision: number;
@@ -72,7 +80,10 @@ type BacklogPlanningProps = {
   onPendingChange: (pending: boolean) => void;
   onSnapshotObserved: (snapshot: BacklogTaskDocument) => void;
   onSessionExpired: () => void;
+  memory?: TaskMemory;
+  onMemoryChange?: (snapshot: TaskMemory) => void;
 };
+const ignoreTaskMemory: (snapshot: TaskMemory) => void = () => {};
 
 const MAX_DOCUMENT_BYTES = 128 * 1024;
 const taskStatuses: readonly BacklogTaskStatus[] = ["-", " ", "~", "x", "!"];
@@ -252,6 +263,8 @@ export default function BacklogPlanning({
   onPendingChange,
   onSnapshotObserved,
   onSessionExpired,
+  memory,
+  onMemoryChange = ignoreTaskMemory,
 }: BacklogPlanningProps) {
   const generatedId = `${instanceId}-${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
   const taskListId = `${generatedId}-task-list`;
@@ -262,19 +275,22 @@ export default function BacklogPlanning({
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState("");
   const [retryNumber, setRetryNumber] = useState(0);
-  const [selectedTaskId, setSelectedTaskIdState] = useState<string | null>(null);
-  const [baseTask, setBaseTaskState] = useState<BacklogTask | null>(null);
-  const [draft, setDraftState] = useState<TaskDraft | null>(null);
-  const [conflict, setConflictState] = useState<TaskConflict | null>(null);
+  const retained = memory?.projectId === projectId ? memory : undefined;
+  const [selectedTaskId, setSelectedTaskIdState] = useState<string | null>(
+    retained?.draft?.taskId ?? null,
+  );
+  const [baseTask, setBaseTaskState] = useState<BacklogTask | null>(retained?.baseTask ?? null);
+  const [draft, setDraftState] = useState<TaskDraft | null>(retained?.draft ?? null);
+  const [conflict, setConflictState] = useState<TaskConflict | null>(retained?.conflict ?? null);
   const [taskBusy, setTaskBusy] = useState(false);
   const [taskError, setTaskError] = useState("");
   const [taskNotice, setTaskNotice] = useState("");
   const snapshotRef = useRef<BacklogTaskDocument | null>(null);
-  const selectedTaskIdRef = useRef<string | null>(null);
-  const baseTaskRef = useRef<BacklogTask | null>(null);
-  const baseRevisionRef = useRef<number | null>(null);
-  const draftRef = useRef<TaskDraft | null>(null);
-  const conflictRef = useRef<TaskConflict | null>(null);
+  const selectedTaskIdRef = useRef<string | null>(retained?.draft?.taskId ?? null);
+  const baseTaskRef = useRef<BacklogTask | null>(retained?.baseTask ?? null);
+  const baseRevisionRef = useRef<number | null>(retained?.revision ?? null);
+  const draftRef = useRef<TaskDraft | null>(retained?.draft ?? null);
+  const conflictRef = useRef<TaskConflict | null>(retained?.conflict ?? null);
   const taskBusyRef = useRef(false);
   const mountedRef = useRef(false);
   const loadRequestNumberRef = useRef(0);
@@ -292,6 +308,19 @@ export default function BacklogPlanning({
   const taskDetailHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const formIsDirty = Boolean(draft && !draftMatchesTask(draft, baseTask));
+  useEffect(() => {
+    onMemoryChange({
+      projectId,
+      ...(conflict ? { conflict } : {}),
+      ...(draft && (formIsDirty || conflict)
+        ? {
+            draft,
+            baseTask: baseTask ?? undefined,
+            revision: baseRevisionRef.current ?? revisionNumber,
+          }
+        : {}),
+    });
+  }, [onMemoryChange, projectId, draft, baseTask, formIsDirty, revisionNumber, conflict]);
   const taskPending = formIsDirty || conflict !== null || taskBusy;
   const snapshotMatchesMarkdown = Boolean(
     taskDocument &&

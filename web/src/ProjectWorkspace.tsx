@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useMemo,
@@ -11,6 +13,19 @@ import {
 import { ApiError, apiRequest } from "./api";
 import BacklogPlanning, { type BacklogTaskDocument } from "./BacklogPlanning";
 import FinalReview, { type ReviewDocumentKind } from "./FinalReview";
+import ProjectChat from "./ProjectChat";
+import type { ChatMemory } from "./chat";
+
+// Browser-memory only. App retains this on expiry and returns it only after
+// server revalidation of the same user; explicit logout/different login drops it.
+export type WorkspaceMemory = {
+  projectId?: string;
+  kind?: DocumentKind;
+  editor?: { projectId: string; kind: DocumentKind; text: string; revision: number };
+  chats: Record<string, ChatMemory>;
+  task?: import("./BacklogPlanning").TaskMemory;
+};
+const ignoreWorkspaceMemory: (snapshot: WorkspaceMemory) => void = () => {};
 
 export type ProjectSummary = {
   id: string;
@@ -20,7 +35,7 @@ export type ProjectSummary = {
 };
 
 type DocumentKind = "project" | "agents" | "backlog";
-type DocumentOrigin = "template" | "human";
+type DocumentOrigin = "template" | "human" | "agent";
 
 type ProjectDocument = {
   id: string;
@@ -538,6 +553,8 @@ export default function ProjectWorkspace({
   onProjectPageChange = () => {},
   onWideReviewChange = () => {},
   projectOffset = 0,
+  memory,
+  onMemoryChange = ignoreWorkspaceMemory,
 }: {
   projects: ProjectSummary[];
   csrfToken: string;
@@ -549,18 +566,39 @@ export default function ProjectWorkspace({
   onProjectPageChange?: (offset: number) => void;
   onWideReviewChange?: (wide: boolean) => void;
   projectOffset?: number;
+  memory?: WorkspaceMemory;
+  onMemoryChange?: (snapshot: WorkspaceMemory) => void;
 }) {
   const instanceId = `project-workspace-${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
+  const [restoration] = useState<WorkspaceMemory>(() => memory ?? { chats: {} });
+  const restorationEditor = useRef(restoration.editor);
+  const [chatMemories, setChatMemories] = useState(restoration.chats);
+  const [taskMemory, setTaskMemory] = useState(restoration.task);
+  const reportChatMemory = useCallback((projectId: string, snapshot: ChatMemory) => {
+    setChatMemories((current) =>
+      current[projectId] === snapshot ? current : { ...current, [projectId]: snapshot },
+    );
+  }, []);
+  const [projectListOpen, setProjectListOpen] = useState(false);
+  const [primaryRegion, setPrimaryRegion] = useState<"chat" | "files" | "backlog">("files");
+  const [chatPending, setChatPending] = useState(false);
+  const [chatDocumentVersion, setChatDocumentVersion] = useState(0);
+  const [chatRefreshRequested, setChatRefreshRequested] = useState<{
+    projectId: string;
+    serial: number;
+  } | null>(null);
   const [newProjectName, setNewProjectName] = useState("");
   const [locallyCreatedProjects, setLocallyCreatedProjects] = useState<ProjectSummary[]>([]);
   const [createError, setCreateError] = useState("");
   const [createNotice, setCreateNotice] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    restoration.projectId ?? null,
+  );
   const [selectedProjectSnapshot, setSelectedProjectSnapshot] = useState<ProjectSummary | null>(
     null,
   );
-  const [selectedKind, setSelectedKind] = useState<DocumentKind>("project");
+  const [selectedKind, setSelectedKind] = useState<DocumentKind>(restoration.kind ?? "project");
   const [workspaceStage, setWorkspaceStage] = useState<"planning" | "final-review">("planning");
   const [returnToFinalReview, setReturnToFinalReview] = useState(false);
   const [focusFinalReviewHeading, setFocusFinalReviewHeading] = useState(false);
@@ -568,15 +606,15 @@ export default function ProjectWorkspace({
   const reviewFocusTarget = useRef<"pair" | ReviewDocumentKind | null>(null);
   const [backlogPanel, setBacklogPanel] = useState<"tasks" | "detail" | "markdown">("tasks");
   const selectionRef = useRef<{ projectId: string | null; kind: DocumentKind }>({
-    projectId: null,
-    kind: "project",
+    projectId: restoration.projectId ?? null,
+    kind: restoration.kind ?? "project",
   });
   const [documents, setDocumentsState] = useState<ProjectDocuments | null>(null);
   const documentsRef = useRef<ProjectDocuments | null>(null);
   const documentsProjectIdRef = useRef<string | null>(null);
-  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsLoading, setDocumentsLoading] = useState(Boolean(restoration.projectId));
   const [documentsError, setDocumentsError] = useState("");
-  const [editorContent, setEditorContent] = useState("");
+  const [editorContent, setEditorContent] = useState(restoration.editor?.text ?? "");
   const editorContentRef = useRef(editorContent);
   const editorChangeNumber = useRef(0);
   const [saveBusy, setSaveBusy] = useState(false);
@@ -642,6 +680,12 @@ export default function ProjectWorkspace({
   // the refreshed page is empty or no longer contains this project.
   const selectedProject =
     visibleProjects.find((project) => project.id === selectedProjectId) ?? selectedProjectSnapshot;
+  const reportCurrentChatMemory = useCallback(
+    (snapshot: ChatMemory) => {
+      if (selectedProjectId) reportChatMemory(selectedProjectId, snapshot);
+    },
+    [selectedProjectId, reportChatMemory],
+  );
   const currentDocument = documents?.[selectedKind] ?? null;
   const editorBytes = contentBytes(editorContent);
   const editorIsOversize = editorBytes > MAX_DOCUMENT_BYTES;
@@ -761,18 +805,50 @@ export default function ProjectWorkspace({
   }
 
   useEffect(() => {
-    onPendingChange(editorIsDirty || saveBusy || taskEditsPending);
-  }, [editorIsDirty, saveBusy, taskEditsPending, onPendingChange]);
+    onPendingChange(editorIsDirty || saveBusy || taskEditsPending || chatPending);
+  }, [editorIsDirty, saveBusy, taskEditsPending, chatPending, onPendingChange]);
 
   useEffect(() => {
-    if (!editorIsDirty && !saveBusy && !approvalBusy && !taskEditsPending) return;
+    onMemoryChange({
+      projectId: selectedProjectId ?? undefined,
+      kind: selectedKind,
+      chats: chatMemories,
+      task: taskMemory,
+      editor:
+        selectedProjectId && currentDocument && editorIsDirty
+          ? {
+              projectId: selectedProjectId,
+              kind: selectedKind,
+              text: editorContent,
+              revision: staleEditorRevision ?? currentDocument.revision_number,
+            }
+          : documentsLoading && selectedProjectId === restoration.projectId
+            ? restorationEditor.current
+            : undefined,
+    });
+  }, [
+    onMemoryChange,
+    selectedProjectId,
+    selectedKind,
+    currentDocument,
+    editorContent,
+    editorIsDirty,
+    staleEditorRevision,
+    documentsLoading,
+    restoration.projectId,
+    chatMemories,
+    taskMemory,
+  ]);
+
+  useEffect(() => {
+    if (!editorIsDirty && !saveBusy && !approvalBusy && !taskEditsPending && !chatPending) return;
     const warnOnExit = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warnOnExit);
     return () => window.removeEventListener("beforeunload", warnOnExit);
-  }, [approvalBusy, editorIsDirty, saveBusy, taskEditsPending]);
+  }, [approvalBusy, editorIsDirty, saveBusy, taskEditsPending, chatPending]);
 
   function updateEditorContent(content: string): void {
     editorContentRef.current = content;
@@ -1013,8 +1089,15 @@ export default function ProjectWorkspace({
       const latest = updateDocuments(complete);
       if (latest) {
         const activeKind = selectionRef.current.kind;
+        const retained = restorationEditor.current;
         const previousHead = headsAtRequest?.[activeKind] ?? null;
-        if (!previousHead || editorContentRef.current === previousHead.content) {
+        if (changingProject && retained?.projectId === projectId && retained.kind === activeKind) {
+          restorationEditor.current = undefined;
+          updateEditorContent(retained.text);
+          setStaleEditorRevision(
+            retained.revision === latest[activeKind].revision_number ? null : retained.revision,
+          );
+        } else if (!previousHead || editorContentRef.current === previousHead.content) {
           updateEditorContent(latest[activeKind].content);
           setStaleEditorRevision(null);
         } else if (latest[activeKind].revision_number > previousHead.revision_number) {
@@ -1037,14 +1120,7 @@ export default function ProjectWorkspace({
   }
 
   async function refreshCurrentDraftPair(): Promise<void> {
-    if (
-      !selectedProjectId ||
-      !documents ||
-      saveBusy ||
-      taskEditsPending ||
-      approvalBusy ||
-      pairRefreshBusy
-    ) {
+    if (!selectedProjectId || !documents || saveBusy || approvalBusy || pairRefreshBusy) {
       return;
     }
     const projectId = selectedProjectId;
@@ -1152,6 +1228,129 @@ export default function ProjectWorkspace({
       }
     } finally {
       if (requestNumber === documentRequestNumber.current) setPairRefreshBusy(false);
+    }
+  }
+
+  // Restore only after the authenticated project-list response admits this ID.
+  // The request itself is the subscription; all state installs occur in its
+  // completion callback, not synchronously in an effect or render.
+  const restoredProjectLoaded = useEffectEvent(
+    (response: ProjectDocument[], project: ProjectSummary) => {
+      const byKind = Object.fromEntries(
+        response.map((item) => [item.kind, item]),
+      ) as Partial<ProjectDocuments>;
+      if (!byKind.project || !byKind.agents || !byKind.backlog)
+        throw new Error("This project does not have all three draft documents yet.");
+      const latest = updateDocuments(byKind as ProjectDocuments);
+      if (!latest) return;
+      documentsProjectIdRef.current = project.id;
+      setSelectedProjectSnapshot(project);
+      const kind = selectionRef.current.kind;
+      const retained = restorationEditor.current;
+      restorationEditor.current = undefined;
+      if (retained?.projectId === project.id && retained.kind === kind) {
+        updateEditorContent(retained.text);
+        setStaleEditorRevision(
+          retained.revision === latest[kind].revision_number ? null : retained.revision,
+        );
+      } else updateEditorContent(latest[kind].content);
+      void loadPairApprovalStatus(project.id);
+      setDocumentsLoading(false);
+    },
+  );
+  const restoredProjectFailed = useEffectEvent((failure: unknown) => {
+    setDocumentsLoading(false);
+    if (failure instanceof ApiError && failure.status === 401) onSessionExpired();
+    else setDocumentsError(errorMessage(failure));
+  });
+  const restorationFinished = useRef(false);
+  useEffect(() => {
+    const project = projects.find((item) => item.id === restoration.projectId);
+    if (
+      !project ||
+      loading ||
+      restorationFinished.current ||
+      selectionRef.current.projectId !== project.id
+    )
+      return;
+    const controller = new AbortController();
+    documentController.current = controller;
+    const number = ++documentRequestNumber.current;
+    void apiRequest<ProjectDocument[]>(
+      `/api/projects/${encodeURIComponent(project.id)}/documents`,
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        if (controller.signal.aborted || number !== documentRequestNumber.current) return;
+        restorationFinished.current = true;
+        restoredProjectLoaded(response, project);
+      })
+      .catch((failure: unknown) => {
+        if (controller.signal.aborted || number !== documentRequestNumber.current) return;
+        restorationFinished.current = true;
+        restoredProjectFailed(failure);
+      });
+    return () => controller.abort();
+  }, [projects, loading, restoration.projectId]);
+
+  // A cancellable retry subscription keeps the completed-turn refresh pending
+  // across an in-flight editor write, with the latest state sampled per tick.
+  const chatRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refreshAfterChat = useEffectEvent(() => {
+    if (saveBusy || approvalBusy || pairRefreshBusy || !documents) return;
+    if (chatRefreshTimer.current !== null) clearInterval(chatRefreshTimer.current);
+    chatRefreshTimer.current = null;
+    setChatRefreshRequested(null);
+    setChatDocumentVersion((current) => current + 1);
+    void refreshCurrentDraftPair();
+  });
+  useEffect(() => {
+    if (!chatRefreshRequested || chatRefreshRequested.projectId !== selectedProjectId) return;
+    chatRefreshTimer.current = setInterval(() => refreshAfterChat(), 100);
+    return () => {
+      if (chatRefreshTimer.current !== null) clearInterval(chatRefreshTimer.current);
+      chatRefreshTimer.current = null;
+    };
+  }, [chatRefreshRequested, selectedProjectId]);
+
+  async function reviewChatProposal(filename: string, proposalId: string): Promise<void> {
+    const kind = documentOptions.find((option) => option.filename === filename)?.kind;
+    if (!kind || !selectedProjectId) return;
+    setPrimaryRegion(kind === "backlog" ? "backlog" : "files");
+    returnToPlanning();
+    if (kind !== selectedKind && (editorIsDirty || taskEditsPending)) {
+      setReviewNavigationNotice(
+        "Your local edits are kept. Save or resolve them, then open the proposal's file and its conflict history to compare/reapply.",
+      );
+      return;
+    }
+    selectDocument(kind);
+    if (kind === "backlog") setBacklogPanel("markdown");
+    const controller = documentController.current;
+    const project = selectedProjectId;
+    try {
+      const proposal = await apiRequest<{ content: string; state: string }>(
+        `/api/projects/${project}/chat/proposals/${proposalId}`,
+        { signal: controller?.signal },
+      );
+      if (
+        !mounted.current ||
+        controller?.signal.aborted ||
+        selectionRef.current.projectId !== project ||
+        selectionRef.current.kind !== kind
+      )
+        return;
+      setCompareContent({
+        label: `Agent ${proposal.state} proposal · ${filename}`,
+        content: proposal.content,
+      });
+      setHistoryOpen(true);
+      historyOpenRef.current = true;
+      void loadHistory("none", true, documentsRef.current?.[kind] ?? null, kind);
+    } catch (failure) {
+      if (!mounted.current || controller?.signal.aborted) return;
+      if (failure instanceof ApiError && failure.status === 401) onSessionExpired();
+      else setHistoryError(errorMessage(failure));
     }
   }
 
@@ -1277,6 +1476,7 @@ export default function ProjectWorkspace({
     if (project.id === selectedProjectId && documents) return;
     setSelectedProjectId(project.id);
     setSelectedProjectSnapshot(project);
+    setProjectListOpen(false);
     setSelectedKind("project");
     setWorkspaceStage("planning");
     setReturnToFinalReview(false);
@@ -1399,10 +1599,11 @@ export default function ProjectWorkspace({
     append: "none" | "revisions" | "proposals" = "none",
     force = false,
     knownHead: ProjectDocument | null = currentDocument,
+    kindOverride?: DocumentKind,
   ): Promise<void> {
     if (!selectedProject || (historyLoading && !force)) return;
     const projectId = selectedProject.id;
-    const kind = selectedKind;
+    const kind = kindOverride ?? selectedKind;
     const editorAtRequest = editorChangeNumber.current;
     const revisionOffset = append === "revisions" ? (history?.revisions.length ?? 0) : 0;
     const proposalCursor = append === "proposals" ? (history?.proposal_next_cursor ?? null) : null;
@@ -2036,11 +2237,21 @@ export default function ProjectWorkspace({
   }
 
   return (
-    <section
-      aria-labelledby={`${instanceId}-projects-title`}
-      className={`grid gap-5 ${workspaceStage === "planning" ? "lg:grid-cols-[minmax(15rem,0.7fr)_minmax(0,1.5fr)]" : ""}`}
-    >
-      <div className="rounded-2xl border border-line bg-surface/95 p-5 sm:p-6">
+    <section aria-labelledby={`${instanceId}-projects-title`} className="grid gap-5">
+      {selectedProject ? (
+        <button
+          className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent"
+          aria-expanded={projectListOpen}
+          onClick={() => setProjectListOpen((current) => !current)}
+          type="button"
+        >
+          {projectListOpen ? "Hide project list" : "Show project list"}
+        </button>
+      ) : null}
+      <div
+        className="rounded-2xl border border-line bg-surface/95 p-5 sm:p-6"
+        hidden={Boolean(selectedProject) && !projectListOpen}
+      >
         <div className="border-b border-line pb-5">
           <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-copy-muted">
             Private project drafts
@@ -2283,7 +2494,7 @@ export default function ProjectWorkspace({
                 </p>
               </div>
               <span className="rounded-full border border-line bg-canvas px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-copy-muted">
-                Human review · no chat
+                Human approval required
               </span>
             </div>
 
@@ -2306,852 +2517,935 @@ export default function ProjectWorkspace({
               </button>
             </nav>
 
-            {workspaceStage === "planning" && returnToFinalReview ? (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-4 py-3">
-                <p className="text-sm text-copy-muted">
-                  Return to the three-file snapshot review when your edits are saved.
-                </p>
-                <button
-                  className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  onClick={() => enterFinalReview(true)}
-                  type="button"
-                >
-                  Return to final review
-                </button>
-              </div>
-            ) : null}
-            {reviewNavigationNotice ? (
-              <p aria-live="polite" className="mt-3 text-sm text-amber-100" role="status">
-                {reviewNavigationNotice}
-              </p>
-            ) : null}
-
-            {workspaceStage === "final-review" ? (
-              <div className="mt-5 min-w-0">
-                <FinalReview
-                  csrfToken={csrfToken}
-                  documents={documents}
-                  documentsLoading={documentsLoading || pairRefreshBusy}
-                  focusHeadingOnMount={focusFinalReviewHeading}
-                  localChangesPending={
-                    editorIsDirty ||
-                    saveBusy ||
-                    taskEditsPending ||
-                    approvalBusy ||
-                    staleEditorRevision !== null
-                  }
-                  onReviewDocument={reviewDocument}
-                  onReviewPair={reviewPair}
-                  onRefreshDocuments={() => void refreshCurrentDraftPair()}
-                  onSessionExpired={onSessionExpired}
-                  projectId={selectedProject.id}
-                />
-              </div>
-            ) : null}
-            <section
-              aria-labelledby={`${instanceId}-pair-approval-title`}
-              className="mt-5 grid min-w-0 gap-4 rounded-xl border border-line bg-canvas p-4 sm:p-5"
-              hidden={workspaceStage !== "planning"}
+            <nav
+              aria-label="Workspace regions"
+              className={`mt-4 flex flex-wrap gap-2 ${workspaceStage === "planning" ? "min-[769px]:hidden" : ""}`}
             >
-              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
-                    First-stage review
-                  </p>
-                  <h4
-                    className="mt-1 text-lg font-semibold"
-                    id={`${instanceId}-pair-approval-title`}
-                    ref={pairApprovalHeadingRef}
-                    tabIndex={-1}
-                  >
-                    Approve the saved document pair
-                  </h4>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-copy-muted">
-                    One human action approves exactly the current PROJECT.md and AGENTS.md saved
-                    revisions. Any later save needs a new review. This does not approve the backlog
-                    or include chat, model proposals, or exports.
-                  </p>
-                </div>
-                <span
-                  aria-live="polite"
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                    approvalStatus?.approved
-                      ? "border-accent/35 bg-accent/10 text-accent"
-                      : "border-line bg-surface-raised text-copy-muted"
-                  }`}
-                >
-                  {approvalStatusLoading || pairRefreshBusy
-                    ? "Refreshing approval status…"
-                    : approvalStatusError
-                      ? "Approval status unavailable"
-                      : approvalStatus?.approved
-                        ? "Approved at last check"
-                        : approvalStatus?.latest_approval
-                          ? "Re-review required"
-                          : approvalStatus
-                            ? "Not yet approved"
-                            : "Approval status unavailable"}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
+              {(["chat", "files", "backlog"] as const).map((region) => (
                 <button
-                  className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`min-h-11 rounded-lg border px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50 ${primaryRegion === region ? "border-accent text-accent" : "border-line"}`}
+                  aria-pressed={primaryRegion === region}
+                  key={region}
                   disabled={
-                    saveBusy ||
-                    taskEditsPending ||
-                    approvalBusy ||
-                    pairRefreshBusy ||
-                    documentsLoading
+                    region === "backlog" &&
+                    selectedKind !== "backlog" &&
+                    (editorIsDirty || taskEditsPending || saveBusy || approvalBusy)
                   }
-                  onClick={() => void refreshCurrentDraftPair()}
+                  onClick={() => {
+                    setPrimaryRegion(region);
+                    if (region === "backlog" && selectedKind !== "backlog")
+                      selectDocument("backlog");
+                    if (region === "backlog") setBacklogPanel("tasks");
+                    if (region === "files" && selectedKind === "backlog")
+                      setBacklogPanel("markdown");
+                  }}
                   type="button"
                 >
-                  {pairRefreshBusy ? "Reloading saved pair…" : "Reload saved pair and status"}
-                </button>
-                <p className="text-xs leading-5 text-copy-muted">
-                  {approvalCheckedAt ? `Last checked ${approvalCheckedAt}. ` : ""}
-                  Another tab may have saved since then. Reload checks both heads and approval;
-                  unsaved editor text is kept.
-                </p>
-              </div>
-
-              {approvalStatusLoading && !approvalStatus ? (
-                <p aria-live="polite" className="text-sm text-copy-muted" role="status">
-                  Loading current pair and approval history…
-                </p>
-              ) : null}
-              {approvalStatusError ? (
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300/30 bg-red-300/5 p-3">
-                  <p aria-live="polite" className="min-w-0 text-sm leading-6 text-red-100">
-                    Approval status could not be loaded: {approvalStatusError}
-                  </p>
-                  <button
-                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={approvalStatusLoading || approvalBusy}
-                    onClick={() => void loadPairApprovalStatus(selectedProject.id)}
-                    type="button"
-                  >
-                    {approvalStatusLoading ? "Refreshing…" : "Retry approval status"}
-                  </button>
-                </div>
-              ) : null}
-
-              {approvalStatus ? (
-                <>
-                  <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
-                    {pairDocumentOptions.map((option) => {
-                      const revision =
-                        option.kind === "project"
-                          ? approvalStatus.current_project_revision
-                          : approvalStatus.current_agents_revision;
-                      return (
-                        <div
-                          className="min-w-0 rounded-lg border border-line bg-surface-raised p-3"
-                          key={option.kind}
-                        >
-                          <dt className="font-mono text-xs uppercase tracking-wide text-copy-muted">
-                            {option.filename}
-                          </dt>
-                          <dd className="mt-2 font-medium text-foreground">
-                            Saved revision {revision.revision_number}
-                          </dd>
-                          <dd className="mt-1 break-all font-mono text-[11px] leading-5 text-copy-muted">
-                            Revision ID {revision.id}
-                          </dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-
-                  {approvalStatus.latest_approval ? (
-                    <div className="min-w-0 rounded-lg border border-line px-3 py-3">
-                      <p className="text-sm font-medium text-foreground">
-                        Latest approval · {isoDate(approvalStatus.latest_approval.created_at)}
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-copy-muted">
-                        PROJECT.md revision {approvalStatus.latest_approval.project_revision_number}
-                        {" · "}AGENTS.md revision{" "}
-                        {approvalStatus.latest_approval.agents_revision_number}
-                        {approvalStatus.approved ? " · current pair" : " · older pair"}
-                      </p>
-                      <div className="mt-2 grid min-w-0 gap-1 text-xs text-copy-muted sm:grid-cols-2">
-                        <code className="min-w-0 break-all">
-                          PROJECT.md ID {approvalStatus.latest_approval.project_revision_id}
-                        </code>
-                        <code className="min-w-0 break-all">
-                          AGENTS.md ID {approvalStatus.latest_approval.agents_revision_id}
-                        </code>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm leading-6 text-copy-muted">
-                      No pair approval is recorded yet. Saving or viewing a draft does not approve
-                      it.
-                    </p>
-                  )}
-                </>
-              ) : null}
-
-              {approvalStatus && !pairHeadsMatchVisibleDocuments ? (
-                <div className="grid min-w-0 gap-3 rounded-lg border border-amber-200/30 bg-amber-100/5 p-3">
-                  <p aria-live="polite" className="text-sm leading-6 text-amber-100" role="status">
-                    The visible drafts and approval status came from different saved snapshots.
-                    Reload both drafts and status before reviewing or approving.
-                  </p>
-                  <button
-                    className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
-                    disabled={
-                      saveBusy ||
-                      taskEditsPending ||
-                      approvalBusy ||
-                      pairRefreshBusy ||
-                      documentsLoading
-                    }
-                    onClick={() => void refreshCurrentDraftPair()}
-                    type="button"
-                  >
-                    {pairRefreshBusy ? "Reloading drafts…" : "Retry saved pair refresh"}
-                  </button>
-                </div>
-              ) : null}
-
-              {editorIsDirty ? (
-                <p className="text-sm leading-6 text-copy-muted" role="status">
-                  Unsaved editor text is not part of the displayed approval tuple. Save or discard
-                  it before approving the saved pair.
-                </p>
-              ) : null}
-
-              {approvalError ? (
-                <div
-                  aria-labelledby={`${instanceId}-approval-error-title`}
-                  className="grid min-w-0 gap-2 rounded-lg border border-red-300/35 bg-red-300/5 p-3"
-                  role="alert"
-                >
-                  <h5
-                    className="font-medium text-red-100"
-                    id={`${instanceId}-approval-error-title`}
-                  >
-                    Pair approval was not recorded
-                  </h5>
-                  <p className="text-sm leading-6 text-red-100">{approvalError}</p>
-                  {Object.entries(approvalValidationErrors).length ? (
-                    <ul className="grid min-w-0 gap-2 text-sm leading-6 text-red-100">
-                      {Object.entries(approvalValidationErrors).map(([filename, messages]) => (
-                        <li className="min-w-0" key={filename}>
-                          <strong className="font-mono">{filename}</strong>
-                          <ul className="ml-5 list-disc">
-                            {messages.map((message) => (
-                              <li className="break-words" key={message}>
-                                {message}
-                              </li>
-                            ))}
-                          </ul>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {approvalNotice ? (
-                <p aria-live="polite" className="text-sm leading-6 text-accent" role="status">
-                  {approvalNotice}
-                </p>
-              ) : null}
-
-              {pairConflict && currentPairConflictDocument && previousPairConflictDocument ? (
-                <section
-                  aria-labelledby={`${instanceId}-approval-conflict-title`}
-                  className="grid min-w-0 gap-3 rounded-lg border border-amber-200/35 bg-amber-100/5 p-3 sm:p-4"
-                >
-                  <div>
-                    <h5
-                      className="text-base font-semibold text-amber-100"
-                      id={`${instanceId}-approval-conflict-title`}
-                    >
-                      Saved pair changed before approval
-                    </h5>
-                    <p
-                      aria-live="polite"
-                      className="mt-1 text-sm leading-6 text-copy-muted"
-                      role="status"
-                    >
-                      {pairReviewMatchesVisibleDocuments
-                        ? "Compare both latest documents. Approval stays disabled until you confirm that you reviewed the exact current pair."
-                        : "A saved head changed since this comparison. Reload both drafts before reviewing the current pair."}
-                    </p>
-                  </div>
-                  <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-                    {pairDocumentOptions.map((option) => (
-                      <p className="min-w-0 break-words text-sm leading-6" key={option.kind}>
-                        <span className="font-mono text-copy-muted">{option.filename}: </span>
-                        revision {pairConflict.previous[option.kind].revision_number}
-                        {" → "}
-                        revision {pairConflict.latest[option.kind].revision_number}
-                      </p>
-                    ))}
-                  </div>
-                  <div className="grid min-w-0 gap-2">
-                    <label
-                      className="text-sm font-medium text-foreground"
-                      htmlFor={`${instanceId}-approval-conflict-document`}
-                    >
-                      Compare saved document
-                    </label>
-                    <select
-                      className="min-h-11 w-full min-w-0 rounded-lg border border-input-border bg-surface-raised px-3 py-2 text-sm text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      id={`${instanceId}-approval-conflict-document`}
-                      onChange={(event) => {
-                        const kind = event.target.value as PairKind;
-                        setPairConflictKind(kind);
-                        const current = documentsRef.current;
-                        const conflict = pairConflictRef.current;
-                        if (
-                          current &&
-                          conflict &&
-                          sameSavedPair(conflict.latest, {
-                            project: current.project,
-                            agents: current.agents,
-                          })
-                        ) {
-                          const viewed = new Set(reviewedPairKindsRef.current);
-                          viewed.add(kind);
-                          updatePairReviewState(viewed, false);
-                        } else {
-                          updatePairReviewState(new Set(), false);
-                        }
-                      }}
-                      value={pairConflictKind}
-                    >
-                      <option value="project">PROJECT.md saved-version diff</option>
-                      <option value="agents">AGENTS.md saved-version diff</option>
-                    </select>
-                  </div>
-                  <DiffViewer
-                    after={currentPairConflictDocument.content}
-                    afterLabel={`Latest ${currentPairConflictDocument.filename} revision ${currentPairConflictDocument.revision_number}`}
-                    before={previousPairConflictDocument.content}
-                    beforeLabel={`Previously reviewed ${previousPairConflictDocument.filename} revision ${previousPairConflictDocument.revision_number}`}
-                  />
-                  {editorIsDirty ? (
-                    <p className="text-sm leading-6 text-copy-muted">
-                      Your unsaved editor text is preserved and is not shown in this saved-revision
-                      diff.
-                    </p>
-                  ) : null}
-                  <div className="flex min-w-0 flex-wrap items-center gap-3">
-                    <button
-                      className="min-h-11 rounded-lg border border-amber-100/40 px-4 py-2 text-sm font-medium text-amber-50 hover:bg-amber-100/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={
-                        !pairReviewMatchesVisibleDocuments ||
-                        approvalBusy ||
-                        reviewedPairKinds.size < pairDocumentOptions.length ||
-                        pairReviewConfirmed
-                      }
-                      onClick={() => {
-                        const current = documentsRef.current;
-                        const conflict = pairConflictRef.current;
-                        if (
-                          current &&
-                          conflict &&
-                          sameSavedPair(conflict.latest, {
-                            project: current.project,
-                            agents: current.agents,
-                          }) &&
-                          reviewedPairKindsRef.current.size === pairDocumentOptions.length
-                        ) {
-                          updatePairReviewState(reviewedPairKindsRef.current, true);
-                        }
-                      }}
-                      type="button"
-                    >
-                      I reviewed both latest documents
-                    </button>
-                    {pairReviewConfirmed ? (
-                      <span aria-live="polite" className="text-sm text-accent" role="status">
-                        Current pair reviewed. Approve only if this exact revision tuple is correct.
-                      </span>
-                    ) : (
-                      <span className="text-sm text-copy-muted">
-                        Viewed {reviewedPairKinds.size} of {pairDocumentOptions.length} saved
-                        documents.
-                      </span>
-                    )}
-                  </div>
-                </section>
-              ) : null}
-
-              <div className="grid min-w-0 gap-3 border-t border-line pt-4 lg:flex lg:flex-wrap lg:items-center">
-                <button
-                  className="min-h-11 w-full min-w-0 whitespace-normal rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-                  disabled={!pairCanBeApproved}
-                  onClick={() => void approveSavedPair()}
-                  ref={approvalButtonRef}
-                  type="button"
-                >
-                  {approvalBusy
-                    ? "Approving saved pair…"
-                    : approvalStatus?.approved
-                      ? "Approved at last check"
-                      : "Approve saved PROJECT.md + AGENTS.md pair"}
-                </button>
-                {approvalStatus && approvalStatus.approval_has_more ? (
-                  <button
-                    className="min-h-11 w-full min-w-0 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-                    disabled={approvalHistoryLoading || approvalBusy}
-                    onClick={loadOlderApprovals}
-                    type="button"
-                  >
-                    {approvalHistoryLoading ? "Loading history…" : "Load earlier approvals"}
-                  </button>
-                ) : null}
-                {approvalStatus && approvalStatus.approvals.length ? (
-                  <details className="w-full min-w-0 rounded-lg border border-line px-3 py-2 lg:min-w-56 lg:flex-1">
-                    <summary className="min-h-8 cursor-pointer break-words py-1 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                      Immutable pair approval history ({approvalStatus.approvals.length} shown)
-                    </summary>
-                    <ol className="mt-3 grid min-w-0 gap-2">
-                      {approvalStatus.approvals.map((approval) => (
-                        <li className="min-w-0 rounded-md bg-surface-raised p-3" key={approval.id}>
-                          <p className="text-sm leading-6 text-foreground">
-                            PROJECT.md r{approval.project_revision_number} + AGENTS.md r
-                            {approval.agents_revision_number}
-                          </p>
-                          <p className="mt-1 text-xs text-copy-muted">
-                            Approved {isoDate(approval.created_at)}
-                          </p>
-                          <div className="mt-2 grid min-w-0 gap-1 text-[11px] text-copy-muted sm:grid-cols-2">
-                            <code className="min-w-0 break-all">
-                              PROJECT.md revision ID {approval.project_revision_id}
-                            </code>
-                            <code className="min-w-0 break-all">
-                              AGENTS.md revision ID {approval.agents_revision_id}
-                            </code>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                  </details>
-                ) : null}
-              </div>
-            </section>
-
-            <div
-              aria-label="Draft document switcher"
-              className="mt-5 flex flex-wrap gap-2"
-              role="tablist"
-              hidden={workspaceStage !== "planning"}
-            >
-              {documentOptions.map((option) => (
-                <button
-                  aria-controls={`${instanceId}-document-panel`}
-                  aria-selected={selectedKind === option.kind}
-                  className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                    selectedKind === option.kind
-                      ? "border-accent/60 bg-accent/10 text-accent"
-                      : "border-line bg-canvas text-copy-muted hover:border-accent/40 hover:text-foreground"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                  id={`${instanceId}-document-tab-${option.kind}`}
-                  key={option.kind}
-                  onKeyDown={(event) => handleDocumentTabKeyDown(event, option.kind)}
-                  onClick={() => selectDocument(option.kind)}
-                  role="tab"
-                  tabIndex={selectedKind === option.kind ? 0 : -1}
-                  type="button"
-                  disabled={
-                    saveBusy || taskEditsPending || approvalBusy || editorIsDirty || !documents
-                  }
-                >
-                  {option.label}
+                  {region === "chat" ? "Chat" : region === "files" ? "Files" : "Backlog"}
                 </button>
               ))}
-            </div>
-
+            </nav>
             <div
-              aria-labelledby={`${instanceId}-document-tab-${selectedKind}`}
-              className="mt-4 grid min-w-0 gap-4"
-              id={`${instanceId}-document-panel`}
-              role="tabpanel"
-              hidden={workspaceStage !== "planning"}
+              className={`mt-5 grid min-w-0 gap-5 ${workspaceStage === "planning" ? "min-[769px]:grid-cols-[minmax(360px,400px)_minmax(0,1fr)]" : ""}`}
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-mono text-xs text-copy-muted">
-                    {currentDocument.filename} · revision {currentDocument.revision_number}
-                  </p>
-                  <p className="mt-1 text-xs text-copy-muted">
-                    {currentDocument.origin === "template"
-                      ? `Starter draft from ${currentDocument.template_source ?? "root template"}`
-                      : "Saved human draft"}
-                  </p>
-                </div>
-                <span className="font-mono text-[10px] text-copy-muted">
-                  {editorBytes.toLocaleString()} / {MAX_DOCUMENT_BYTES.toLocaleString()} bytes
-                </span>
-              </div>
-
-              {selectedKind === "backlog" && selectedProject ? (
-                <BacklogPlanning
-                  canEditTasks={Boolean(
-                    csrfToken &&
-                    !editorIsDirty &&
-                    staleEditorRevision === null &&
-                    !saveBusy &&
-                    !approvalBusy &&
-                    !pairRefreshBusy &&
-                    !documentsLoading &&
-                    !createBusy,
-                  )}
-                  csrfToken={csrfToken}
-                  instanceId={instanceId}
-                  markdownPanelId={`${instanceId}-backlog-markdown-panel`}
-                  onPanelChange={setBacklogPanel}
-                  onPendingChange={setTaskEditsPending}
-                  onSessionExpired={onSessionExpired}
-                  onSnapshotObserved={observeBacklogTaskSnapshot}
-                  panel={backlogPanel}
-                  projectId={selectedProject.id}
-                  revisionNumber={currentDocument.revision_number}
-                  savedContent={currentDocument.content}
-                  savedContentSha256={currentDocument.content_sha256}
-                />
-              ) : null}
-
               <div
-                aria-label={selectedKind === "backlog" ? "Backlog Markdown editor" : undefined}
-                className="grid min-w-0 gap-4"
-                hidden={selectedKind === "backlog" && backlogPanel !== "markdown"}
-                id={selectedKind === "backlog" ? `${instanceId}-backlog-markdown-panel` : undefined}
+                className={`${workspaceStage === "final-review" ? (primaryRegion === "chat" ? "" : "hidden") : primaryRegion === "chat" ? "" : "hidden min-[769px]:block"}`}
               >
-                {selectedKind === "backlog" && taskEditsPending ? (
-                  <p className="text-sm leading-5 text-amber-100" role="status">
-                    Task details have unsaved changes. Save or discard them before editing the
-                    Markdown draft.
-                  </p>
-                ) : null}
-                <label
-                  className="sr-only"
-                  htmlFor={`${instanceId}-document-editor-${selectedKind}`}
-                >
-                  Edit {currentDocument.filename}
-                </label>
-                <textarea
-                  className="min-h-[24rem] w-full min-w-0 resize-y rounded-xl border border-input-border bg-canvas px-4 py-3 font-mono text-xs leading-6 text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:min-h-[32rem]"
-                  id={`${instanceId}-document-editor-${selectedKind}`}
-                  onChange={(event) => {
-                    updateEditorContent(event.target.value);
-                    setSaveError("");
-                    setSaveNotice("");
-                    setApprovalError("");
-                    setApprovalValidationErrors({});
-                  }}
-                  readOnly={selectedKind === "backlog" && taskEditsPending}
-                  spellCheck={false}
-                  value={editorContent}
+                <ProjectChat
+                  key={selectedProject.id}
+                  projectId={selectedProject.id}
+                  csrfToken={csrfToken}
+                  memory={chatMemories[selectedProject.id]}
+                  onMemoryChange={reportCurrentChatMemory}
+                  onPendingChange={setChatPending}
+                  onSessionExpired={onSessionExpired}
+                  onDocumentsChanged={() =>
+                    setChatRefreshRequested((current) => ({
+                      projectId: selectedProject.id,
+                      serial: (current?.serial ?? 0) + 1,
+                    }))
+                  }
+                  onCompareProposal={(filename, id) => void reviewChatProposal(filename, id)}
                 />
-
-                {editorIsOversize ? (
-                  <p className="text-sm text-red-200" role="alert">
-                    This draft exceeds the 128 KiB limit. Shorten it before saving.
-                  </p>
+              </div>
+              <div
+                className={`min-w-0 ${workspaceStage === "final-review" ? (primaryRegion === "chat" ? "hidden" : "") : primaryRegion === "chat" ? "hidden min-[769px]:block" : ""}`}
+              >
+                {workspaceStage === "planning" && returnToFinalReview ? (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-4 py-3">
+                    <p className="text-sm text-copy-muted">
+                      Return to the three-file snapshot review when your edits are saved.
+                    </p>
+                    <button
+                      className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      onClick={() => enterFinalReview(true)}
+                      type="button"
+                    >
+                      Return to final review
+                    </button>
+                  </div>
                 ) : null}
-                {staleEditorRevision !== null && editorIsDirty ? (
-                  <p className="text-sm leading-5 text-amber-200" role="status">
-                    Another tab saved this draft after your editor text was started. Saving now will
-                    preserve your text as a conflict proposal, not overwrite the newer revision.
-                  </p>
-                ) : null}
-                {saveError ? (
-                  <p className="text-sm leading-5 text-red-200" role="alert">
-                    {saveError}
-                  </p>
-                ) : null}
-                {conflictNotice ? (
-                  <p aria-live="polite" className="text-sm leading-5 text-amber-200" role="status">
-                    {conflictNotice}
-                  </p>
-                ) : null}
-                {saveNotice ? (
-                  <p aria-live="polite" className="text-sm leading-5 text-accent" role="status">
-                    {saveNotice}
+                {reviewNavigationNotice ? (
+                  <p aria-live="polite" className="mt-3 text-sm text-amber-100" role="status">
+                    {reviewNavigationNotice}
                   </p>
                 ) : null}
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    className="min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={
-                      !editorIsDirty ||
-                      editorIsOversize ||
-                      saveBusy ||
-                      taskEditsPending ||
-                      approvalBusy ||
-                      pairRefreshBusy ||
-                      !csrfToken
-                    }
-                    onClick={() => void saveDraft()}
-                    type="button"
-                  >
-                    {saveBusy ? "Saving draft…" : "Save draft"}
-                  </button>
-                  <button
-                    className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={!editorIsDirty || saveBusy || approvalBusy}
-                    onClick={() => {
-                      if (
-                        !currentDocument ||
-                        !window.confirm(
-                          "Discard unsaved editor text and restore the displayed saved revision?",
-                        )
-                      )
-                        return;
-                      invalidateDetailRequest();
-                      setStaleEditorRevision(null);
-                      updateEditorContent(currentDocument.content);
-                      setSaveError("");
-                      setSaveNotice("");
-                      setConflictNotice("");
-                    }}
-                    type="button"
-                  >
-                    Discard editor changes
-                  </button>
-                  <button
-                    aria-controls={`${instanceId}-document-history`}
-                    aria-expanded={historyOpen}
-                    className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    disabled={saveBusy || approvalBusy}
-                    onClick={() => void toggleHistory()}
-                    ref={historyToggleRef}
-                    type="button"
-                  >
-                    {historyOpen ? "Hide history" : "View history"}
-                  </button>
-                  {editorIsDirty ? (
-                    <span className="text-xs text-copy-muted">
-                      Unsaved editor text · save before switching drafts
-                    </span>
-                  ) : null}
-                </div>
-
-                {compareContent ? (
-                  <section
-                    aria-labelledby={`${instanceId}-compare-title`}
-                    className="grid gap-3 border-t border-line pt-5"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                {workspaceStage === "final-review" ? (
+                  <div className="mt-5 min-w-0">
+                    <FinalReview
+                      csrfToken={csrfToken}
+                      documents={documents}
+                      documentsLoading={documentsLoading || pairRefreshBusy}
+                      focusHeadingOnMount={focusFinalReviewHeading}
+                      localChangesPending={
+                        editorIsDirty ||
+                        saveBusy ||
+                        taskEditsPending ||
+                        approvalBusy ||
+                        staleEditorRevision !== null
+                      }
+                      onReviewDocument={reviewDocument}
+                      onReviewPair={reviewPair}
+                      onRefreshDocuments={() => void refreshCurrentDraftPair()}
+                      onSessionExpired={onSessionExpired}
+                      projectId={selectedProject.id}
+                      refreshNumber={chatDocumentVersion}
+                    />
+                  </div>
+                ) : null}
+                <section
+                  aria-labelledby={`${instanceId}-pair-approval-title`}
+                  className="mt-5 grid min-w-0 gap-4 rounded-xl border border-line bg-canvas p-4 sm:p-5"
+                  hidden={workspaceStage !== "planning"}
+                >
+                  <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
+                        First-stage review
+                      </p>
                       <h4
-                        className="scroll-mt-6 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        id={`${instanceId}-compare-title`}
-                        ref={comparisonHeadingRef}
+                        className="mt-1 text-lg font-semibold"
+                        id={`${instanceId}-pair-approval-title`}
+                        ref={pairApprovalHeadingRef}
                         tabIndex={-1}
                       >
-                        Compare {compareContent.label} with saved revision{" "}
-                        {currentDocument.revision_number}
+                        Approve the saved document pair
                       </h4>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-copy-muted">
+                        One human action approves exactly the current PROJECT.md and AGENTS.md saved
+                        revisions. Any later save needs a new review. This does not approve the
+                        backlog or approve chat messages or conflict proposals.
+                      </p>
+                    </div>
+                    <span
+                      aria-live="polite"
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                        approvalStatus?.approved
+                          ? "border-accent/35 bg-accent/10 text-accent"
+                          : "border-line bg-surface-raised text-copy-muted"
+                      }`}
+                    >
+                      {approvalStatusLoading || pairRefreshBusy
+                        ? "Refreshing approval status…"
+                        : approvalStatusError
+                          ? "Approval status unavailable"
+                          : approvalStatus?.approved
+                            ? "Approved at last check"
+                            : approvalStatus?.latest_approval
+                              ? "Re-review required"
+                              : approvalStatus
+                                ? "Not yet approved"
+                                : "Approval status unavailable"}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={
+                        saveBusy ||
+                        taskEditsPending ||
+                        approvalBusy ||
+                        pairRefreshBusy ||
+                        documentsLoading
+                      }
+                      onClick={() => void refreshCurrentDraftPair()}
+                      type="button"
+                    >
+                      {pairRefreshBusy ? "Reloading saved pair…" : "Reload saved pair and status"}
+                    </button>
+                    <p className="text-xs leading-5 text-copy-muted">
+                      {approvalCheckedAt ? `Last checked ${approvalCheckedAt}. ` : ""}
+                      Another tab may have saved since then. Reload checks both heads and approval;
+                      unsaved editor text is kept.
+                    </p>
+                  </div>
+
+                  {approvalStatusLoading && !approvalStatus ? (
+                    <p aria-live="polite" className="text-sm text-copy-muted" role="status">
+                      Loading current pair and approval history…
+                    </p>
+                  ) : null}
+                  {approvalStatusError ? (
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300/30 bg-red-300/5 p-3">
+                      <p aria-live="polite" className="min-w-0 text-sm leading-6 text-red-100">
+                        Approval status could not be loaded: {approvalStatusError}
+                      </p>
                       <button
-                        className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs text-copy-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={approvalStatusLoading || approvalBusy}
+                        onClick={() => void loadPairApprovalStatus(selectedProject.id)}
+                        type="button"
+                      >
+                        {approvalStatusLoading ? "Refreshing…" : "Retry approval status"}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {approvalStatus ? (
+                    <>
+                      <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
+                        {pairDocumentOptions.map((option) => {
+                          const revision =
+                            option.kind === "project"
+                              ? approvalStatus.current_project_revision
+                              : approvalStatus.current_agents_revision;
+                          return (
+                            <div
+                              className="min-w-0 rounded-lg border border-line bg-surface-raised p-3"
+                              key={option.kind}
+                            >
+                              <dt className="font-mono text-xs uppercase tracking-wide text-copy-muted">
+                                {option.filename}
+                              </dt>
+                              <dd className="mt-2 font-medium text-foreground">
+                                Saved revision {revision.revision_number}
+                              </dd>
+                              <dd className="mt-1 break-all font-mono text-[11px] leading-5 text-copy-muted">
+                                Revision ID {revision.id}
+                              </dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+
+                      {approvalStatus.latest_approval ? (
+                        <div className="min-w-0 rounded-lg border border-line px-3 py-3">
+                          <p className="text-sm font-medium text-foreground">
+                            Latest approval · {isoDate(approvalStatus.latest_approval.created_at)}
+                          </p>
+                          <p className="mt-1 text-sm leading-6 text-copy-muted">
+                            PROJECT.md revision{" "}
+                            {approvalStatus.latest_approval.project_revision_number}
+                            {" · "}AGENTS.md revision{" "}
+                            {approvalStatus.latest_approval.agents_revision_number}
+                            {approvalStatus.approved ? " · current pair" : " · older pair"}
+                          </p>
+                          <div className="mt-2 grid min-w-0 gap-1 text-xs text-copy-muted sm:grid-cols-2">
+                            <code className="min-w-0 break-all">
+                              PROJECT.md ID {approvalStatus.latest_approval.project_revision_id}
+                            </code>
+                            <code className="min-w-0 break-all">
+                              AGENTS.md ID {approvalStatus.latest_approval.agents_revision_id}
+                            </code>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm leading-6 text-copy-muted">
+                          No pair approval is recorded yet. Saving or viewing a draft does not
+                          approve it.
+                        </p>
+                      )}
+                    </>
+                  ) : null}
+
+                  {approvalStatus && !pairHeadsMatchVisibleDocuments ? (
+                    <div className="grid min-w-0 gap-3 rounded-lg border border-amber-200/30 bg-amber-100/5 p-3">
+                      <p
+                        aria-live="polite"
+                        className="text-sm leading-6 text-amber-100"
+                        role="status"
+                      >
+                        The visible drafts and approval status came from different saved snapshots.
+                        Reload both drafts and status before reviewing or approving.
+                      </p>
+                      <button
+                        className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 sm:w-fit"
+                        disabled={
+                          saveBusy ||
+                          taskEditsPending ||
+                          approvalBusy ||
+                          pairRefreshBusy ||
+                          documentsLoading
+                        }
+                        onClick={() => void refreshCurrentDraftPair()}
+                        type="button"
+                      >
+                        {pairRefreshBusy ? "Reloading drafts…" : "Retry saved pair refresh"}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {editorIsDirty ? (
+                    <p className="text-sm leading-6 text-copy-muted" role="status">
+                      Unsaved editor text is not part of the displayed approval tuple. Save or
+                      discard it before approving the saved pair.
+                    </p>
+                  ) : null}
+
+                  {approvalError ? (
+                    <div
+                      aria-labelledby={`${instanceId}-approval-error-title`}
+                      className="grid min-w-0 gap-2 rounded-lg border border-red-300/35 bg-red-300/5 p-3"
+                      role="alert"
+                    >
+                      <h5
+                        className="font-medium text-red-100"
+                        id={`${instanceId}-approval-error-title`}
+                      >
+                        Pair approval was not recorded
+                      </h5>
+                      <p className="text-sm leading-6 text-red-100">{approvalError}</p>
+                      {Object.entries(approvalValidationErrors).length ? (
+                        <ul className="grid min-w-0 gap-2 text-sm leading-6 text-red-100">
+                          {Object.entries(approvalValidationErrors).map(([filename, messages]) => (
+                            <li className="min-w-0" key={filename}>
+                              <strong className="font-mono">{filename}</strong>
+                              <ul className="ml-5 list-disc">
+                                {messages.map((message) => (
+                                  <li className="break-words" key={message}>
+                                    {message}
+                                  </li>
+                                ))}
+                              </ul>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {approvalNotice ? (
+                    <p aria-live="polite" className="text-sm leading-6 text-accent" role="status">
+                      {approvalNotice}
+                    </p>
+                  ) : null}
+
+                  {pairConflict && currentPairConflictDocument && previousPairConflictDocument ? (
+                    <section
+                      aria-labelledby={`${instanceId}-approval-conflict-title`}
+                      className="grid min-w-0 gap-3 rounded-lg border border-amber-200/35 bg-amber-100/5 p-3 sm:p-4"
+                    >
+                      <div>
+                        <h5
+                          className="text-base font-semibold text-amber-100"
+                          id={`${instanceId}-approval-conflict-title`}
+                        >
+                          Saved pair changed before approval
+                        </h5>
+                        <p
+                          aria-live="polite"
+                          className="mt-1 text-sm leading-6 text-copy-muted"
+                          role="status"
+                        >
+                          {pairReviewMatchesVisibleDocuments
+                            ? "Compare both latest documents. Approval stays disabled until you confirm that you reviewed the exact current pair."
+                            : "A saved head changed since this comparison. Reload both drafts before reviewing the current pair."}
+                        </p>
+                      </div>
+                      <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                        {pairDocumentOptions.map((option) => (
+                          <p className="min-w-0 break-words text-sm leading-6" key={option.kind}>
+                            <span className="font-mono text-copy-muted">{option.filename}: </span>
+                            revision {pairConflict.previous[option.kind].revision_number}
+                            {" → "}
+                            revision {pairConflict.latest[option.kind].revision_number}
+                          </p>
+                        ))}
+                      </div>
+                      <div className="grid min-w-0 gap-2">
+                        <label
+                          className="text-sm font-medium text-foreground"
+                          htmlFor={`${instanceId}-approval-conflict-document`}
+                        >
+                          Compare saved document
+                        </label>
+                        <select
+                          className="min-h-11 w-full min-w-0 rounded-lg border border-input-border bg-surface-raised px-3 py-2 text-sm text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          id={`${instanceId}-approval-conflict-document`}
+                          onChange={(event) => {
+                            const kind = event.target.value as PairKind;
+                            setPairConflictKind(kind);
+                            const current = documentsRef.current;
+                            const conflict = pairConflictRef.current;
+                            if (
+                              current &&
+                              conflict &&
+                              sameSavedPair(conflict.latest, {
+                                project: current.project,
+                                agents: current.agents,
+                              })
+                            ) {
+                              const viewed = new Set(reviewedPairKindsRef.current);
+                              viewed.add(kind);
+                              updatePairReviewState(viewed, false);
+                            } else {
+                              updatePairReviewState(new Set(), false);
+                            }
+                          }}
+                          value={pairConflictKind}
+                        >
+                          <option value="project">PROJECT.md saved-version diff</option>
+                          <option value="agents">AGENTS.md saved-version diff</option>
+                        </select>
+                      </div>
+                      <DiffViewer
+                        after={currentPairConflictDocument.content}
+                        afterLabel={`Latest ${currentPairConflictDocument.filename} revision ${currentPairConflictDocument.revision_number}`}
+                        before={previousPairConflictDocument.content}
+                        beforeLabel={`Previously reviewed ${previousPairConflictDocument.filename} revision ${previousPairConflictDocument.revision_number}`}
+                      />
+                      {editorIsDirty ? (
+                        <p className="text-sm leading-6 text-copy-muted">
+                          Your unsaved editor text is preserved and is not shown in this
+                          saved-revision diff.
+                        </p>
+                      ) : null}
+                      <div className="flex min-w-0 flex-wrap items-center gap-3">
+                        <button
+                          className="min-h-11 rounded-lg border border-amber-100/40 px-4 py-2 text-sm font-medium text-amber-50 hover:bg-amber-100/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={
+                            !pairReviewMatchesVisibleDocuments ||
+                            approvalBusy ||
+                            reviewedPairKinds.size < pairDocumentOptions.length ||
+                            pairReviewConfirmed
+                          }
+                          onClick={() => {
+                            const current = documentsRef.current;
+                            const conflict = pairConflictRef.current;
+                            if (
+                              current &&
+                              conflict &&
+                              sameSavedPair(conflict.latest, {
+                                project: current.project,
+                                agents: current.agents,
+                              }) &&
+                              reviewedPairKindsRef.current.size === pairDocumentOptions.length
+                            ) {
+                              updatePairReviewState(reviewedPairKindsRef.current, true);
+                            }
+                          }}
+                          type="button"
+                        >
+                          I reviewed both latest documents
+                        </button>
+                        {pairReviewConfirmed ? (
+                          <span aria-live="polite" className="text-sm text-accent" role="status">
+                            Current pair reviewed. Approve only if this exact revision tuple is
+                            correct.
+                          </span>
+                        ) : (
+                          <span className="text-sm text-copy-muted">
+                            Viewed {reviewedPairKinds.size} of {pairDocumentOptions.length} saved
+                            documents.
+                          </span>
+                        )}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  <div className="grid min-w-0 gap-3 border-t border-line pt-4 lg:flex lg:flex-wrap lg:items-center">
+                    <button
+                      className="min-h-11 w-full min-w-0 whitespace-normal rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                      disabled={!pairCanBeApproved}
+                      onClick={() => void approveSavedPair()}
+                      ref={approvalButtonRef}
+                      type="button"
+                    >
+                      {approvalBusy
+                        ? "Approving saved pair…"
+                        : approvalStatus?.approved
+                          ? "Approved at last check"
+                          : "Approve saved PROJECT.md + AGENTS.md pair"}
+                    </button>
+                    {approvalStatus && approvalStatus.approval_has_more ? (
+                      <button
+                        className="min-h-11 w-full min-w-0 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                        disabled={approvalHistoryLoading || approvalBusy}
+                        onClick={loadOlderApprovals}
+                        type="button"
+                      >
+                        {approvalHistoryLoading ? "Loading history…" : "Load earlier approvals"}
+                      </button>
+                    ) : null}
+                    {approvalStatus && approvalStatus.approvals.length ? (
+                      <details className="w-full min-w-0 rounded-lg border border-line px-3 py-2 lg:min-w-56 lg:flex-1">
+                        <summary className="min-h-8 cursor-pointer break-words py-1 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                          Immutable pair approval history ({approvalStatus.approvals.length} shown)
+                        </summary>
+                        <ol className="mt-3 grid min-w-0 gap-2">
+                          {approvalStatus.approvals.map((approval) => (
+                            <li
+                              className="min-w-0 rounded-md bg-surface-raised p-3"
+                              key={approval.id}
+                            >
+                              <p className="text-sm leading-6 text-foreground">
+                                PROJECT.md r{approval.project_revision_number} + AGENTS.md r
+                                {approval.agents_revision_number}
+                              </p>
+                              <p className="mt-1 text-xs text-copy-muted">
+                                Approved {isoDate(approval.created_at)}
+                              </p>
+                              <div className="mt-2 grid min-w-0 gap-1 text-[11px] text-copy-muted sm:grid-cols-2">
+                                <code className="min-w-0 break-all">
+                                  PROJECT.md revision ID {approval.project_revision_id}
+                                </code>
+                                <code className="min-w-0 break-all">
+                                  AGENTS.md revision ID {approval.agents_revision_id}
+                                </code>
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    ) : null}
+                  </div>
+                </section>
+
+                <div
+                  aria-label="Draft document switcher"
+                  className="mt-5 flex flex-wrap gap-2"
+                  role="tablist"
+                  hidden={workspaceStage !== "planning"}
+                >
+                  {documentOptions.map((option) => (
+                    <button
+                      aria-controls={`${instanceId}-document-panel`}
+                      aria-selected={selectedKind === option.kind}
+                      className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                        selectedKind === option.kind
+                          ? "border-accent/60 bg-accent/10 text-accent"
+                          : "border-line bg-canvas text-copy-muted hover:border-accent/40 hover:text-foreground"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                      id={`${instanceId}-document-tab-${option.kind}`}
+                      key={option.kind}
+                      onKeyDown={(event) => handleDocumentTabKeyDown(event, option.kind)}
+                      onClick={() => selectDocument(option.kind)}
+                      role="tab"
+                      tabIndex={selectedKind === option.kind ? 0 : -1}
+                      type="button"
+                      disabled={
+                        saveBusy || taskEditsPending || approvalBusy || editorIsDirty || !documents
+                      }
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div
+                  aria-labelledby={`${instanceId}-document-tab-${selectedKind}`}
+                  className="mt-4 grid min-w-0 gap-4"
+                  id={`${instanceId}-document-panel`}
+                  role="tabpanel"
+                  hidden={workspaceStage !== "planning"}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs text-copy-muted">
+                        {currentDocument.filename} · revision {currentDocument.revision_number}
+                      </p>
+                      <p className="mt-1 text-xs text-copy-muted">
+                        {currentDocument.origin === "template"
+                          ? `Starter draft from ${currentDocument.template_source ?? "root template"}`
+                          : "Saved human draft"}
+                      </p>
+                    </div>
+                    <span className="font-mono text-[10px] text-copy-muted">
+                      {editorBytes.toLocaleString()} / {MAX_DOCUMENT_BYTES.toLocaleString()} bytes
+                    </span>
+                  </div>
+
+                  {selectedKind === "backlog" && selectedProject ? (
+                    <BacklogPlanning
+                      canEditTasks={Boolean(
+                        csrfToken &&
+                        !editorIsDirty &&
+                        staleEditorRevision === null &&
+                        !saveBusy &&
+                        !approvalBusy &&
+                        !pairRefreshBusy &&
+                        !documentsLoading &&
+                        !createBusy,
+                      )}
+                      csrfToken={csrfToken}
+                      instanceId={instanceId}
+                      markdownPanelId={`${instanceId}-backlog-markdown-panel`}
+                      onPanelChange={setBacklogPanel}
+                      onPendingChange={setTaskEditsPending}
+                      memory={taskMemory}
+                      onMemoryChange={setTaskMemory}
+                      onSessionExpired={onSessionExpired}
+                      onSnapshotObserved={observeBacklogTaskSnapshot}
+                      panel={backlogPanel}
+                      projectId={selectedProject.id}
+                      revisionNumber={currentDocument.revision_number}
+                      savedContent={currentDocument.content}
+                      savedContentSha256={currentDocument.content_sha256}
+                    />
+                  ) : null}
+
+                  <div
+                    aria-label={selectedKind === "backlog" ? "Backlog Markdown editor" : undefined}
+                    className="grid min-w-0 gap-4"
+                    hidden={selectedKind === "backlog" && backlogPanel !== "markdown"}
+                    id={
+                      selectedKind === "backlog"
+                        ? `${instanceId}-backlog-markdown-panel`
+                        : undefined
+                    }
+                  >
+                    {selectedKind === "backlog" && taskEditsPending ? (
+                      <p className="text-sm leading-5 text-amber-100" role="status">
+                        Task details have unsaved changes. Save or discard them before editing the
+                        Markdown draft.
+                      </p>
+                    ) : null}
+                    <label
+                      className="sr-only"
+                      htmlFor={`${instanceId}-document-editor-${selectedKind}`}
+                    >
+                      Edit {currentDocument.filename}
+                    </label>
+                    <textarea
+                      className="min-h-[24rem] w-full min-w-0 resize-y rounded-xl border border-input-border bg-canvas px-4 py-3 font-mono text-xs leading-6 text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:min-h-[32rem]"
+                      id={`${instanceId}-document-editor-${selectedKind}`}
+                      onChange={(event) => {
+                        updateEditorContent(event.target.value);
+                        setSaveError("");
+                        setSaveNotice("");
+                        setApprovalError("");
+                        setApprovalValidationErrors({});
+                      }}
+                      readOnly={selectedKind === "backlog" && taskEditsPending}
+                      spellCheck={false}
+                      value={editorContent}
+                    />
+
+                    {editorIsOversize ? (
+                      <p className="text-sm text-red-200" role="alert">
+                        This draft exceeds the 128 KiB limit. Shorten it before saving.
+                      </p>
+                    ) : null}
+                    {staleEditorRevision !== null && editorIsDirty ? (
+                      <p className="text-sm leading-5 text-amber-200" role="status">
+                        Another tab saved this draft after your editor text was started. Saving now
+                        will preserve your text as a conflict proposal, not overwrite the newer
+                        revision.
+                      </p>
+                    ) : null}
+                    {saveError ? (
+                      <p className="text-sm leading-5 text-red-200" role="alert">
+                        {saveError}
+                      </p>
+                    ) : null}
+                    {conflictNotice ? (
+                      <p
+                        aria-live="polite"
+                        className="text-sm leading-5 text-amber-200"
+                        role="status"
+                      >
+                        {conflictNotice}
+                      </p>
+                    ) : null}
+                    {saveNotice ? (
+                      <p aria-live="polite" className="text-sm leading-5 text-accent" role="status">
+                        {saveNotice}
+                      </p>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        className="min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={
+                          !editorIsDirty ||
+                          editorIsOversize ||
+                          saveBusy ||
+                          taskEditsPending ||
+                          approvalBusy ||
+                          pairRefreshBusy ||
+                          !csrfToken
+                        }
+                        onClick={() => void saveDraft()}
+                        type="button"
+                      >
+                        {saveBusy ? "Saving draft…" : "Save draft"}
+                      </button>
+                      <button
+                        className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!editorIsDirty || saveBusy || approvalBusy}
                         onClick={() => {
-                          restoreComparisonFocus.current = true;
-                          setCompareContent(null);
+                          if (
+                            !currentDocument ||
+                            !window.confirm(
+                              "Discard unsaved editor text and restore the displayed saved revision?",
+                            )
+                          )
+                            return;
+                          invalidateDetailRequest();
+                          setStaleEditorRevision(null);
+                          updateEditorContent(currentDocument.content);
+                          setSaveError("");
+                          setSaveNotice("");
+                          setConflictNotice("");
                         }}
                         type="button"
                       >
-                        Close comparison
+                        Discard editor changes
                       </button>
-                    </div>
-                    <DiffViewer
-                      after={currentDocument.content}
-                      afterLabel={`Saved ${currentDocument.filename} revision ${currentDocument.revision_number}`}
-                      before={compareContent.content}
-                      beforeLabel={compareContent.label}
-                    />
-                    {editorIsDirty ? (
-                      <p className="text-xs text-copy-muted">
-                        Unsaved editor text is not shown in this comparison.
-                      </p>
-                    ) : null}
-                  </section>
-                ) : null}
-
-                <section
-                  aria-labelledby={`${instanceId}-history-title`}
-                  className={historyOpen ? "grid min-w-0 gap-5 border-t border-line pt-5" : ""}
-                  hidden={!historyOpen}
-                  id={`${instanceId}-document-history`}
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
-                        Immutable records
-                      </p>
-                      <h4 className="mt-1 text-lg font-semibold" id={`${instanceId}-history-title`}>
-                        {currentDocument.filename} history
-                      </h4>
-                    </div>
-                    {history ? (
-                      <span className="font-mono text-xs text-copy-muted">
-                        Current revision {history.current_revision_number}
-                      </span>
-                    ) : null}
-                  </div>
-                  {historyLoading ? (
-                    <p aria-live="polite" className="text-sm text-copy-muted" role="status">
-                      Loading revision history…
-                    </p>
-                  ) : null}
-                  {historyError ? (
-                    <div className="grid justify-items-start gap-2">
-                      <p className="text-sm text-red-200" role="alert">
-                        {historyError}
-                      </p>
                       <button
-                        className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        disabled={historyLoading}
-                        onClick={() => void loadHistory("none", true)}
+                        aria-controls={`${instanceId}-document-history`}
+                        aria-expanded={historyOpen}
+                        className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        disabled={saveBusy || approvalBusy}
+                        onClick={() => void toggleHistory()}
+                        ref={historyToggleRef}
                         type="button"
                       >
-                        Retry history
+                        {historyOpen ? "Hide history" : "View history"}
                       </button>
+                      {editorIsDirty ? (
+                        <span className="text-xs text-copy-muted">
+                          Unsaved editor text · save before switching drafts
+                        </span>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {history && !historyLoading ? (
-                    <>
-                      <div className="grid gap-3">
-                        <h5 className="font-mono text-xs uppercase tracking-wide text-copy-muted">
-                          Saved revisions
-                        </h5>
-                        {history.revisions.length === 0 ? (
-                          <p className="text-sm text-copy-muted">No saved revisions.</p>
-                        ) : (
-                          <ol className="grid gap-3">
-                            {history.revisions.map((revision) => (
-                              <li
-                                className="min-w-0 rounded-lg border border-line bg-canvas p-3"
-                                key={`revision-${revision.revision_number}`}
-                              >
-                                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                  <span className="font-medium text-foreground">
-                                    Revision {revision.revision_number}
-                                    {revision.revision_number === history.current_revision_number
-                                      ? " · current"
-                                      : ""}
-                                  </span>
-                                  <span className="text-xs text-copy-muted">
-                                    {revision.origin === "template"
-                                      ? "Starter template"
-                                      : "Human edit"}{" "}
-                                    · {isoDate(revision.created_at)}
-                                  </span>
-                                </div>
-                                {revision.template_source ? (
-                                  <p className="mt-1 break-words font-mono text-[10px] text-copy-muted">
-                                    Source {revision.template_source} · SHA-256{" "}
-                                    {revision.template_sha256}
-                                  </p>
-                                ) : null}
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <button
-                                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                                    onClick={(event) =>
-                                      void compareRevision(revision, event.currentTarget)
-                                    }
-                                    type="button"
-                                  >
-                                    Compare revision {revision.revision_number}
-                                  </button>
-                                  <button
-                                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                                    onClick={() => void reapplyRevision(revision)}
-                                    type="button"
-                                  >
-                                    Reapply revision {revision.revision_number} in editor
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ol>
-                        )}
-                        {history.revision_has_more ? (
+
+                    {compareContent ? (
+                      <section
+                        aria-labelledby={`${instanceId}-compare-title`}
+                        className="grid gap-3 border-t border-line pt-5"
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <h4
+                            className="scroll-mt-6 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            id={`${instanceId}-compare-title`}
+                            ref={comparisonHeadingRef}
+                            tabIndex={-1}
+                          >
+                            Compare {compareContent.label} with saved revision{" "}
+                            {currentDocument.revision_number}
+                          </h4>
                           <button
-                            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-fit"
-                            disabled={historyLoading}
-                            onClick={() => void loadHistory("revisions")}
+                            className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs text-copy-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            onClick={() => {
+                              restoreComparisonFocus.current = true;
+                              setCompareContent(null);
+                            }}
                             type="button"
                           >
-                            Load older revisions
+                            Close comparison
                           </button>
-                        ) : null}
-                      </div>
-
-                      <div className="grid gap-3">
-                        <h5 className="font-mono text-xs uppercase tracking-wide text-copy-muted">
-                          Conflict proposals
-                        </h5>
-                        {history.proposals.length === 0 ? (
-                          <p className="text-sm text-copy-muted">
-                            No rejected edits. If another tab saves first, the attempted text is
-                            kept here.
+                        </div>
+                        <DiffViewer
+                          after={currentDocument.content}
+                          afterLabel={`Saved ${currentDocument.filename} revision ${currentDocument.revision_number}`}
+                          before={compareContent.content}
+                          beforeLabel={compareContent.label}
+                        />
+                        {editorIsDirty ? (
+                          <p className="text-xs text-copy-muted">
+                            Unsaved editor text is not shown in this comparison.
                           </p>
-                        ) : (
-                          <ol className="grid gap-3">
-                            {history.proposals.map((proposal) => (
-                              <li
-                                className="min-w-0 rounded-lg border border-amber-200/20 bg-amber-100/5 p-3"
-                                key={proposal.id}
-                              >
-                                <p className="font-medium text-foreground">
-                                  Conflict proposal · expected revision{" "}
-                                  {proposal.expected_revision_number}, newer revision{" "}
-                                  {proposal.observed_revision_number}
-                                </p>
-                                <p className="mt-1 text-xs text-copy-muted">
-                                  Saved {isoDate(proposal.created_at)}
-                                </p>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  <button
-                                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                                    onClick={(event) =>
-                                      void compareProposal(proposal, event.currentTarget)
-                                    }
-                                    type="button"
-                                  >
-                                    Compare conflict proposal
-                                  </button>
-                                  <button
-                                    className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                                    onClick={() => void reapplyProposal(proposal)}
-                                    type="button"
-                                  >
-                                    Reapply conflict proposal in editor
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ol>
-                        )}
-                        {history.proposal_has_more ? (
-                          <button
-                            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-fit"
-                            disabled={historyLoading}
-                            onClick={() => void loadHistory("proposals")}
-                            type="button"
+                        ) : null}
+                      </section>
+                    ) : null}
+
+                    <section
+                      aria-labelledby={`${instanceId}-history-title`}
+                      className={historyOpen ? "grid min-w-0 gap-5 border-t border-line pt-5" : ""}
+                      hidden={!historyOpen}
+                      id={`${instanceId}-document-history`}
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <div>
+                          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
+                            Immutable records
+                          </p>
+                          <h4
+                            className="mt-1 text-lg font-semibold"
+                            id={`${instanceId}-history-title`}
                           >
-                            Load older conflict proposals
-                          </button>
+                            {currentDocument.filename} history
+                          </h4>
+                        </div>
+                        {history ? (
+                          <span className="font-mono text-xs text-copy-muted">
+                            Current revision {history.current_revision_number}
+                          </span>
                         ) : null}
                       </div>
-                    </>
-                  ) : null}
-                </section>
+                      {historyLoading ? (
+                        <p aria-live="polite" className="text-sm text-copy-muted" role="status">
+                          Loading revision history…
+                        </p>
+                      ) : null}
+                      {historyError ? (
+                        <div className="grid justify-items-start gap-2">
+                          <p className="text-sm text-red-200" role="alert">
+                            {historyError}
+                          </p>
+                          <button
+                            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            disabled={historyLoading}
+                            onClick={() => void loadHistory("none", true)}
+                            type="button"
+                          >
+                            Retry history
+                          </button>
+                        </div>
+                      ) : null}
+                      {history && !historyLoading ? (
+                        <>
+                          <div className="grid gap-3">
+                            <h5 className="font-mono text-xs uppercase tracking-wide text-copy-muted">
+                              Saved revisions
+                            </h5>
+                            {history.revisions.length === 0 ? (
+                              <p className="text-sm text-copy-muted">No saved revisions.</p>
+                            ) : (
+                              <ol className="grid gap-3">
+                                {history.revisions.map((revision) => (
+                                  <li
+                                    className="min-w-0 rounded-lg border border-line bg-canvas p-3"
+                                    key={`revision-${revision.revision_number}`}
+                                  >
+                                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                      <span className="font-medium text-foreground">
+                                        Revision {revision.revision_number}
+                                        {revision.revision_number ===
+                                        history.current_revision_number
+                                          ? " · current"
+                                          : ""}
+                                      </span>
+                                      <span className="text-xs text-copy-muted">
+                                        {revision.origin === "template"
+                                          ? "Starter template"
+                                          : revision.origin === "agent"
+                                            ? "Agent draft"
+                                            : "Human edit"}{" "}
+                                        · {isoDate(revision.created_at)}
+                                      </span>
+                                    </div>
+                                    {revision.template_source ? (
+                                      <p className="mt-1 break-words font-mono text-[10px] text-copy-muted">
+                                        Source {revision.template_source} · SHA-256{" "}
+                                        {revision.template_sha256}
+                                      </p>
+                                    ) : null}
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                        onClick={(event) =>
+                                          void compareRevision(revision, event.currentTarget)
+                                        }
+                                        type="button"
+                                      >
+                                        Compare revision {revision.revision_number}
+                                      </button>
+                                      <button
+                                        className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                        onClick={() => void reapplyRevision(revision)}
+                                        type="button"
+                                      >
+                                        Reapply revision {revision.revision_number} in editor
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                            {history.revision_has_more ? (
+                              <button
+                                className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-fit"
+                                disabled={historyLoading}
+                                onClick={() => void loadHistory("revisions")}
+                                type="button"
+                              >
+                                Load older revisions
+                              </button>
+                            ) : null}
+                          </div>
 
-                <p className="border-t border-line pt-4 text-xs leading-5 text-copy-muted">
-                  Drafts and conflict proposals are saved privately. Workspace files are temporary
-                  copies; PostgreSQL is the source of truth. No draft is approved by saving or
-                  reapplying it.
-                </p>
+                          <div className="grid gap-3">
+                            <h5 className="font-mono text-xs uppercase tracking-wide text-copy-muted">
+                              Conflict proposals
+                            </h5>
+                            {history.proposals.length === 0 ? (
+                              <p className="text-sm text-copy-muted">
+                                No rejected edits. If another tab saves first, the attempted text is
+                                kept here.
+                              </p>
+                            ) : (
+                              <ol className="grid gap-3">
+                                {history.proposals.map((proposal) => (
+                                  <li
+                                    className="min-w-0 rounded-lg border border-amber-200/20 bg-amber-100/5 p-3"
+                                    key={proposal.id}
+                                  >
+                                    <p className="font-medium text-foreground">
+                                      Conflict proposal · expected revision{" "}
+                                      {proposal.expected_revision_number}, newer revision{" "}
+                                      {proposal.observed_revision_number}
+                                    </p>
+                                    <p className="mt-1 text-xs text-copy-muted">
+                                      Saved {isoDate(proposal.created_at)}
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <button
+                                        className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                        onClick={(event) =>
+                                          void compareProposal(proposal, event.currentTarget)
+                                        }
+                                        type="button"
+                                      >
+                                        Compare conflict proposal
+                                      </button>
+                                      <button
+                                        className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                        onClick={() => void reapplyProposal(proposal)}
+                                        type="button"
+                                      >
+                                        Reapply conflict proposal in editor
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                            {history.proposal_has_more ? (
+                              <button
+                                className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:w-fit"
+                                disabled={historyLoading}
+                                onClick={() => void loadHistory("proposals")}
+                                type="button"
+                              >
+                                Load older conflict proposals
+                              </button>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : null}
+                    </section>
+
+                    <p className="border-t border-line pt-4 text-xs leading-5 text-copy-muted">
+                      Drafts and conflict proposals are saved privately. Workspace files are
+                      temporary copies; PostgreSQL is the source of truth. No draft is approved by
+                      saving or reapplying it.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

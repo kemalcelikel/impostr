@@ -124,6 +124,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function showProjectList(): void {
+  const toggle = screen.queryByRole("button", { name: "Show project list" });
+  if (toggle) fireEvent.click(toggle);
+}
+
 function renderWorkspace(
   fetchMock: ReturnType<typeof vi.fn>,
   props: {
@@ -138,6 +143,9 @@ function renderWorkspace(
     ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | undefined;
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const path = pathOf(input);
+    if (/^\/api\/projects\/[^/]+\/chat$/.test(path) && (init?.method ?? "GET") === "GET") {
+      return Promise.resolve(jsonResponse({ conversations: [], last_conversation_id: null }));
+    }
     const isApprovalStatusRequest =
       path.includes("/document-pair-approval") && (init?.method ?? "GET") === "GET";
     if (originalImplementation) {
@@ -513,6 +521,7 @@ describe("private project drafts", () => {
       const view = renderWorkspace(fetchMock, { projects: [project], onProjectCreated });
       fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
       const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      showProjectList();
       fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), {
         target: { value: created.name },
       });
@@ -577,6 +586,7 @@ describe("private project drafts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard editor changes" }));
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(editor).toHaveValue("# My unsaved idea\n");
+    showProjectList();
     expect(screen.getByRole("button", { name: "Open project Second private plan" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     expect(await screen.findByText("PROJECT.md · revision 2")).toBeInTheDocument();
@@ -1108,11 +1118,13 @@ describe("private project drafts", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Discard editor changes" }));
     expect(editor).toHaveValue(newer.content);
+    showProjectList();
     fireEvent.click(screen.getByRole("button", { name: "Open project Second private plan" }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
     historyResponse.resolve(
       jsonResponse({ kind: "project", current_revision_number: 2, revisions: [], proposals: [] }),
     );
+    showProjectList();
     expect(
       screen.getByRole("button", { name: "Open project Second private plan" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -1138,6 +1150,7 @@ describe("private project drafts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open project Page one 0" }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
     fireEvent.click(screen.getByRole("button", { name: "View history" }));
+    showProjectList();
     fireEvent.click(screen.getByRole("button", { name: "Next projects" }));
     expect(pageChange).toHaveBeenCalledWith(100);
     // Even before the parent supplies the next list, the old selection is gone.
@@ -1190,6 +1203,7 @@ describe("private project drafts", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Edit PROJECT.md" }), {
       target: { value: "# Unsaved second page\n" },
     });
+    showProjectList();
     expect(screen.getByRole("button", { name: "Previous projects" })).toBeDisabled();
     expect(pageChange).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("textbox", { name: "Edit PROJECT.md" })).toHaveValue(
@@ -1485,6 +1499,9 @@ describe("private project drafts", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = pathOf(input);
       const method = init?.method ?? "GET";
+      if (/^\/api\/projects\/[^/]+\/chat$/.test(path) && method === "GET") {
+        return Promise.resolve(jsonResponse({ conversations: [], last_conversation_id: null }));
+      }
       if (path.endsWith("/documents") && method === "GET") {
         return Promise.resolve(
           jsonResponse([current, initialDocuments.agents, initialDocuments.backlog]),
@@ -1875,6 +1892,7 @@ describe("private project drafts", () => {
     fireEvent.change(editor, { target: { value: initialDocuments.project.content } });
     expect(screen.getByRole("button", { name: "View history" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Discard editor changes" })).toBeDisabled();
+    showProjectList();
     expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Open project Second private plan" })).toBeDisabled();
     fireEvent.submit(screen.getByRole("button", { name: "Create project" }).closest("form")!);
@@ -1935,6 +1953,7 @@ describe("private project drafts", () => {
         "Editor text changed while loading",
       );
       expect(editor).toHaveValue("# Typed during request\n");
+      showProjectList();
       expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
     },
   );
@@ -2098,6 +2117,7 @@ describe("private project drafts", () => {
       fireEvent.click(await screen.findByRole("button", { name: button }));
       await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(detailsPath, expect.any(Object)));
 
+      showProjectList();
       fireEvent.click(screen.getByRole("button", { name: "Open project Second private plan" }));
       const secondEditor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
       expect(secondEditor).toHaveValue(projectBContent);
@@ -2123,6 +2143,7 @@ describe("private project drafts", () => {
       expect(
         screen.queryByText("# First project's private historical text"),
       ).not.toBeInTheDocument();
+      showProjectList();
       expect(
         screen.getByRole("button", { name: "Open project Second private plan" }),
       ).toHaveAttribute("aria-pressed", "true");
@@ -3074,6 +3095,7 @@ describe("private project drafts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
     await waitFor(() => expect(projectADocumentRequests).toBe(2));
 
+    showProjectList();
     fireEvent.click(screen.getByRole("button", { name: "Open project Second private plan" }));
     const secondEditor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
     expect(secondEditor).toHaveValue(projectBDocument.content);
@@ -3084,6 +3106,7 @@ describe("private project drafts", () => {
     await waitFor(() => expect(secondEditor).toHaveValue(projectBDocument.content));
     expect(screen.getByText("PROJECT.md · revision 1")).toBeInTheDocument();
     expect(screen.queryByText("# First private project sentinel")).not.toBeInTheDocument();
+    showProjectList();
     expect(
       screen.getByRole("button", { name: "Open project Second private plan" }),
     ).toHaveAttribute("aria-pressed", "true");

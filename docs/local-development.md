@@ -12,6 +12,142 @@ delivered release. Consult `BACKLOG.md` for task outcomes.
 
 ## Operator-only chat-safety prototype (IMP-002)
 
+### IMP-024 phase three — verified synthetic UI/front-door acceptance
+
+**Latest coordinator-verified outcome:** On exact base
+`1121bb3314c7f298a16854f2f21ac084b13b44ae`, fresh 11 focused fixture tests and
+`imp024-candidate-preflight` passed with fingerprint
+`0cd9062476ec6b654acd2931702beeec97766d3dae289beac3d4ea3d179910fe`.
+Exact-fingerprint launch passed using the approved canonical UID/GID1000 mode0775
+synthetic Member handoff, without chmod or a wider private-state exception. No
+runtime/profile inputs changed between preflight and rendered acceptance.
+
+Normal generated Member sign-in and project creation passed. The rendered flow
+completed a native question reply, Allow once and unapproved `PROJECT.md` import.
+A second turn with a human save before Allow once retained the human text as a
+proposal conflict and displayed its comparison. Composer drafts survived conversation
+tab switches; refresh and re-login restored the server's last-used conversation.
+An actual DOM MutationObserver observed `Synthetic planning` text while tech-lead
+was still running, before completion, proving incremental rendered delivery through
+the front door rather than merely a successful API/stream connection.
+
+Independent candidate and affected repair reviews PASS remain valid. UI-designer
+rendered review returned **PASS** at 1440/1024/768/375 px, with no horizontal overflow,
+keyboard-focus checks and unsaved-text retention. Existing coordinator evidence of
+92 web tests plus lint/format/typecheck/build remains valid for the unchanged web
+inputs. Fixture `stop` returned **0**; sanitized cleanup status verified synthetic
+Member accounts and removal of the login, owned stack/images, private state and
+broker/worker/channel resources. These are coordinator execution results, not
+developer Docker/browser runs.
+
+Phase three uses **5/5** substantive attempts. The narrow handoff correction and
+mechanical exact-base reconciliation are the same fifth attempt, not an additional
+budget. Phase four remains **0/5**, next for integrated proof and the reviewed human
+operator entrypoint. Whole IMP-024 is **not done**; phase-three proof is synthetic,
+not live model/account acceptance or release readiness. No operator/live mode or
+runner was started. Coordinator owns phase-three staging/commit and task bookkeeping.
+
+**Preserved earlier runner checkpoint:** 92 focused web tests and lint/format/typecheck/build
+passed; fresh exact-input preflight passed migration0007, normal Member chat history,
+authorization denials and all owned cleanup. Rendered launch stopped before handoff
+because the approved channel failed its ownership/mode0700 gate. The owner subsequently
+accepted the existing development directory's exact mode0775 for synthetic Member
+handoff only, without chmod. At that checkpoint the fixture correction, affected
+review and fresh preflight/rendered proof were outstanding; the latest verified
+outcome above supersedes that blocker without erasing the failed launch. Earlier
+fingerprints do not cover the corrected fixture/base.
+
+Phase-three candidate uses delivered backend `a39a2f4` at exact committed base
+`1121bb3314c7f298a16854f2f21ac084b13b44ae`. It adds durable conversation tabs,
+per-tab drafts, explicit Send/Stop, Ctrl/Command+Enter, incremental DB replay,
+inline questions/once-or-reject permissions and unapproved proposal/conflict links.
+The stable project conversation panel is shared by planning, backlog and final review.
+At <=768px switch Chat/Files/Backlog without discarding mounted text; final review
+uses the region switcher so all three files retain full desktop width. Project list
+collapses while a project is open. Existing revision checks and explicit conflict
+compare/reapply remain authoritative; agent updates never approve a document.
+
+The exact-base reconciliation from `4a4d820` to `1121bb3` verified that only
+`BACKLOG.md` and `DONE.md` changed; all scoped runtime/build/test/helper bytes and
+Git modes are identical. These bookkeeping paths and dirty coordinator planning/docs
+remain outside the existing candidate status/archive scope. The full fixed inventory
+is unchanged, including the added `scripts/test_imp024_browser_fixture.py` harness
+input. The updated exact pin and handoff exception passed affected independent review
+before the latest fresh preflight. Any later changed-input profile needs affected
+review and fresh preflight; do not bypass the pin or reuse a stale fingerprint.
+
+Unsaved composer/editor/task text is held only in browser memory, not localStorage
+or cookies. Expiry unmounts private workspace/aborts streams; same-page re-login
+restores drafts only after the server authenticates the **same user ID**. A different
+account or explicit sign-out drops that memory. Refresh reloads saved history and
+the server's last-used conversation, not unsaved browser text. Do not interpret
+synthetic chat as live connection/account acceptance.
+
+**Coordinator-only, after independent boundary/profile review:**
+
+```sh
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp024_browser_fixture.py'
+/usr/bin/python3 -I -B scripts/local_browser_fixture.py imp024-candidate-preflight
+/usr/bin/python3 -I -B scripts/local_browser_fixture.py launch --handoff-dir /tmp/opencode/impostr-review-handoff --lifetime-minutes 30 --imp024-candidate-fingerprint <fresh-IMP024_CANDIDATE_FINGERPRINT>
+# Normal generated Member sign-in/rendered review, then always:
+/usr/bin/python3 -I -B scripts/local_browser_fixture.py stop --handoff-dir /tmp/opencode/impostr-review-handoff
+```
+
+The new `IMP024_CANDIDATE_PREVIEW_POLICY` is separate from older profiles. It pins
+the actual base, exact modified web/Nginx inputs, test/harness bytes, full enumerated
+API/build/migration/Compose/template inputs and delivered host helper inventory.
+Unexpected scoped changes, missing inputs, unsafe files, token material, stale HEAD
+or fingerprint drift fail closed.
+Three committed lockfiles are root-owned mode0644 in this checkout; only their
+read-only inventory accepts that owner, retaining nofollow/single-link/mode checks.
+No dirty inputs or host helpers receive that exception. `compose.chat-synthetic.yaml` is
+inventory only, **not** executed by this preview. The fixture prepares just one
+read-only API bind of its random owned `/tmp/opencode/impostr-browser-chat-<run-id>`
+directory to `/run/impostr-broker`, with `create_host_path: false`. No other service
+may bind/enable chat. The original Compose safety checks still reject general host
+attachments, external services and non-owned resources. No live activation/default
+Compose changes, private configuration or model credentials are involved.
+
+`imp024_browser.py` supervises the committed synthetic broker via an owned stdin
+watchdog. EOF (also supervisor death), signals or lifetime expiry stop/reap only
+owned children before channel removal; fixture success requires its zero exit and
+removed channel. Cleanup failure retains the private snapshot and reports failure.
+The guardian confines the delivered broker's fixed turn-tempfile call to a separate
+owned mode0700 scratch sibling (never API-mounted), and removes that inode-pinned
+scratch only after its adopted children are reaped, including forced shutdown.
+It never certifies cleanup from component evidence. Existing Member revocation, stack,
+volume/network/image ownership and handoff cleanup stay in place.
+
+Coordinator web checks on the exact candidate: `npm run test -- src/chat.test.ts
+src/ProjectChat.test.tsx src/ProjectWorkspace.test.tsx src/BacklogPlanning.test.tsx
+src/FinalReview.test.tsx src/App.test.tsx`, then lint, format:check, typecheck and build
+using the existing owned `web-check` environment. No host install is needed.
+The earlier developer host `npm run typecheck` was unavailable (`tsc: not found`);
+that attempt provided no web/rendered evidence. The coordinator results above are
+separate successful checks. Run the web commands below inside that owned
+environment, not against a live Compose stack or reusable account:
+
+```sh
+npm run test -- src/chat.test.ts src/ProjectChat.test.tsx src/ProjectWorkspace.test.tsx src/BacklogPlanning.test.tsx src/FinalReview.test.tsx src/App.test.tsx
+npm run lint
+npm run format:check
+npm run typecheck
+npm run build
+```
+
+Preflight alone is **not** browser/SSE acceptance. For future changed-input reviews,
+fresh normal Member rendered proof must
+cover new/last-used tabs, separate drafts, question and permission ACKs, Stop,
+incremental delivery through Nginx (before completion), replay without duplicate text,
+manual-save proposal conflict/compare/reapply, dirty editor/task/focus preservation,
+final-review invalidation and 1440/1024/768/375 layouts. Expire/revoke the generated
+session; verify private-state hiding/stream abort, same-user draft restoration and
+different-user isolation. Confirm the dedicated stream location forwards auth/cursor
+and unrelated API requests retain their ordinary timeout/buffering behavior. Always
+verify owned broker/worker/channel plus normal fixture cleanup. The latest run's
+rendered evidence is recorded above; phase four/operator entrypoint and live gates
+remain **not** implemented or claimed by this phase-three candidate.
+
 ### IMP-024 phase two — verified synthetic backend acceptance
 
 **Latest coordinator-verified outcome (2026-10-01):** From checkout root,
@@ -979,7 +1115,15 @@ product setup, CI service, or unattended global fixture. It requires Docker with
 working local Unix socket and the owner-approved handoff directory
 `/tmp/opencode/impostr-review-handoff` already available to the operator and
 permitted file tools. The directory must be owned by the current user and mode
-`0700`; the fixture creates handoff files as mode `0600`. If tool permissions for
+`0700`. The owner also explicitly accepts the existing exact canonical directory
+at UID/GID `1000:1000`, mode `0775`, **only** for short-lived generated synthetic
+Member login and sanitized cleanup handoff. Other group members can observe or
+tamper with this channel; confidentiality/integrity against them is not claimed.
+This exception never applies to real accounts, provider/admin/DB credentials,
+private fixture/control state, other paths or modes, world-write, changed owners
+or symlinks. Private state still requires `0700`; handoff files remain plain owned
+single-link mode `0600` with existing size/content checks. No directory permissions
+are changed by this correction. If tool permissions for
 this channel change, first prove a harmless marker can be written and read through
 the permitted tools. If that proof is denied, stop before launching or creating
 credentials; do not move the file or use another tool to bypass the denial.
@@ -1058,7 +1202,8 @@ for reviewing the specific IMP-004 worktree candidate based on `2d71c1b`; it is 
 a general dirty-tree preview or a product/deployment command. The preflight needs
 Docker with the local Docker socket. Candidate launch additionally requires the
 already-approved handoff directory `/tmp/opencode/impostr-review-handoff` to be
-owned by the operator with mode `0700` and available through the permitted file
+owned by the operator with mode `0700` (or the exact synthetic-only development
+exception documented above) and available through the permitted file
 tools. If the channel's permissions may have changed, prove a harmless write/read
 marker first. If that fails, stop before creating credentials; do not choose
 another path or tool.

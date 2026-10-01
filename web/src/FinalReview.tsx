@@ -50,6 +50,7 @@ type ReviewProps = {
   onReviewDocument: (kind: ReviewDocumentKind) => void;
   onReviewPair: () => void;
   onRefreshDocuments?: () => void;
+  refreshNumber?: number;
 };
 
 const documentOptions: { kind: ReviewDocumentKind; filename: string; label: string }[] = [
@@ -194,6 +195,7 @@ export default function FinalReview({
   onReviewDocument,
   onReviewPair,
   onRefreshDocuments = () => {},
+  refreshNumber = 0,
 }: ReviewProps) {
   const instanceId = `final-review-${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
   const [selectedKind, setSelectedKind] = useState<ReviewDocumentKind>("project");
@@ -320,6 +322,7 @@ export default function FinalReview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     projectId,
+    refreshNumber,
     documents.project.id,
     documents.project.revision_number,
     documents.project.content_sha256,
