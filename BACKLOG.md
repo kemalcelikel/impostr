@@ -47,6 +47,84 @@ harness templates certify future previews.
 Other blockers retain their recorded unmet prerequisites. No automatic restart,
 new template integration, network provisioning or attachment limits are implied.
 
+**New runner handoff:** Owner rejected further private-resolver troubleshooting and
+authorized preparing independent synthetic session work. IMP-023 below is the only
+new executable slice; IMP-002 and its dependent product tasks remain blocked. The
+reported `directory_write_mode`/config failure is parked without changing permissions
+or requesting another operator command. Prototype capability checks passed at
+`e82c809` (51 tests, synthetic/probes, owned cleanup); new server capability is execution
+work, not already proved. On the next owner-started root run, `overnight` takes sole
+coordination on `feature/impostr-v1`, delegates implementation to senior-developer and
+stops after IMP-023 delivery/blocker. No task pushes/PRs, automatic launch, private
+resolver reads or live model tests. Use direct root-runner mode, never optional sbx
+credential-copy/network/fallback setup. Run from this repository root.
+
+## [ ] IMP-023 — Prove confined synthetic session start, stream and resume
+
+**Depends on:** IMP-001
+
+Owner-authorized independent preparation slice after the blocked private model-access
+inspection. Reuse committed isolation/relay prototype code (`ae1fab8`, subsequent
+streaming changes through `e82c809`) without treating IMP-002 as delivered. New finite
+budget: three substantive implementation/repair attempts total, initially 0/3; count
+across sessions, preserving all IMP-002 budgets. Capability inspection and mechanical
+formatting/check reruns do not consume an attempt. No automatic replenishment.
+
+### Outcome and boundaries
+
+A non-serving operator synthetic harness proves actual pinned OpenCode 1.18.34 server
+sessions inside the existing bwrap boundary. Both server and fixed-route Python driver
+stay inside the worker; server listens on namespace-private loopback with mDNS disabled
+and generated synthetic Basic auth, never host credentials. Reuse clean HOME/config,
+discovery masks, runtime pins, mandatory namespaces and owned cleanup. The host relay
+stays inference-only and unchanged; generated test agent tools remain denied. No general
+server proxy, host listener/browser ingress, shell routes, attachments or prompt-tool
+overrides. Synthetic data only; no private config/auth/env inspection or operator modes,
+live model, installation, network provisioning, app/API/UI/Compose or runner changes.
+Aggregate quotas remain owner-deferred; retain practical time/output/child bounds.
+
+Suggested files: new `scripts/imp023_session.py`, `scripts/test_imp023_session.py`,
+and an internal worker/fixture module if needed. Narrow staging/mode seams in
+`scripts/imp002_prototype.py`, `imp002_worker.py` and affected tests are allowed;
+do not expand relay validation, transport or private diagnostic behavior. Reuse existing
+synthetic inference response support where possible. Verified command/docs are recorded
+in `docs/local-development.md` after proof, not guessed in advance.
+
+Existing constant-text stub alone is insufficient for these assertions: an internal
+namespace-local text-only fixture must make history-sensitive assertions and gate a
+delta before completion, plus controlled abort/failure responses. Keep the host relay
+unchanged. Use explicit session titles to avoid background title-generation calls;
+split bounded scenarios rather than raising the existing four-call relay limit.
+
+### Acceptance and focused verification
+
+- First implement the confined launcher/server/driver seam and pure synthetic tests.
+  Obtain independent boundary review before executing any newly introduced server
+  scenario. Existing approved prototype commands may be reused for baseline checks.
+- Actual startup proves authenticated health/version 1.18.34, unauthenticated denial,
+  `/event` `server.connected`, create/read a session, and owned child/socket/state
+  cleanup. Discover/confirm actual selected routes via namespace-local `/doc` or pinned
+  public source; missing dependency or rejected isolation stops without host fallback.
+- Subscribe before prompting; actual OpenCode text delta arrives before deterministic
+  inference completion. Distinct sessions remain distinct; explicit second turn sees
+  prior conversation and a fresh session does not. Capture only bounded synthetic
+  assertions, never raw host settings/transcripts.
+- Driver disconnect/reconnect recovers via saved history/status without resubmitting
+  the prompt. Restart server within the same worker/private HOME; prove saved history
+  and explicit-session continuation. Do not claim SSE replay or full worker-restart
+  durability. Abort and one bounded inference failure cannot be reported as successful
+  completion; cleanup remains bounded and verifiable.
+- Run focused new tests and actual confined scenarios, plus affected existing prototype
+  regressions (including file/socket/network/config injection and cleanup). Independent
+  review covers substantive isolation/protocol changes; re-review only affected repairs.
+  Mock-only or public-source-only results cannot satisfy actual runtime acceptance.
+
+Questions/permission tool execution, proposals, product-session authorization and live
+credentials are explicitly excluded and remain IMP-002 acceptance. No chat-dependent
+task is unblocked by this outcome. Missing capability/exhausted budget means `[!]`
+with preserved partial work; a concrete in-budget next action may follow the existing
+bounded `[~]` continuation policy. Local task/bookkeeping commits only, no push/PR.
+
 ## [x] IMP-001 — Bootstrap app and database baseline
 
 **Depends on:** None

@@ -1,5 +1,36 @@
 # Repository agent rules: Impostr
 
+## Latest owner-started runner handoff (IMP-023)
+
+Owner rejected further private-resolver diagnostic loops and authorized independent
+synthetic session preparation. On the next owner-started root `run-tonight.sh` batch,
+`overnight` takes sole coordination of ready IMP-023; interactive tech-lead stops
+implementation coordination. Delegate to senior-developer; independently review the
+new launcher/server/driver boundary before executing new server scenarios. Read
+BACKLOG.md IMP-023 for actual scope, acceptance and a new three-substantive-attempt
+total budget across sessions. All earlier IMP-002 budgets/history remain untouched.
+
+The existing pinned prototype passed 51 tests and synthetic/probes at `e82c809`;
+confined `serve` remains unproved execution work, not a hidden operator prerequisite.
+Use synthetic inputs only; do not run operator inspection/diagnostic/live modes,
+read private env/config/auth or fix the reported writable configuration ancestor.
+No weakening file checks or permission changes. IMP-002 remains blocked. No app
+gateway/UI, actual model credentials, questions/tools/proposals, installations,
+Docker/live data, network provisioning, pushes/PRs or automatic runner start.
+Resource quotas remain deferred; other isolation and practical bounds remain.
+
+Run the existing root helper from this checkout root on `feature/impostr-v1`, with
+`RUNNER_USE_SBX=0`. Optional sbx copies host credentials/provisions network and is
+not authorized. Root runner itself uses the owner's existing host model setup under
+the already accepted local coordination policy; this is distinct from synthetic
+product-worker proof and does not authorize private input inspection by agents.
+Preserve logs/browser artifacts and all partial work. After IMP-023 completion or
+blocker, stop with local commits/checkpoint; no final batch push/PR. No new scope may
+be activated automatically. Installed permissions are not inferred from distribution
+files: if they deny an essential assigned operation, stop without bypass. This handoff
+supersedes earlier “runner stopped until operator rerun” instructions for IMP-023 only,
+not any IMP-002/live/product acceptance rule.
+
 ## Current interactive chat-safety repair (2026-10-01)
 
 The owner asked why the runner stopped, then selected **Fix chat safety first**.

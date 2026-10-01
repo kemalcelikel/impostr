@@ -101,6 +101,15 @@ risk and defers memory/CPU/process/scratch quotas for this non-serving prototype
 only. This does not waive credential/project isolation or release/attachment rules.
 See BACKLOG.md for the prior three-attempt checkpoint and current continuation scope.
 
+Following private resolver compatibility failures, the owner selected independent
+synthetic session-protocol work instead of further operator troubleshooting. IMP-023
+will prove actual confined server start/text streaming/history/reconnect and in-worker
+server restart with a fake inference upstream. This is not implemented yet. Its
+generated authenticated server/driver are namespace-local, never a product gateway
+or host service. Private live access is parked; questions/permissions/proposals and
+product integration remain IMP-002 acceptance. Synthetic protocol delivery alone
+does not unblock chat or certify the host account/model connection.
+
 ### Current implementation versus planned application
 
 - This checkout contains root `scripts/backlog.py` and `run-tonight.sh`, plus an
