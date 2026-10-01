@@ -89,6 +89,54 @@ and bundled [`@ai-sdk/azure` 3.0.93](https://unpkg.com/@ai-sdk/azure@3.0.93/dist
 consume Azure resource/key environment inputs. None of that source establishes which
 variable was present in the human's terminal.
 
+### Reviewed category diagnostic (human only)
+
+After another `environment_override` result, the owner authorized a different-angle
+**diagnostic only**, not another guard change or configuration/auth support expansion.
+The command below passed independent review and 40 focused synthetic tests before
+the **human** runs it in a plain terminal from this repository. Agents must never run
+it, read private inputs or ask for their contents:
+
+```sh
+/usr/bin/python3 -I -B scripts/imp002_diagnostic.py
+```
+
+It accepts no arguments. Share only its one sanitized JSON report. `status:complete`
+means category collection completed, **not** compatible auth/config or live readiness;
+`status:unavailable` is a generic stop with no error details. No fingerprints are made.
+The fixed `environment` booleans distinguish XDG directory/session/unknown names,
+OpenCode inline config/path/inline auth/other names and Azure auth/resource/other names.
+Presence includes empty values; only the two exact inline content inputs are read.
+Path/resource/key/unknown environment values are never read or followed.
+
+`sources` reports the two inline inputs and the existing resolver's fixed global
+JSON/named-JSON/JSONC/legacy and default auth locations. `literal_json` means a bounded
+read produced a literal JSON object, not a valid OpenCode configuration. `absent`,
+`unreadable`, `unsafe`, `too_large`, `unsupported`, `unsupported_format` and
+`expansion_required` distinguish safe collection failures without showing content.
+Directory/path overrides (including unknown XDG names) leave both default trees
+`uninspected_override`; inline auth leaves default auth uninspected. This conservative
+inspection policy is **not** a claim about runtime precedence. JSONC/legacy files get
+safe metadata checks only; there is no JSONC/TOML parser or new dependency. File reads
+are bounded, owner/permission checked and nofollow through every directory component.
+
+`authentication_observed` aggregates literal API-key/OAuth/well-known remote and
+config bearer-header/token-provider declarations across inspected inputs, never
+provider identities or the effective credential. Unsupported records are flagged;
+token-provider declarations are unsupported, not executed. False means **not observed
+in inspected literal inputs**, not proof of absence. References are detected but never
+expanded; referenced content is not classified. Plugins, remote config, project,
+managed/account sources and arbitrary referenced files are never loaded or traversed.
+Endpoint/model `ambiguity:potential` is a coarse warning from declarations/overrides;
+`unknown` does not prove unambiguous precedence. `effective_configuration:unestablished`
+and `other_sources:uninspected` always remain explicit. No network/OpenCode/worker/live
+operation or config/environment edit occurs. Output is projected through fixed key,
+enum and boolean allowlists; no names, values, paths, URLs, credentials or errors escape.
+
+Stop after the sanitized operator result for a separately approved compatibility
+decision. This checkpoint supersedes repeating blind inspection or proceeding to the
+live command below: IMP-002 stays blocked and the runner stays stopped.
+
 The resolver also refuses ambiguous
 global files, unsupported auth/metadata/model/provider options, non-inference routes
 and nonliteral settings; it does not pretend to implement full host config precedence.
