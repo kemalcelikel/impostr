@@ -147,6 +147,15 @@ reruns `/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect` and
 only sanitized JSON, then stops. Live/account compatibility and full sessions remain
 unproved; IMP-002 blocked and runner stopped. Two repair attempts remain.
 
+**File-safety diagnostic checkpoint:** Human inspection now reports
+`file_permissions` with no network; actual cause is unknown. Compatibility attempt
+2/3 adds fixed allowlisted detail/source categories for existing reader failures only.
+No file checks were weakened or extra private path lookups added. Independent affected
+review approved human rerun; coordinator verified 51 synthetic tests. Run the same
+human-only `operator-inspect` and share sanitized JSON, then stop before live mode.
+One compatibility attempt remains; prior budgets preserved. No permission changes,
+agent private input inspection, resolver/live run or runner restart occurred.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement

@@ -44,7 +44,7 @@ review approved the operator steps after rejecting provider-level endpoint overr
 Full session/proposal
 behavior remains unproved. These commands do not make the runner or product chat ready.
 
-### Continuation operator step (file-failure details awaiting affected review)
+### Reviewed continuation operator step
 
 Do **not** run these operator modes from an agent or before independent review and
 passing synthetic checks. Only the human operator may resolve existing private
@@ -100,7 +100,7 @@ The human's latest offline result was `reason_code:file_permissions` with
 `network_used:false`. **The actual cause and path are unknown**; this does not identify
 a bad directory, file, ownership, permission mode or symlink. Compatibility attempt
 2/3 prepares fixed reader-failure details; 51 focused synthetic tests passed,
-with affected independent review still required before the human rerun of the
+with affected independent review approved before the human rerun of the
 **same** command above. No new diagnostic
 command, input support, permission/setup change or live authorization is added.
 

@@ -282,6 +282,17 @@ Human next runs `/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-ins
 shares sanitized JSON and stops before live mode. Actual setup/model compatibility
 remains unknown; keep blocked/eligible zero and **2/3** attempts remaining.
 
+**File-safety outcome (local code commit `92bb00f`):** Human inspection advances to `file_permissions`, offline.
+This category does not establish missing read permission: ownership, writable modes,
+file type/hardlinks or symlink/non-directory ancestors can also trigger it. Attempt
+**2/3** adds eight fixed reader detail codes and fixed config/auth source categories to
+offline inspection only. No checks weakened, extra lookups or private values disclosed;
+live/success contracts unchanged. Independent affected review APPROVED; coordinator
+**51 focused synthetic tests passed**. Human reruns the same `operator-inspect`, shares
+sanitized JSON then stops. Actual cause/path/account unknown; no chmod/config edits,
+agent resolver/private reads, live/network or runner run. **1/3** attempt remains;
+previous histories retained, IMP-002 blocked/eligible zero.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001
