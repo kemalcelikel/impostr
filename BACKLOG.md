@@ -257,6 +257,31 @@ only sanitized JSON. Agents have not run the diagnostic or inspected private inp
 Wait for that result before selecting supported configuration/auth changes; no live
 model or runner restart. IMP-002 remains blocked/eligible zero.
 
+**Measured resolver repair authorization:** Human category report completed offline:
+Azure resource present, XDG directory/session present, other Azure/OpenCode/unknown
+XDG categories false; inline config/auth absent, default files uninspected. This proves
+source-category incompatibility, not which directories/resources or credential mechanism
+are used. Owner approved narrow XDG/Azure-resource operator resolver compatibility,
+new budget **0/3**; preserve prior 3/3 + 3/3, guard 1/3 and diagnostic 1/3 outcomes.
+Validate privately selected XDG paths and bounded nofollow reads; establish exact
+pinned OpenCode/SDK precedence for supported Azure resource inputs and bind credentials
+to that endpoint. Tests and agents use synthetic inputs only. No arbitrary referenced
+path expansion, loader/plugins, auth-mechanism expansion, setup changes, live agent
+execution, installations, push/PR or runner restart. Independent affected boundary
+review precedes human operator inspection. Unsupported sources remain explicit stops;
+do not claim effective account/live/session compatibility without actual proof.
+
+**Measured compatibility outcome (local commit `bb96721`):** Attempt **1/3** adds validated XDG config/data
+selection, exact `AZURE_RESOURCE_NAME` interpretation, pinned global literal JSON merge
+order/Remeda semantics and config-resource/baseURL/API-auth precedence. Reader pins
+every nofollow ancestor, bounds inputs and rejects unsafe permissions/hardlinks/FIFOs,
+references/plugins/unsupported auth. Other Azure names, including cognitive-services,
+stay denied. Independent affected review APPROVED human inspection; coordinator **47
+focused tests passed**. No agent private input inspection, resolver or live execution.
+Human next runs `/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect`,
+shares sanitized JSON and stops before live mode. Actual setup/model compatibility
+remains unknown; keep blocked/eligible zero and **2/3** attempts remaining.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001

@@ -123,6 +123,30 @@ categories and explicitly leaves effective configuration unestablished. No agent
 run it or inspected private inputs. Share sanitized JSON only, then stop for a measured
 compatibility decision; no live/runner authorization follows from diagnostic success.
 
+**Measured compatibility repair approved:** Human diagnostic returned Azure resource
+environment presence and XDG directory/session presence, no inline config/auth; all
+default files remained uninspected. Credential mechanism and exact directory/resource
+inputs are unknown. Owner approved adapting the operator-only resolver to these
+existing inputs within three new focused attempts, preserving all prior histories.
+Agents implement/test synthetic inputs only, never inspect private environment values,
+configuration/auth or run operator modes. Reviewed human-run code may privately read
+bounded validated XDG-selected configuration/auth locations and exact publicly verified
+Azure resource inputs, with demonstrated pinned-runtime precedence and fixed endpoint
+binding. Do not broaden to arbitrary references/plugins/config loader/OAuth/new auth,
+installations, settings edits, network provisioning or host fallback. Independent
+affected review and focused checks precede operator rerun. Actual live/session
+acceptance remains missing; no runner launch or task push/PR.
+
+**Measured compatibility outcome:** Attempt 1/3 implemented validated XDG config/data
+selection and exact `AZURE_RESOURCE_NAME` support with pinned literal-global merge,
+credential/resource/baseURL precedence and nofollow ancestor/file checks. All other
+Azure overrides, including cognitive-services, remain unsupported. Independent affected
+review approved human `operator-inspect`; coordinator verified 47 focused tests with
+synthetic inputs. No private inputs or operator modes were accessed by agents. Human
+reruns `/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect` and shares
+only sanitized JSON, then stops. Live/account compatibility and full sessions remain
+unproved; IMP-002 blocked and runner stopped. Two repair attempts remain.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement
