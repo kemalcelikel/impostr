@@ -73,6 +73,15 @@ Share sanitized outcomes only; failure/drift stops. Do not directly inspect priv
 files or execute the operator-only resolver as coordinator/subagent. Full session
 resume/questions/permissions/proposals remain absent; no runner-ready handoff yet.
 
+**Operator failure checkpoint:** Human ran `operator-inspect` and reported generic
+capability failure; no cause or live compatibility is established. Final continuation
+attempt added independently approved offline fixed `reason_code` diagnostics only.
+Coordinator verified 28 focused tests; continuation now 3/3 consumed, previous 3/3
+preserved. Human may rerun the same inspection command and share only sanitized JSON.
+No supported configuration/auth expansion, credential access by agents, live run,
+runner restart or further implementation is authorized by the failed inspection.
+Keep IMP-002 blocked; any next repair needs actual reason and renewed bounded scope.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement

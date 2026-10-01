@@ -193,6 +193,20 @@ resume/question/permission and revision-safe proposal tests remain missing, so I
 stays blocked and runner eligibility zero. Remaining attempt retained pending operator
 outcome; no automatic runner restart.
 
+**Reported operator failure and diagnostic repair (local commit `43af33e`):** Human returned
+`{"success": false, "operator_capability_unavailable": true}` from offline inspection.
+Cause remains unknown; do not infer invalid credentials or missing model from it.
+Continuation attempt 3 added only allowlisted coarse `reason_code` values for offline
+inspection failures, with `network_used:false`; arbitrary exception details, private
+paths, environment names/values and settings are never printed. Configuration/auth
+support and live failure/success contracts remain unchanged. Independent affected
+review APPROVED; coordinator 28 tests passed using synthetic/injected errors only.
+Continuation **3/3 consumed**, earlier **3/3 preserved**. Human next step: rerun
+`/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect` from this repo,
+share sanitized JSON only. No resolver run by agents, live model operation, settings
+changes, push/PR or runner launch; IMP-002 remains blocked/eligibility zero. Further
+implementation requires reason-specific renewed bounded authorization.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001
