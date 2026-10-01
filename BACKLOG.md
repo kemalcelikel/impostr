@@ -773,11 +773,25 @@ denial and owned cleanup passed. API 51/9 skipped, PostgreSQL 9, web 35 and tool
 98/1 skipped plus applicable static/build checks passed. Existing starter provenance
 remains immutable; selected-template integration is IMP-022.
 
-## [ ] IMP-005 — Project-scoped resumable planning chats
+## [x] IMP-005 — Project-scoped resumable planning chats
 
 **Depends on:** IMP-024, IMP-004
 **Scope:** Authenticated `tech-lead` gateway and project session tabs; proposals
 become versioned drafts, never approvals.
+
+**Delivered locally:** `978eedd` on `feature/impostr-v1`, reusing delivered IMP-024
+chat/UI/history. Ordinary foreground connection and opt-in Compose overlay remain
+default-off; explicit human no-echo provider setup is required. Vetted repository
+planning prompt and mode admission deny synthetic activation for ordinary accounts.
+Bounded safe early text is verified synthetically; tools/terminal remain validated,
+late failure retains partial text without importing proposals. Capacity is 248 turns
+per foreground epoch followed by explicit clean human restart, not unlimited service.
+Independent boundary/affected repair reviews PASS; coordinator normal-stack verifier
+passed build/migration/API/static, joined revision/concurrency/revocation/reconnect,
+broker/worker/channel/DB lifecycle and frontdoor workflow with all owned cleanup.
+94 focused unit tests passed; affected docs finalized. Repairs 2/3 used (diagnostics,
+generated socket-path correction); prior IMP-024 budgets unchanged. Real-provider
+testing remains owner-deferred, not passed; no push/PR or runner launch.
 
 **Reconciled remaining implementation:** Tabs, DB histories/events/interactions,
 revision-safe proposals and UI already exist in IMP-024 commits `a39a2f4`, `b72e98c`,
