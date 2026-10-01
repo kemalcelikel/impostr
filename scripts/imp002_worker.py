@@ -3,6 +3,7 @@
 import http.client
 import json
 import os
+import select
 import socket
 import subprocess
 import sys
@@ -10,7 +11,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from imp002_relay import IO_TIMEOUT, MAX_REQUEST, MAX_RESPONSE, ROUTE, respond
+from imp002_relay import CALL_TIMEOUT, IO_TIMEOUT, MAX_REQUEST, MAX_RESPONSE, ROUTE, respond
 
 
 class Shim(BaseHTTPRequestHandler):
@@ -21,7 +22,7 @@ class Shim(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self.connection.settimeout(IO_TIMEOUT)
-        print(json.dumps({"synthetic_route": self.path, "header_names": list(self.headers.keys())}), flush=True)
+        started = False
         try:
             lengths = self.headers.get_all("Content-Length", [])
             if self.path != ROUTE or len(lengths) != 1 or self.headers.get("Transfer-Encoding"):
@@ -35,24 +36,62 @@ class Shim(BaseHTTPRequestHandler):
             if len(body) != length:
                 raise ValueError("truncated")
             with socket.socket(socket.AF_UNIX) as upstream:
-                upstream.settimeout(IO_TIMEOUT)
+                upstream.settimeout(CALL_TIMEOUT)
                 upstream.connect("/relay/inference.sock")
                 # No worker-supplied host, auth, cookies, query, or proxy headers.
                 request = (f"POST {ROUTE} HTTP/1.1\r\nHost: synthetic\r\n"
                            f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
                            "Connection: close\r\n\r\n").encode() + body
                 upstream.sendall(request)
-                response = http.client.HTTPResponse(upstream)
-                response.begin()
-                data = response.read(MAX_RESPONSE + 1)
-                if len(data) > MAX_RESPONSE or response.status not in (200, 403):
-                    raise ValueError("upstream")
-                kind = "text/event-stream" if response.status == 200 else "application/json"
-                respond(self.connection, "200 OK" if response.status == 200 else "403 Forbidden", data, kind)
-        except (ValueError, OSError, http.client.HTTPException) as exc:
-            print(json.dumps({"shim_error": type(exc).__name__}), flush=True)
+                finished = threading.Event()
+                deadline = time.monotonic() + CALL_TIMEOUT
+
+                def guard():
+                    while not finished.wait(0.025):
+                        try:
+                            if (time.monotonic() >= deadline
+                                    or select.select([self.connection], [], [], 0)[0]):
+                                # Caller EOF/pipelining or timeout closes the
+                                # Unix peer, cancelling the host inference/TLS.
+                                upstream.shutdown(socket.SHUT_RDWR)
+                                return
+                        except OSError:
+                            return
+
+                watcher = threading.Thread(target=guard, daemon=True)
+                watcher.start()
+                try:
+                    response = http.client.HTTPResponse(upstream)
+                    response.begin()
+                    if response.status not in (200, 403, 503):
+                        raise ValueError("upstream")
+                    if response.status != 200:
+                        # Never trust error bodies even from the trusted relay.
+                        respond(self.connection, "403 Forbidden" if response.status == 403 else "503 Service Unavailable",
+                                b'{"error":"relay unavailable"}')
+                    else:
+                        if response.getheader("Content-Type") != "text/event-stream":
+                            raise ValueError("stream type")
+                        self.connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                                                b"Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+                        started = True
+                        total = 0
+                        while True:
+                            block = response.read1(4096)
+                            if not block:
+                                break
+                            total += len(block)
+                            if total > MAX_RESPONSE or time.monotonic() >= deadline:
+                                raise ValueError("stream bound")
+                            self.connection.sendall(f"{len(block):x}\r\n".encode() + block + b"\r\n")
+                        self.connection.sendall(b"0\r\n\r\n")
+                finally:
+                    finished.set()
+                    watcher.join(1)
+        except (ValueError, OSError, http.client.HTTPException):
             try:
-                respond(self.connection, "503 Service Unavailable", b'{"error":"relay unavailable"}')
+                if not started:
+                    respond(self.connection, "503 Service Unavailable", b'{"error":"relay unavailable"}')
             except OSError:
                 pass
         self.close_connection = True
@@ -159,7 +198,9 @@ def main():
                   "provider": {"azure": {"npm": "@ai-sdk/azure", "options": {
                       "baseURL": f"http://127.0.0.1:{port}/openai/v1", "apiKey": "synthetic-not-a-secret",
                       "useDeploymentBasedUrls": False,
-                      "timeout": 3000, "maxRetries": 0},
+                      "timeout": 12000 if mode == "operator-live" else 3000,
+                      "headerTimeout": 12000 if mode == "operator-live" else 3000,
+                      "chunkTimeout": 3000, "maxRetries": 0},
                       "models": {"synthetic-deployment": {"name": "Synthetic", "toolcall": False,
                                  "limit": {"context": 64000, "output": 256},
                                  "options": {"store": False, "maxOutputTokens": 256}}}}}}

@@ -1,12 +1,13 @@
-"""Synthetic-only native inference relay. No credentials or live upstream support.
+"""Inference-only per-run Unix relay. Default transport is a synthetic stub.
 
 The worker may reach this one per-run filesystem Unix socket, not a host HTTP
-server. A future reviewed operator transport must replace the stub, never accept
-an upstream URL/header from the worker. Only bounded text Responses calls pass.
+server. The separately reviewed operator transport owns upstream/auth; workers
+never supply upstream URLs/headers. Only bounded text Responses calls pass.
 """
 
 import json
 import os
+import select
 import socket
 import struct
 import threading
@@ -19,6 +20,7 @@ MAX_REQUEST = 128 * 1024
 MAX_RESPONSE = 32 * 1024
 MAX_CALLS = 4
 IO_TIMEOUT = 3
+CALL_TIMEOUT = 12
 
 
 class Denied(ValueError):
@@ -191,9 +193,13 @@ def respond(connection, status, body, content_type="application/json"):
 
 
 class SyntheticRelay:
-    """One serial request at a time, bounded lifetime/calls; no public listener."""
+    """One serial request at a time, bounded lifetime/calls; no public listener.
 
-    def __init__(self, path: Path, lifetime=30):
+    An operator can supply a trusted transport. No host transport module/config/auth
+    is copied into the worker; this relay's default is still entirely synthetic.
+    """
+
+    def __init__(self, path: Path, lifetime=30, transport=None):
         if not 1 <= lifetime <= 60:
             raise ValueError("lifetime")
         self.path = path
@@ -203,6 +209,8 @@ class SyntheticRelay:
         self.connections = 0
         self.denied = 0
         self.observed = []  # Only protocol shape/errors; never prompt/body/header values.
+        self.transport = transport
+        self.active = None
         self.listener = socket.socket(socket.AF_UNIX)
         self.listener.bind(str(path))
         path.chmod(0o600)
@@ -216,6 +224,11 @@ class SyntheticRelay:
 
     def __exit__(self, *_):
         self.stop.set()
+        if self.active is not None:
+            try:
+                self.active.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
         self.thread.join(IO_TIMEOUT + 1)
         self.listener.close()
         self.path.unlink(missing_ok=True)
@@ -229,7 +242,26 @@ class SyntheticRelay:
             except socket.timeout:
                 continue
             with connection:
+                self.active = connection
                 connection.settimeout(IO_TIMEOUT)
+                finished = threading.Event()
+                cancelled = threading.Event()
+                deadline = min(self.deadline, time.monotonic() + CALL_TIMEOUT)
+
+                def guard():
+                    # A total bound also covers a request trickled below the
+                    # per-read idle timeout. Closing the shim peer cancels TLS.
+                    while not finished.wait(0.025):
+                        if self.stop.is_set() or time.monotonic() >= deadline:
+                            cancelled.set()
+                            try:
+                                connection.shutdown(socket.SHUT_RDWR)
+                            except OSError:
+                                pass
+                            return
+
+                watcher = threading.Thread(target=guard, daemon=True)
+                watcher.start()
                 try:
                     self.connections += 1
                     if self.connections > MAX_CALLS:
@@ -242,17 +274,81 @@ class SyntheticRelay:
                     self.calls += 1
                     if self.calls > MAX_CALLS:
                         raise Denied("call bound")
-                    self.observed.append({"route": route[:160],
-                                          "fields": sorted(decode(body)) if isinstance(decode(body), dict) else []})
+                    # Never retain attacker-controlled route or JSON key values.
+                    self.observed.append({"inference_route": route == ROUTE})
                     try:
-                        validate(method, route, body)
+                        data = validate(method, route, body)
                     except Denied as exc:
                         self.observed[-1]["denial"] = str(exc)
                         raise
-                    respond(connection, "200 OK", stub_response(), "text/event-stream")
+                    if self.transport is None:
+                        respond(connection, "200 OK", stub_response(), "text/event-stream")
+                    else:
+                        self.stream(connection, data, cancelled, deadline)
                 except (Denied, OSError, ValueError, RecursionError):
                     self.denied += 1
                     try:
                         respond(connection, "403 Forbidden", b'{"error":"inference denied"}')
                     except OSError:
                         pass
+                finally:
+                    finished.set()
+                    watcher.join(1)
+                    self.active = None
+
+    def stream(self, connection, data, cancelled, deadline):
+        # Only fixed sanitized errors cross this boundary. Exceptions/headers/
+        # provider bodies must never be logged or forwarded.
+        finished = threading.Event()
+
+        def peer_guard():
+            while not finished.wait(0.025):
+                try:
+                    if select.select([connection], [], [], 0)[0]:
+                        # EOF, pipelining or any extra worker bytes cancels this
+                        # inference. The single request body was already consumed.
+                        cancelled.set()
+                        return
+                except OSError:
+                    cancelled.set()
+                    return
+
+        watcher = threading.Thread(target=peer_guard, daemon=True)
+        watcher.start()
+        events = self.transport.events(data, cancelled, deadline)
+        started = False
+        size = 0
+        try:
+            for event in events:
+                size += len(event)
+                if size > MAX_RESPONSE or cancelled.is_set() or time.monotonic() >= deadline:
+                    raise Denied("stream bound")
+                if not started:
+                    connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+                                       b"Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+                    started = True
+                connection.sendall(f"{len(event):x}\r\n".encode() + event + b"\r\n")
+            if not started:
+                raise Denied("empty stream")
+            connection.sendall(b"0\r\n\r\n")
+        except Exception:
+            self.denied += 1
+            if not cancelled.is_set():
+                try:
+                    if started:
+                        error = b'event: error\ndata: {"type":"error","code":"server_error","message":"relay unavailable","param":null}\n\n'
+                        connection.sendall(f"{len(error):x}\r\n".encode() + error + b"\r\n0\r\n\r\n")
+                    else:
+                        respond(connection, "503 Service Unavailable", b'{"error":"relay unavailable"}')
+                except OSError:
+                    pass
+        finally:
+            cancelled.set()
+            finished.set()
+            try:
+                events.close()
+            except Exception:
+                # Generator cleanup exceptions can contain private SDK/socket
+                # data. Never allow a credential-bearing thread traceback.
+                self.denied += 1
+            watcher.join(1)

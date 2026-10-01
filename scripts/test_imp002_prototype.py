@@ -6,6 +6,7 @@ Namespace integration is an explicit operator command, not an automatic test gat
 
 import copy
 import http.client
+import io
 import json
 from pathlib import Path
 import socket
@@ -92,6 +93,17 @@ class RelayTests(unittest.TestCase):
 
 
 class LauncherTests(unittest.TestCase):
+    def test_main_capability_failure_reports_sanitized_json_without_launch(self):
+        output = io.StringIO()
+        with patch.object(prototype.sys, "argv", ["imp002_prototype.py", "synthetic"]), \
+                patch.object(prototype, "check_runtime", side_effect=prototype.CapabilityError("synthetic-private-detail")), \
+                patch.object(prototype.subprocess, "Popen") as child, \
+                patch.object(prototype.sys, "stdout", output):
+            self.assertEqual(prototype.main(), 1)
+        self.assertEqual(json.loads(output.getvalue()), {"success": False, "capability_error": "CapabilityError"})
+        self.assertNotIn("synthetic-private-detail", output.getvalue())
+        child.assert_not_called()
+
     def test_mandatory_namespace_and_narrow_mounts(self):
         args = prototype.command(Path("/tmp/opencode/synthetic"), "probes", 12345)
         for flag in ["--unshare-user", "--unshare-pid", "--unshare-net", "--unshare-ipc", "--unshare-uts",

@@ -1,8 +1,9 @@
-"""Operator-only, synthetic, non-serving IMP-002 handoff.
+"""Operator-only, non-serving IMP-002 handoff; synthetic modes by default.
 
 Run: /usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic
 Optional failure checks: replace synthetic with probes, outage, or timeout.
-No aggregate quotas are claimed (owner deferred them). No live model option.
+No aggregate quotas are claimed (owner deferred them). operator-inspect/live MUST
+NOT run before independent review + synthetic checks; never use real project data.
 Pins are this host's measured binaries, not a portable deployment promise.
 """
 
@@ -160,7 +161,7 @@ def bounded_run(args, timeout=20, max_output=65536):
         process.stdout.close()
 
 
-def run(mode):
+def run(mode, transport=None):
     pins = check_runtime()
     parent = Path("/tmp/opencode")
     if not parent.is_dir():
@@ -211,7 +212,7 @@ def run(mode):
             listener.bind(("127.0.0.1", 0))
             listener.listen(1)
             port = listener.getsockname()[1]
-            with SyntheticRelay(root / "relay.sock") as relay:
+            with SyntheticRelay(root / "relay.sock", transport=transport) as relay:
                 code, reason, output = bounded_run(command(root, mode, port), timeout=2 if mode == "timeout" else 20)
                 results = []
                 response_text = False
@@ -231,7 +232,7 @@ def run(mode):
                                 for result in results if "containment" in result)
                 injection_denied = not (root / "project" / "injection-executed").exists()
                 success = (code == 0 and reason == "exited" and contained and injection_denied)
-                if mode == "synthetic":
+                if mode in ("synthetic", "synthetic-stream", "operator-live"):
                     success = success and relay.calls > 0 and relay.denied == 0 and response_text and not runtime_error
                 if mode == "outage":
                     success = success and {"relay_outage_denied": True} in results
@@ -242,7 +243,7 @@ def run(mode):
                            "observed": relay.observed, "runtime_sha256": pins,
                            "project_configuration_injection_denied": injection_denied,
                            "aggregate_containment": "owner-deferred; not proved"}
-                if mode == "synthetic" and not success:
+                if mode in ("synthetic", "synthetic-stream") and not success:
                     # This output is from an isolated, entirely synthetic runtime;
                     # never enable this diagnostic for a credential-bearing mode.
                     summary["synthetic_diagnostic"] = output.decode("utf-8", errors="replace")[-6000:]
@@ -256,9 +257,32 @@ def run(mode):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("synthetic", "probes", "outage", "timeout"))
+    parser.add_argument("mode", choices=("synthetic", "synthetic-stream", "probes", "outage", "timeout", "operator-inspect", "operator-live"))
+    parser.add_argument("--contract-sha256", help="nonsecret fingerprint from reviewed operator-inspect")
     args = parser.parse_args()
     try:
+        if args.mode == "synthetic-stream":
+            from imp002_transport import SyntheticStream
+            return run(args.mode, SyntheticStream())
+        if args.mode.startswith("operator-"):
+            # This branch is for a human operator AFTER independent review, never
+            # unattended agent execution. No host CLI/config loader is executed.
+            check_runtime()
+            from imp002_transport import HTTPSInference, Unavailable, resolve_operator_contract
+            try:
+                contract = resolve_operator_contract()
+                if args.mode == "operator-inspect":
+                    print(json.dumps({"operator_contract_resolved": True,
+                                      "contract_sha256": contract.fingerprint,
+                                      "network_used": False, "credentials_disclosed": False}))
+                    return 0
+                if args.contract_sha256 != contract.fingerprint:
+                    raise Unavailable("contract pin absent/changed")
+                return run(args.mode, HTTPSInference(contract))
+            except Exception:
+                # No paths/settings/credentials/chained errors or runtime text.
+                print(json.dumps({"success": False, "operator_capability_unavailable": True}))
+                return 1
         return run(args.mode)
     except (CapabilityError, OSError) as exc:
         # No raw runtime output or private configuration in the operator report.

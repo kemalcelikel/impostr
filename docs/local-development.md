@@ -12,28 +12,91 @@ delivered release. Consult `BACKLOG.md` for task outcomes.
 
 ## Operator-only chat-safety prototype (IMP-002)
 
-The prototype is synthetic and has no live-model mode, credential resolver or app
-gateway. Do not put real credentials/project data into it. It requires this host's
-measured UID/GID 1000:1000 and pinned bwrap 0.6.1/OpenCode 1.18.34/runtime digests;
+The default prototype modes are synthetic; a continuation now prepares an
+operator-only live transport, **independently reviewed, not live-verified**.
+There is no app gateway. Do not put real credentials/project data into it. It requires
+this host's measured UID/GID 1000:1000 and pinned bwrap 0.6.1/OpenCode 1.18.34/runtime digests;
 changed binaries fail closed, rather than falling back to the host. `/tmp/opencode`
 must already exist as the permitted scratch parent. From the repository root:
 
 ```sh
 /usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp002_*.py'
 /usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic
+/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic-stream
 /usr/bin/python3 -I -B scripts/imp002_prototype.py probes
 /usr/bin/python3 -I -B scripts/imp002_prototype.py outage
 /usr/bin/python3 -I -B scripts/imp002_prototype.py timeout
 ```
 
-Verified: 9 tests and all four modes passed, including synthetic file/socket/network
-denials, clean environment, read-only runtime/config/discovery, native Responses
+Prior independently verified checkpoint: 9 tests and the original four modes passed,
+including synthetic file/socket/network denials, clean environment,
+read-only runtime/config/discovery, native Responses
 stub decoding, fail-closed relay outage, timeout/descendant pipe EOF and owned-state
 removal. Reports contain synthetic protocol shape/digests, not live credentials.
 Independent review approved only this synthetic scope. The owner defers aggregate
 resource quotas and accepts host disruption risk; time/output/relay bounds do not
-prove aggregate containment. SSE responses are buffered and full session/proposal
-behavior is unproved. These commands do not make the runner or product chat ready.
+prove aggregate containment. The continuation removes relay/shim buffering and
+normalizes bounded native Responses SSE into text-only events. Continuation checks
+passed 22 focused unit tests and all five synthetic launcher modes; socketpair tests
+proved incremental relay-to-shim delivery before completion and upstream cancellation
+on caller disconnect. Coordinator repeated the suite and all five modes; independent
+review approved the operator steps after rejecting provider-level endpoint overrides.
+Full session/proposal
+behavior remains unproved. These commands do not make the runner or product chat ready.
+
+### Reviewed continuation operator step
+
+Do **not** run these operator modes from an agent or before independent review and
+passing synthetic checks. Only the human operator may resolve existing private
+configuration/auth. No secret, endpoint, deployment or credential file is a command
+argument. From this repository root in a plain operator terminal:
+
+```sh
+/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect
+```
+
+This performs **no network/model operation**. It reads only the pinned host's
+default global config/API-auth locations privately, interpreting a narrow literal
+JSON Azure Responses/API-key subset without running OpenCode, plugins or config
+expansion. It returns only a nonsecret contract fingerprint or a generic capability
+failure. It refuses environment-based provider/XDG/OpenCode overrides, ambiguous
+global files, unsupported auth/metadata/model/provider options, non-inference routes
+and nonliteral settings; it does not pretend to implement full host config precedence.
+If unavailable, stop. The next useful operator action is privately reconciling the
+actual endpoint, deployment mapping, API version and auth mechanism with this
+supported subset; do not send private settings/secrets/logs to an agent or substitute
+invented settings, a fresh credential copy, host CLI fallback or network provisioning.
+
+If inspection succeeds, pin its returned fingerprint in the following operator
+command (the only argument is that **nonsecret** fingerprint):
+
+```sh
+/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-live --contract-sha256 <returned-fingerprint>
+```
+
+This re-resolves the contract privately, rejects drift, pins a public resolved IP,
+uses direct verified TLS with the fixed system CA bundle, and sends only the generated
+synthetic worker prompt. No redirects/retries/proxies/worker headers/ambient TLS env;
+no host transport/config/auth is mounted in the worker. Limits remain four accepted
+connections/calls, 128 KiB requests, 32 KiB upstream and downstream stream bytes,
+3 s idle I/O, 12 s per call, 30 s relay life and 20 s worker time. Caller disconnect,
+relay shutdown or deadline cancels and closes the upstream connection. Provider
+headers/IDs/metadata/reasoning/errors are not exposed; only bounded normalized text
+is retained in host memory for the synthetic sentinel check. Reports omit raw
+worker/model output and credentials; literal credential echoes are redacted, including
+split deltas. Failed/incomplete/malformed inference produces no completed event.
+These live bounds/capabilities have **not** been verified against the actual account.
+
+The pinned public `v1.18.34` `cli/cmd/run.ts` explicitly denies questions in noninteractive
+mode, auto-rejects permissions and emits text only after `part.time.end`; `--format json`
+is not full protocol proof. The pinned SDK exposes `/event`, `/session`,
+`/session/{sessionID}/message`, `/session/{sessionID}/prompt_async`,
+`/session/{sessionID}/abort`, `/question/{requestID}/reply` and
+`/permission/{requestID}/reply`. Next bounded session experiment must exercise those
+interfaces **inside the isolated worker**, without exposing a host OpenCode server,
+and prove restart/resume, event recovery, question replies, default-deny permissions
+and revision-safe proposal import. None of those acceptance checks is delivered by
+the operator live turn. IMP-002 remains blocked and the runner stays stopped.
 
 ## Manifest persistence verification (IMP-020)
 
