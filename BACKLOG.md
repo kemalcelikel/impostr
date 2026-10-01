@@ -82,6 +82,44 @@ Owner permits independently eligible human-only development, not unconfined prod
 agents. The runner's optional `sbx` copies host auth and can fall back to host execution;
 it is not this boundary. Keep blocked until revised readiness is explicitly approved.
 
+**Owner-authorized next repair (2026-10-01):** The latest batch at `d74ee13`
+finished IMP-014/010 and stopped normally with zero eligible tasks. Owner selected
+**Fix chat safety first**, authorizing interactive tech-lead coordination, senior
+implementation and three new focused substantive attempts for a non-serving local
+worker/model-relay prototype. Preserve prior history and blocked marker; this is
+not authorization to claim full IMP-002 acceptance from a prototype or restart the
+runner automatically. No product gateway, installs, credential disclosure, host
+fallback, network exposure, push/PR or unrelated HTTPS/attachment implementation.
+
+Start with actual non-root launcher identity, pinned OpenCode/bwrap dependencies,
+isolated configuration and available aggregate memory/process/CPU/scratch controls.
+Use synthetic workspace/home/sibling/socket canaries, never real secret/DB/Docker
+probes. Missing enforceable controls stop child-tool/live execution. Proposed boundary:
+private worker network, a local shim through a per-run Unix socket to a trusted
+fixed-upstream model-only relay; no host OpenCode server proxy or copied auth.
+Exact routes/protocol/settings must be measured before implementation claims.
+Focused denial/failure, configuration-injection, bounded relay/stream/cancellation
+checks and independent boundary review precede any short synthetic live session.
+The reviewed relay alone uses an operator-managed existing credential channel;
+unknown auth or upstream metadata is an operator checkpoint, not permission to read
+private configuration. Pin actual setup and verify owned child/socket/state cleanup.
+
+Prototype scope: operator-only scripts and focused tests; no API/web/Compose changes.
+Document verified operating instructions after proof. Full session streaming,
+resume/questions/permission replies and revision-safe proposal import remain this
+item’s acceptance, not presumed properties of `opencode run`. Budget used: 0/3.
+
+**Capability checkpoint:** Senior inspection verified launcher UID/GID 1000:1000
+(non-root), Linux 6.8.0-138-generic x86_64 and bwrap 0.6.1. Effective Read permissions
+denied `/proc/self/cgroup`, `/proc/self/status` and `/proc/self/mountinfo`; no alternate
+tool was used to retrieve denied contents. Aggregate control delegation remains
+unknown, not disproved. No worker, relay, live model or substantive attempt occurred.
+Next: narrowly scoped read-only access to these process facts, relevant
+`/sys/fs/cgroup` hierarchy and runtime executable/dependency metadata, or sanitized
+operator-supplied results. Establish enforceable memory/PID/CPU and bounded scratch
+before execution. Missing delegation then requires operator provisioning, not host
+fallback or Docker access. Runner remains ineligible; 0/3 attempts used.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001

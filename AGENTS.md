@@ -1,5 +1,32 @@
 # Repository agent rules: Impostr
 
+## Current interactive chat-safety repair (2026-10-01)
+
+The owner asked why the runner stopped, then selected **Fix chat safety first**.
+Latest runner sessions delivered IMP-014 and IMP-010; at `d74ee13` the root parser
+finds zero eligible items. The runner is stopped, not crashed. Interactive tech-lead
+now owns the bounded IMP-002 repair; do not run a concurrent batch or automatically
+restart it. Senior-developer implements; independent review covers the substantial
+isolation/relay boundary. The new budget is three focused substantive attempts,
+preserving earlier history; capability inspection does not consume an attempt.
+
+Authorized scope is an operator-only, non-serving synthetic prototype of the
+fail-closed bwrap worker and trusted model-only relay, using existing model access.
+No product gateway/UI, host fallback, tooling installation, credential disclosure
+to agents/workers, external service exposure, network provisioning, task push or PR.
+Preserve existing logs/browser artifacts. Selective verified local task/bookkeeping
+commits follow the existing work-branch limits. IMP-002 stays blocked until its
+actual acceptance is proved; prototype success alone does not unblock chat tasks.
+
+First inspect actual runtime identity/dependencies and available aggregate resource
+controls without private host auth/config or live application access. Stop on missing
+essential capability. Before live model use, independently review the implemented
+boundary and pass synthetic containment/relay checks. Only the reviewed operator-run
+relay may resolve existing credentials privately; agents must not inspect, copy or
+receive them. Record proved commands and missing operator capabilities, not invented
+provider settings. Current BACKLOG.md records the detailed checkpoint; this section
+supersedes historical runner-only handoffs for this assignment only.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement
