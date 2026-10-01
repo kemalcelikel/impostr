@@ -230,6 +230,33 @@ configuration inspected, resolver/live run or supported auth/config expansion.
 Next human reruns `operator-inspect` unchanged; original triggering name and actual
 account remain unknown. Keep blocked/eligible zero; **2/3** guard attempts remain.
 
+**Diagnostic reassessment authorized:** A second SSH-terminal inspection still reports
+`environment_override`/no network; which setting triggered it remains unknown. Owner
+approved one reviewed human-run offline category diagnostic, not further speculative
+allowlist changes. New diagnostic-only budget 0/3; preserve prior 3/3 + 3/3 and guard
+1/3 history. Identify rejected environment/input-source categories, literal versus
+expanded settings, authentication mechanism and potential endpoint/model precedence
+ambiguity, only where bounded safe reads establish them. Unsupported/unknown sources
+remain explicitly unknown; do not claim full OpenCode effective config resolution.
+Agents use synthetic inputs and never run the private diagnostic. Human output is a
+fixed sanitized schema with no values/arbitrary names/paths/URLs/secrets. No config
+loader/plugins/reference expansion/arbitrary file traversal/network, supported auth
+expansion, setup changes, push/PR or runner launch. After the operator result, approve
+a measured compatibility addition or explicit operator-owned relay contract separately.
+IMP-002 remains blocked; diagnostic success does not prove live model/session acceptance.
+
+**Diagnostic preparation outcome (local commit `f604ad7`):** New `scripts/imp002_diagnostic.py` and
+`scripts/test_imp002_diagnostic.py` provide fixed environment/source/auth categories,
+bounded literal parsing, nofollow directory/file reads and strict output projection.
+Path-overridden trees and references stay uninspected; no loader/plugin/network or
+effective precedence claim. Independent boundary review APPROVED; coordinator 40
+focused tests passed with fake inputs, including nondisclosure and no traversal.
+Diagnostic attempt **1/3** used, retaining earlier histories. Human now runs
+`/usr/bin/python3 -I -B scripts/imp002_diagnostic.py` from repository root and shares
+only sanitized JSON. Agents have not run the diagnostic or inspected private inputs.
+Wait for that result before selecting supported configuration/auth changes; no live
+model or runner restart. IMP-002 remains blocked/eligible zero.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001

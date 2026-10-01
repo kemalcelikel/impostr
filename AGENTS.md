@@ -101,6 +101,28 @@ resolver/live run or configuration/auth support expanded. Human reruns the same
 `operator-inspect` command and shares sanitized JSON; actual triggering variable
 and live compatibility remain unknown. Runner stays stopped; 2/3 attempts retained.
 
+**Owner-approved diagnostic reassessment:** After another `environment_override`
+result, owner approved one narrowly scoped offline operator diagnostic to identify
+configuration-source/authentication categories instead of repeating blind inspection.
+New diagnostic-only budget: three focused attempts; preserve both previous 3/3
+histories and the guard's 1/3 outcome. Agents implement/review using synthetic inputs
+only; never inspect private environment/config/auth or execute the operator diagnostic.
+Only reviewed human-run code may inspect bounded existing inputs privately, reporting
+fixed categories, never values, arbitrary names, paths, endpoints, credentials or
+exception details. Do not execute the OpenCode config loader/plugins, expand file
+references, traverse arbitrary referenced paths or contact a model/network service.
+This approves diagnostic preparation, not new configuration/auth support, a separate
+credential contract, config edits, live runs, installations or runner restart. Stop
+for the sanitized operator result before selecting a compatibility repair.
+
+**Diagnostic ready:** `scripts/imp002_diagnostic.py` and its synthetic tests passed
+independent boundary review and 40 coordinator focused tests. Diagnostic budget 1/3
+used; previous histories retained. Human-only command from repository root:
+`/usr/bin/python3 -I -B scripts/imp002_diagnostic.py`. It prints fixed source/auth/env
+categories and explicitly leaves effective configuration unestablished. No agent has
+run it or inspected private inputs. Share sanitized JSON only, then stop for a measured
+compatibility decision; no live/runner authorization follows from diagnostic success.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement
