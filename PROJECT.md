@@ -2,6 +2,33 @@
 
 ## Purpose and release boundary
 
+**Latest owner scope — same-PC use and PDFs only:** Private HTTPS/phone/LAN access
+is removed from this version, not a readiness gate. Revisit only on a future owner
+request; keep loopback binding, no raw LAN shortcut. Attachments are ONLY text-readable
+PDFs, maximum **50,000,000 bytes per original** (decimal 50 MB assumption); no OCR,
+image/DOCX/standalone text uploads or remote URL intake. Real-provider testing remains
+owner-deferred; synthetic validation is not a live acceptance claim.
+
+PDF originals and bounded page-separated derivatives are private durable PostgreSQL
+data with project/conversation ownership, opaque IDs and explicit deletion. Parse in a
+separate networkless, credential-free extractor, never the API or model worker. Owner
+authorizes pinned parser dependency fetching/install ONLY in that dedicated image,
+not host/global tooling. Attachment process guards are engineering containment, not
+revival of cancelled personal-chat quotas. Initial guard defaults: one conversion,
+512 MiB memory/no swap, one CPU, 16 PIDs, 128 MiB scratch, 30s job, 500 pages and
+128 KiB UTF-8 derivative; measure/refine only to satisfy safe bounded operation, record
+changes. A valid 50 MB file may exceed extraction/context bounds: explain rejection,
+never silently truncate/summarize or drop earlier history.
+
+Reject malformed/encrypted/active-content PDFs and zero usable text. Mixed documents
+are text-layer-only; identify pages without readable text and explain that images/
+diagrams were not read. Serve originals as authorized attachments, not inline active
+content. Selected PDF text enters inference as untrusted reference data, not instructions
+or workspace files. Record exact derivative/provenance and actual submission status;
+stored/queued is not proof of model inclusion. Deletion prevents future sends and
+removes retained original/derivative/payload copies; already sent content and model
+quotes cannot be retracted. Local backup/restore includes these DB records consistently.
+
 **Owner-deferred real-model testing:** Provider compatibility is a planning assumption,
 not observed acceptance. The owner will test the application later; retain the live
 operator acceptance command but do not require it immediately. Synthetic preparation
@@ -61,9 +88,8 @@ transactions. Concurrent human saves retain conflict proposals instead of overwr
 agent edits cannot approve documents or activate draft tasks. Live activation is separate
 from synthetic preparation and does not deliver private HTTPS/media or the first release.
 
-Impostr's first usable release is a **one-owner, private-access planning app**
-hosted on this PC. The owner may use it from another device on the LAN through
-a tested private HTTPS route; the app's trusted backend remains unexposed. A
+Impostr's first usable release is a **one-owner, same-PC planning app**
+hosted on this PC through loopback; phone/LAN access is outside this version. A
 future multi-user server release needs separate qualification and is **not**
 delivered by the personal release. The app serves people who use the
 `overnight-agent` toolkit but do not want to copy starter files, edit Markdown
@@ -78,13 +104,11 @@ private projects; project metadata and immutable Markdown revisions in
 PostgreSQL in Docker; resumable project-scoped chat with multiple session tabs;
 version-bound two-file approval, backlog editing and approval, three-file review,
 and individual approved downloads. Project conversation attachments include
-PNG/JPEG images, selectable-text PDFs, text-only DOCX extraction, and UTF-8
-text/Markdown. The model must actually receive an attached image before the UI
-claims it saw it; scanned/visual PDF pages and embedded DOCX images are not
-supported in this first version. Attachments persist privately with the project/
+only text-readable PDFs up to decimal 50 MB, with no OCR or image interpretation.
+Scanned/image-only PDFs are unsupported. Attachments persist privately with the project/
 conversation until explicit deletion; deleting later cannot retract bytes already
-sent to a model. The phone/other-device route and full planning workflow must
-pass the personal-release gates before calling this version complete. The UI is
+sent to a model. The local planning/PDF workflow and recovery checks must
+pass before local use; real-provider testing is explicitly owner-deferred. The UI is
 a dark, modern terminal-inspired *application*, not a terminal emulator.
 
 During implementation, the human-only document review/approval and backlog

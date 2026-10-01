@@ -28,6 +28,14 @@ new push or merge is authorized by this document edit.
 
 ## Current position
 
+**Latest owner scope:** Prepare one batch for local PDF use, not more chat prototypes.
+IMP-005 delivered at978eedd/2bfb5e4; don't rebuild it. Private HTTPS is cancelled for
+this version, broader attachment formats removed; archive docs/local-scope-history.md.
+Owner approved decimal50MB text-readable PDF intake/model inclusion and pinned parser
+installation/fetches in dedicated extractor image ONLY. IMP-017→018→011 are approved
+executable local outcomes; live-provider testing remains deferred. No push/PR or
+multi-user/remote work in this batch. Older conflicting broad scope below is history.
+
 **Latest complete-chat preparation:** IMP-023 succeeded, but the runner stopped
 normally because remaining ready tasks depend on blocked IMP-002. Owner now approved
 the complete independent IMP-024 job, including a separate operator-owned relay
@@ -1135,11 +1143,27 @@ Both browser runs stopped exit 0 with sanitized owned account/login/resource/ima
 private-state cleanup verified. Stage navigation resets file selection/scroll (documented
 optional polish); switching files retains position. No push/PR, chat or release claim.
 
-## [-] IMP-011 — One-owner private-access release and recovery acceptance
+## [ ] IMP-011 — Verify same-PC PDF workflow and data restore
 
-**Depends on:** IMP-003, IMP-005, IMP-008, IMP-021, IMP-010, IMP-016, IMP-018
-**Scope:** Full planning/chat/media/approval/download flow on this PC for one owner
-through verified private HTTPS; not multi-user server qualification.
+**Depends on:** IMP-003, IMP-005, IMP-008, IMP-021, IMP-010, IMP-018
+**Scope:** Concrete same-PC PDF workflow and restorable data; no private HTTPS,
+phone/device, image/DOCX, shared-server qualification or live-provider gate.
+
+Owner authorized five focused verification/repair attempts, initially0/5. Reuse valid
+delivered chat/review evidence; inspect full assigned final branch without exhaustive
+suite repetition. Verify loopback ordinary-stack synthetic PDF upload→text preview→
+selected turn→question/proposal/conflict→human approval→three exact downloads. Perform
+owned synthetic DB backup/restore including original/derived PDF hashes, conversations,
+document revisions/approvals; actual restored app reads and private access must work.
+Backup artifacts stay private disposable fixture data, never Git. Review new restore
+helper/credential/data handling before executing; no live DB/dumps or owner's PDFs.
+Document verified same-PC startup/shutdown, local-account bootstrap/recovery, PDF
+errors/deletion, backup/restore, existing chat epoch/context limits and the later
+human live test. Missing optional audits are reported, not claimed passing or made
+new scope. Concrete failed workflow/security/data checks block local-use outcome.
+Local commits only then stop; no auto-start, operator/live execution, push/PR or deploy.
+
+### Preserved earlier wider release acceptance (superseded scope)
 
 ### Acceptance
 
@@ -1157,7 +1181,10 @@ escape drills, and actual remote-device HTTPS smoke. Never expose DB/Docker/work
 Owner approved draft scope only; route/certificate/proxy commands and restore procedure
 are unverified. Fix owning slices rather than replacing their acceptance here.
 
-## [ ] IMP-012 — Verify work branch and open single development PR
+## [-] IMP-012 — Verify work branch and open single development PR
+
+Publication deferred for this local-use batch; owner asked for usable application,
+not a push/PR. Preserve earlier finalization specification below for later approval.
 
 Type: release-finalization
 **Depends on:** IMP-011
@@ -1313,7 +1340,11 @@ owned PostgreSQL migration `0006` and 3 concurrency checks passed with cleanup. 
 186-test run timed out and is not passing command evidence. IMP-014 still needs new exact
 candidate proof/authenticated rendering. No push/PR, deployment or runner restart.
 
-## [!] IMP-016 — Prove private HTTPS LAN access
+## [-] IMP-016 — Prove private HTTPS LAN access
+
+**Cancelled for this version:** Owner removed private HTTPS until a future request.
+No provisioning/device approval is needed for same-PC use; keep loopback, no LAN
+HTTP substitute. Preserve earlier blocked scope/history below; not an active queue gate.
 
 **Depends on:** IMP-001, IMP-003
 **Scope:** One-owner phone/other-PC access through operator-managed private HTTPS;
@@ -1336,11 +1367,55 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [!] IMP-017 — Ingest and privately store project attachments
+## [ ] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
 
-**Depends on:** IMP-004
-**Scope:** Private project PNG/JPEG, UTF-8 text/Markdown, selectable-text PDF and
-text-only DOCX intake/storage/processing; model inclusion belongs to IMP-018.
+**Depends on:** IMP-004, IMP-005
+**Scope:** PDF only, max50,000,000 original bytes; private project/conversation upload,
+status/list, escaped derived-text preview, attachment download and deletion. No OCR,
+image/DOCX/text-file upload, remote fetch or inline PDF rendering. IMP-018 adds sends.
+
+Owner approved implementation and confined-image parser installation; earlier numeric/
+design blocker is superseded by concrete current scope. Five ordered PDF phases span
+IMP-017/018: (1) pinned extractor/channel boundary, (2) DB/intake, (3) extraction/lifecycle,
+(4) model/composer integration, (5) integrated PDF proof. Each phase has five substantive
+attempts, initially0/5 (25total); no borrowing/renewal, preserve earlier zero-attempt
+blocker and all chat budgets. Capability/format/check reruns aren't substantive attempts.
+
+Use raw application/pdf body and stream-count bytes independently of Content-Length;
+scope larger Nginx body limit only to upload route. Opaque IDs, filename onlymetadata,
+server ownership/revocation checks on all operations. Store original bytea/derivative
+text and bounded metadata/provenance in PostgreSQL with Alembic after0007; no new
+durablevolume or disposable/workspace cache as authority. Keep blobs out of routine
+metadata lists. Commit upload before conversion, no long DB transaction during parsing;
+bounded job lease/retry handles process/API restart. Invalid/rejected blobs removed,
+failed state retained; deletion removes original/derivatives, with orphan cleanup.
+
+Dedicated converter image: pinned pdftotext+structural parser (qpdf preferred; alternative
+must prove same bounded parsed-object safety), version/source/hash packaging recorded.
+Only converter image may fetch/install its dependencies during build. Runtime has no
+network/credentials/repo/DB/provider/broker sockets/durable mounts; exact private Unix
+channel and bounded jobs/results, non-root/read-only/droppedcaps/no-new-privileges.
+One fresh child per conversion, deadline kill/reap and scratchcleanup. Initial engineering
+guards512MiB/no swap,1CPU,16PIDs,128MiBtmpfs,30swholejob,500pages,128KiBUTF8 derivative;
+prove enforcement and measure representative fixtures, record warranted refinements
+without silently disabling bounds. Review before new boundary execution.
+
+Require bounded structural parsing: reject malformed/encrypted PDFs, active actions/
+JavaScript/embedded files/XFA/rich media, not regex scanning raw bytes. Text extracted
+in page order with page boundaries; reject zero usable letters/numbers as scanned/
+image-only unsupported. MixedPDF text layer may be offered with missing-text page
+coverage and explicit images/diagrams notread label; no OCR/fidelity claim. Reject
+over-output/page bounds, no silent clipping or summarization. Attachment download
+Content-Disposition:attachment/nosniff; preview escaped text only.
+
+Focused verification: valid representative near50MB textPDF, overcap actual-body
+rejection, spoof/malformed/encrypted/active/zero-text/mixed fixtures, timeout/expansion
+failure cleanup, network/secret/sibling denial, unauthorized/revoked/cross-project
+access, migration preservation, restart/retry/delete and rawdownload hash match.
+Use owned synthetic inputs only. Candidate UI work belongs018; actual parser mocks
+cannot satisfy runtime boundary proof. Local committed017 before018.
+
+### Preserved earlier broader attachment acceptance (superseded)
 
 ### Acceptance and verification
 
@@ -1367,6 +1442,37 @@ existing code/logs. Local outcome bookkeeping only, no push/PR or runner restart
 ## [ ] IMP-018 — Attach verified media to planning chat
 
 **Depends on:** IMP-005, IMP-017
+**Current owner scope: PDF text only.** Reuse ordinary chat and integrate selected
+same-project/conversation ready PDF derivatives, no nativePDF/image provider support
+or historical IMP002 gate. PDFphase4/5 budgets above apply, not a new reset.
+
+Extend durable turn request/idempotency with selection and exact derivative hash/page
+coverage. Quote extracted text as untrusted references, not agentpolicy/workspacefiles.
+128KiBaggregate derivative per turn in rawUTF8 AND JSONescaped form; existing384KiB
+assembled context/512KiBframe remains. Validate total before dispatch, explain no-fit
+without dropping history/truncation. Preserve exact text reference for reconstructed
+conversation while attachment exists. Server revalidates readiness/ownership/deletion
+at capture/dispatch; UUID alone noauth. Record actual inference-submission receipt and
+distinguish stored/selected/queued/sent/failed-before-send/uncertain; no comprehension
+claim. Tests assert exact PDF text at synthetic inference boundary, not workerACK only.
+
+Deletion serialized against capture/send; active-use deletion returns visible conflict
+until stop, no future inclusion after deletion. Remove stored derivative/payload/history
+attachment copies, including retained host-broker Turn.payload copies; preserve bounded idempotency/
+replay tombstones without keeping deleted attachment text. Cover completed and queued
+broker payloads as well as DB rows. Previous provider input and assistant quotations
+cannot be retracted,
+and old backups may retain files until backup deletion. Explain this in UI/docs.
+
+Composer: upload/progress/processing/ready/failure, text preview/coverage, selection/
+remove/delete, bounds/errors and perturn sent status; preserve active text/selections
+across tabs/reconnect without duplicate turns. Narrow/desktop accessible review uses
+fresh reviewed exactinput fixture pinned actualcommittedbase and ordinarysynthetic
+connection, generatedMemberlogin, cross-user denial and ownedcleanup. Substantive
+extractor/channel/data/receipt changes need review before new runtime scenarios.
+Reuse priorUIevidence, don't reimplement editors. Real-provider testing remains deferred.
+
+### Preserved earlier broader media acceptance (superseded)
 **Scope:** Accessible composer and authorized session/model handoff of selected,
 validated media under IMP-002's measured input contract.
 
@@ -1381,7 +1487,9 @@ embedded-image failures, delete/revoke/reconnect/authorization, and rendered acc
 desktop/phone review. No media in Markdown downloads. Draft scope/synthetic tests
 approved, but no actual image/attachment model transport is verified yet.
 
-## [ ] IMP-019 — Qualify a later multi-user shared-server release
+## [-] IMP-019 — Qualify a later multi-user shared-server release
+
+Deferred later scope, not part of owner's same-PC PDF/local-use batch.
 
 Type: release-hardening
 **Depends on:** IMP-011

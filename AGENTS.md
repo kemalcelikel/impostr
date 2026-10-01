@@ -1,5 +1,35 @@
 # Repository agent rules: Impostr
 
+## Latest owner-started PDF/local-use runner batch
+
+Owner removed private HTTPS from this version and approved PDF-only attachments:
+text-readable, no OCR/scanned support, max50,000,000 original bytes (decimal50MB).
+Run IMP-017, then IMP-018, then IMP-011 on existing feature/impostr-v1; reuse delivered
+chat/editors. IMP-016 cancelled, IMP-012/019 deferred; no publication or remote setup.
+History: docs/local-scope-history.md. Live-provider testing stays owner-deferred.
+
+Owner explicitly authorized fetching/installing pinned PDF parser dependencies ONLY
+inside a dedicated extractor image. No host/global installation, unrelated tools,
+private host configuration reads, operator/live modes, network provisioning or fallback.
+Converter runtime must be networkless, credential-free, non-root and resource-bounded;
+personal-chat quota cancellation does not waive attachment containment. Coordinator
+owns disposable Docker/DB/browser checks; Docker never goes to product workers.
+
+Read current outcomes in BACKLOG.md. Five ordered PDF phases have five substantive
+attempts each (25 total planning budget), counts preserved across sessions with no
+automatic renewal/borrowing. IMP-011 has five focused local verification/repair attempts.
+Independent review before new parser/channel/model data boundary execution; review
+affected repairs only. Use representative PDF fixtures and exact committed-base/browser
+profile, normal generated Member login, existing exact synthetic775 handoff exception
+and owned cleanup. No owner's files/accounts or arbitrary dirty preview.
+
+At launch overnight takes sole coordination and delegates implementation. Continue
+dependency-eligible work through the three approved outcomes; don't stop after one
+successful phase. Missing essential capability/exhaustion stops with exact checkpoint,
+not silent acceptance. Finish with local-use instructions, known limits and a preserved
+later live test; no automatic app/runner start, pushes/PRs/deployment. Root helper from
+checkout root with RUNNER_USE_SBX=0. Do not promise one run guarantees completion.
+
 ## Current IMP-024 handoff — prepared; awaiting human outcome
 
 **Latest owner decision — live test deferred:** Owner accepts provider compatibility
