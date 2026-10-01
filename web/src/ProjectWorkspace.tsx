@@ -10,6 +10,7 @@ import {
 } from "react";
 import { ApiError, apiRequest } from "./api";
 import BacklogPlanning, { type BacklogTaskDocument } from "./BacklogPlanning";
+import FinalReview, { type ReviewDocumentKind } from "./FinalReview";
 
 export type ProjectSummary = {
   id: string;
@@ -535,6 +536,7 @@ export default function ProjectWorkspace({
   onSessionExpired,
   onPendingChange = () => {},
   onProjectPageChange = () => {},
+  onWideReviewChange = () => {},
   projectOffset = 0,
 }: {
   projects: ProjectSummary[];
@@ -545,6 +547,7 @@ export default function ProjectWorkspace({
   onSessionExpired: () => void;
   onPendingChange?: (pending: boolean) => void;
   onProjectPageChange?: (offset: number) => void;
+  onWideReviewChange?: (wide: boolean) => void;
   projectOffset?: number;
 }) {
   const instanceId = `project-workspace-${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
@@ -558,6 +561,11 @@ export default function ProjectWorkspace({
     null,
   );
   const [selectedKind, setSelectedKind] = useState<DocumentKind>("project");
+  const [workspaceStage, setWorkspaceStage] = useState<"planning" | "final-review">("planning");
+  const [returnToFinalReview, setReturnToFinalReview] = useState(false);
+  const [focusFinalReviewHeading, setFocusFinalReviewHeading] = useState(false);
+  const [reviewNavigationNotice, setReviewNavigationNotice] = useState("");
+  const reviewFocusTarget = useRef<"pair" | ReviewDocumentKind | null>(null);
   const [backlogPanel, setBacklogPanel] = useState<"tasks" | "detail" | "markdown">("tasks");
   const selectionRef = useRef<{ projectId: string | null; kind: DocumentKind }>({
     projectId: null,
@@ -619,6 +627,7 @@ export default function ProjectWorkspace({
   const approvalStatusRequestNumber = useRef(0);
   const approvalStatusController = useRef<AbortController | null>(null);
   const approvalButtonRef = useRef<HTMLButtonElement>(null);
+  const pairApprovalHeadingRef = useRef<HTMLHeadingElement>(null);
   const restoreApprovalButtonFocus = useRef(false);
   const createRequestNumber = useRef(0);
   const createController = useRef<AbortController | null>(null);
@@ -697,6 +706,59 @@ export default function ProjectWorkspace({
       approvalButtonRef.current?.focus();
     }
   }, [approvalBusy]);
+
+  useLayoutEffect(() => {
+    const target = reviewFocusTarget.current;
+    if (!target || workspaceStage !== "planning") return;
+    reviewFocusTarget.current = null;
+    const element =
+      target === "pair"
+        ? pairApprovalHeadingRef.current
+        : document.getElementById(`${instanceId}-document-tab-${target}`);
+    if (element instanceof HTMLElement) {
+      element.scrollIntoView({ block: "nearest" });
+      element.focus({ preventScroll: true });
+    }
+  }, [instanceId, selectedKind, workspaceStage]);
+
+  function enterFinalReview(focusHeading = false): void {
+    setWorkspaceStage("final-review");
+    setReturnToFinalReview(false);
+    setFocusFinalReviewHeading(focusHeading);
+    setReviewNavigationNotice("");
+    onWideReviewChange(true);
+  }
+
+  function returnToPlanning(): void {
+    const returningFromReview = workspaceStage === "final-review";
+    setWorkspaceStage("planning");
+    if (returningFromReview) setReturnToFinalReview(true);
+    setFocusFinalReviewHeading(false);
+    onWideReviewChange(false);
+  }
+
+  function reviewDocument(kind: ReviewDocumentKind): void {
+    setReviewNavigationNotice("");
+    if (editorIsDirty || taskEditsPending || saveBusy) {
+      setReviewNavigationNotice(
+        "Resolve the current local edit before switching files. Your unsaved work has been kept.",
+      );
+      returnToPlanning();
+      reviewFocusTarget.current = selectionRef.current.kind;
+      return;
+    }
+    void refreshCurrentDraftPair();
+    returnToPlanning();
+    selectDocument(kind);
+    reviewFocusTarget.current = kind;
+  }
+
+  function reviewPair(): void {
+    setReviewNavigationNotice("");
+    void refreshCurrentDraftPair();
+    returnToPlanning();
+    reviewFocusTarget.current = "pair";
+  }
 
   useEffect(() => {
     onPendingChange(editorIsDirty || saveBusy || taskEditsPending);
@@ -1173,6 +1235,9 @@ export default function ProjectWorkspace({
         return;
       }
       setSelectedKind("project");
+      setWorkspaceStage("planning");
+      setReturnToFinalReview(false);
+      onWideReviewChange(false);
       setSelectedProjectId(created.id);
       setSelectedProjectSnapshot(created);
       selectionRef.current = { projectId: created.id, kind: "project" };
@@ -1213,6 +1278,9 @@ export default function ProjectWorkspace({
     setSelectedProjectId(project.id);
     setSelectedProjectSnapshot(project);
     setSelectedKind("project");
+    setWorkspaceStage("planning");
+    setReturnToFinalReview(false);
+    onWideReviewChange(false);
     selectionRef.current = { projectId: project.id, kind: "project" };
     historyRevisionRef.current = null;
     setHistory(null);
@@ -1243,6 +1311,9 @@ export default function ProjectWorkspace({
     invalidateHistory();
     setSelectedProjectId(null);
     setSelectedProjectSnapshot(null);
+    setWorkspaceStage("planning");
+    setReturnToFinalReview(false);
+    onWideReviewChange(false);
     setLocallyCreatedProjects([]);
     selectionRef.current = { projectId: null, kind: "project" };
     setSelectedKind("project");
@@ -1967,7 +2038,7 @@ export default function ProjectWorkspace({
   return (
     <section
       aria-labelledby={`${instanceId}-projects-title`}
-      className="grid gap-5 lg:grid-cols-[minmax(15rem,0.7fr)_minmax(0,1.5fr)]"
+      className={`grid gap-5 ${workspaceStage === "planning" ? "lg:grid-cols-[minmax(15rem,0.7fr)_minmax(0,1.5fr)]" : ""}`}
     >
       <div className="rounded-2xl border border-line bg-surface/95 p-5 sm:p-6">
         <div className="border-b border-line pb-5">
@@ -2140,6 +2211,9 @@ export default function ProjectWorkspace({
               onClick={() => {
                 setSelectedProjectId(null);
                 setSelectedProjectSnapshot(null);
+                setWorkspaceStage("planning");
+                setReturnToFinalReview(false);
+                onWideReviewChange(false);
                 selectionRef.current = { projectId: null, kind: "project" };
                 documentRequestNumber.current += 1;
                 documentController.current?.abort();
@@ -2200,7 +2274,9 @@ export default function ProjectWorkspace({
                 <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-copy-muted">
                   {selectedProject.name}
                 </p>
-                <h3 className="mt-2 break-words text-xl font-semibold">Planning drafts</h3>
+                <h3 className="mt-2 break-words text-xl font-semibold">
+                  {workspaceStage === "planning" ? "Planning drafts" : "Three-file final review"}
+                </h3>
                 <p className="mt-2 text-xs leading-5 text-copy-muted">
                   Project created {isoDate(selectedProject.created_at)} · changes create immutable
                   drafts
@@ -2211,9 +2287,71 @@ export default function ProjectWorkspace({
               </span>
             </div>
 
+            <nav aria-label="Project stages" className="mt-5 flex flex-wrap gap-2">
+              <button
+                aria-pressed={workspaceStage === "planning"}
+                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${workspaceStage === "planning" ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
+                onClick={returnToPlanning}
+                type="button"
+              >
+                Planning and editing
+              </button>
+              <button
+                aria-pressed={workspaceStage === "final-review"}
+                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${workspaceStage === "final-review" ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
+                onClick={() => enterFinalReview()}
+                type="button"
+              >
+                Final review and downloads
+              </button>
+            </nav>
+
+            {workspaceStage === "planning" && returnToFinalReview ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-canvas px-4 py-3">
+                <p className="text-sm text-copy-muted">
+                  Return to the three-file snapshot review when your edits are saved.
+                </p>
+                <button
+                  className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  onClick={() => enterFinalReview(true)}
+                  type="button"
+                >
+                  Return to final review
+                </button>
+              </div>
+            ) : null}
+            {reviewNavigationNotice ? (
+              <p aria-live="polite" className="mt-3 text-sm text-amber-100" role="status">
+                {reviewNavigationNotice}
+              </p>
+            ) : null}
+
+            {workspaceStage === "final-review" ? (
+              <div className="mt-5 min-w-0">
+                <FinalReview
+                  csrfToken={csrfToken}
+                  documents={documents}
+                  documentsLoading={documentsLoading || pairRefreshBusy}
+                  focusHeadingOnMount={focusFinalReviewHeading}
+                  localChangesPending={
+                    editorIsDirty ||
+                    saveBusy ||
+                    taskEditsPending ||
+                    approvalBusy ||
+                    staleEditorRevision !== null
+                  }
+                  onReviewDocument={reviewDocument}
+                  onReviewPair={reviewPair}
+                  onRefreshDocuments={() => void refreshCurrentDraftPair()}
+                  onSessionExpired={onSessionExpired}
+                  projectId={selectedProject.id}
+                />
+              </div>
+            ) : null}
             <section
               aria-labelledby={`${instanceId}-pair-approval-title`}
               className="mt-5 grid min-w-0 gap-4 rounded-xl border border-line bg-canvas p-4 sm:p-5"
+              hidden={workspaceStage !== "planning"}
             >
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -2223,6 +2361,8 @@ export default function ProjectWorkspace({
                   <h4
                     className="mt-1 text-lg font-semibold"
                     id={`${instanceId}-pair-approval-title`}
+                    ref={pairApprovalHeadingRef}
+                    tabIndex={-1}
                   >
                     Approve the saved document pair
                   </h4>
@@ -2602,6 +2742,7 @@ export default function ProjectWorkspace({
               aria-label="Draft document switcher"
               className="mt-5 flex flex-wrap gap-2"
               role="tablist"
+              hidden={workspaceStage !== "planning"}
             >
               {documentOptions.map((option) => (
                 <button
@@ -2633,6 +2774,7 @@ export default function ProjectWorkspace({
               className="mt-4 grid min-w-0 gap-4"
               id={`${instanceId}-document-panel`}
               role="tabpanel"
+              hidden={workspaceStage !== "planning"}
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>

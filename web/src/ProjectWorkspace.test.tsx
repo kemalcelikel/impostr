@@ -130,6 +130,7 @@ function renderWorkspace(
     projects?: ProjectSummary[];
     onProjectCreated?: (project: ProjectSummary) => void;
     onProjectPageChange?: (offset: number) => void;
+    onWideReviewChange?: (wide: boolean) => void;
     projectOffset?: number;
   } = {},
 ) {
@@ -167,6 +168,7 @@ function renderWorkspace(
       onProjectCreated={props.onProjectCreated ?? vi.fn()}
       onSessionExpired={vi.fn()}
       onProjectPageChange={props.onProjectPageChange}
+      onWideReviewChange={props.onWideReviewChange}
       projectOffset={props.projectOffset}
       projects={props.projects ?? [project]}
     />,
@@ -200,6 +202,64 @@ afterEach(() => {
 });
 
 describe("private project drafts", () => {
+  it("opens the full-width final review and returns to planning", async () => {
+    const wideReviewChange = vi.fn();
+    const finalStatus = {
+      current_project_revision: {
+        id: "project-revision-1",
+        revision_number: initialDocuments.project.revision_number,
+        content_sha256: initialDocuments.project.content_sha256,
+      },
+      current_agents_revision: {
+        id: "agents-revision-1",
+        revision_number: initialDocuments.agents.revision_number,
+        content_sha256: initialDocuments.agents.content_sha256,
+      },
+      current_backlog_revision: {
+        id: "backlog-revision-1",
+        revision_number: initialDocuments.backlog.revision_number,
+        content_sha256: initialDocuments.backlog.content_sha256,
+      },
+      current_pair_approval_id: null,
+      pair_approved: false,
+      approved: false,
+      current_manifest: null,
+      latest_manifest: null,
+      validation_errors: {},
+    };
+    const taskSummary = {
+      revision_number: initialDocuments.backlog.revision_number,
+      content_sha256: initialDocuments.backlog.content_sha256,
+      summary: { draft_count: 0, ready_count: 0, eligible_count: 0, waiting_count: 0 },
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (path.includes("/document-pair-approval"))
+        return Promise.resolve(jsonResponse(makeApprovalStatus()));
+      if (path.endsWith("/final-approval")) return Promise.resolve(jsonResponse(finalStatus));
+      if (path.endsWith("/backlog/tasks")) return Promise.resolve(jsonResponse(taskSummary));
+      return Promise.reject(new Error(`Unexpected request ${path}`));
+    });
+    renderWorkspace(fetchMock, { onWideReviewChange: wideReviewChange });
+
+    fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    expect(
+      screen.queryByRole("button", { name: "Return to final review" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Final review and downloads" }));
+    await screen.findByRole("heading", { name: "Review and download approved files" });
+    expect(wideReviewChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole("button", { name: "Download PROJECT.md" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    expect(wideReviewChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByRole("textbox", { name: "Edit PROJECT.md" })).toBeInTheDocument();
+  });
+
   it.each([
     { draftCount: 1, message: "1 draft task is not ready." },
     { draftCount: 2, message: "2 draft tasks are not ready." },

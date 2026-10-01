@@ -869,6 +869,45 @@ class MigrationDiagnosticTests(unittest.TestCase):
         )
         diagnose.assert_called_once_with(imp014_candidate=True)
 
+    def test_imp010_candidate_uses_the_current_0006_manifest_schema(self) -> None:
+        diagnostic = json.dumps(
+            self.valid_imp014_candidate_diagnostic(),
+            separators=(",", ":"),
+        )
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/imp010-candidate-source"),
+            env_file=Path("/tmp/imp010-candidate-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            candidate=True,
+            imp010_candidate=True,
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260930_0006 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260930_0006", evidence)
+        self.assertIn("project_approval_manifests=yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(imp014_candidate=True)
+
     def test_committed_imp014_profile_uses_the_0006_migration_diagnostic(self) -> None:
         diagnostic = json.dumps(
             self.valid_imp014_candidate_diagnostic(),
@@ -1206,9 +1245,56 @@ class GitArchiveTests(unittest.TestCase):
         self,
     ) -> None:
         repository_root = Path(fixture.__file__).resolve().parent.parent
+        pinned_checkout = Path(self.temporary.name) / "imp014-pinned-committed-worktree"
+        git_environment = {
+            "PATH": os.environ.get("PATH", os.defpath),
+            "HOME": str(self.private_home),
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+        }
+        cloned = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--shared",
+                "--no-checkout",
+                str(repository_root),
+                str(pinned_checkout),
+            ],
+            cwd=repository_root,
+            env=git_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(cloned.returncode, 0, cloned.stderr)
+        checked_out = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(pinned_checkout),
+                "checkout",
+                "--quiet",
+                "--detach",
+                fixture.IMP014_CANDIDATE_BASE_COMMIT,
+            ],
+            cwd=repository_root,
+            env=git_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(checked_out.returncode, 0, checked_out.stderr)
         snapshot = Path(self.temporary.name) / "actual-imp014-profile-snapshot"
         commit = fixture.archive_head_snapshot(
-            repository_root,
+            pinned_checkout,
             snapshot,
             private_home=self.private_home,
             expected_commit=fixture.IMP014_CANDIDATE_BASE_COMMIT,
@@ -1470,6 +1556,14 @@ class CandidateSnapshotTests(unittest.TestCase):
             base_commit=base_commit,
         )
 
+    def imp010_policy(self, base_commit: str) -> fixture.CandidatePreviewPolicy:
+        return replace(
+            fixture.IMP010_CANDIDATE_PREVIEW_POLICY,
+            base_commit=base_commit,
+            committed_support_paths=(),
+            required_snapshot_paths=(),
+        )
+
     def write_imp014_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
         base = self.initialize_imp014_checkout()
         policy = self.imp014_policy(base)
@@ -1485,6 +1579,22 @@ class CandidateSnapshotTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (self.root / relative).chmod(0o644)
+        return base, policy
+
+    def write_imp010_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
+        base = self.initialize_checkout()
+        policy = self.imp010_policy(base)
+        for relative, status in (
+            *policy.reviewed_inputs,
+            *policy.nonruntime_test_changes,
+            *policy.harness_changes,
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if status == "added":
+                self.assertFalse(path.exists(), f"{relative} must be absent from the pinned base")
+            path.write_text(f"scoped IMP-010 input: {relative}\n", encoding="utf-8")
+            path.chmod(0o644)
         return base, policy
 
     def write_imp007_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
@@ -1588,6 +1698,10 @@ class CandidateSnapshotTests(unittest.TestCase):
         )
         self.assertTrue(policy.fingerprint_test_changes)
         self.assertTrue(policy.fingerprint_harness_changes)
+        self.assertEqual(
+            policy.allowed_test_literal_digests,
+            fixture.IMP013_CANDIDATE_TEST_LITERAL_DIGESTS,
+        )
         self.assertTrue(policy.strict_scope)
         self.assertEqual(policy.committed_support_paths, (".dockerignore",))
         self.assertEqual(policy.committed_support_paths, (".dockerignore",))
@@ -1721,6 +1835,140 @@ class CandidateSnapshotTests(unittest.TestCase):
         self.assertNotIn("PROJECT.md.example", policy.required_snapshot_paths)
         self.assertNotIn("AGENTS.md.example", policy.required_snapshot_paths)
         self.assertNotIn("BACKLOG.md.example", policy.required_snapshot_paths)
+
+    def test_imp010_policy_is_pinned_to_its_own_final_review_overlay(self) -> None:
+        policy = fixture.IMP010_CANDIDATE_PREVIEW_POLICY
+        self.assertEqual(
+            policy.base_commit,
+            "daf078c95119e549e57be62109aacbc0823b1915",
+        )
+        self.assertEqual(
+            set(policy.reviewed_inputs),
+            {
+                ("web/src/App.tsx", "modified"),
+                ("web/src/ProjectWorkspace.tsx", "modified"),
+                ("web/src/FinalReview.tsx", "added"),
+            },
+        )
+        self.assertEqual(
+            set(policy.nonruntime_test_changes),
+            {
+                ("web/src/ProjectWorkspace.test.tsx", "modified"),
+                ("web/src/FinalReview.test.tsx", "added"),
+            },
+        )
+        self.assertEqual(
+            set(policy.harness_changes),
+            {
+                ("scripts/local_browser_fixture.py", "modified"),
+                ("scripts/test_local_browser_fixture.py", "modified"),
+            },
+        )
+        self.assertTrue(policy.strict_scope)
+        self.assertTrue(policy.fingerprint_test_changes)
+        self.assertTrue(policy.fingerprint_harness_changes)
+        self.assertEqual(
+            policy.allowed_test_literal_digests,
+            fixture.IMP010_CANDIDATE_TEST_LITERAL_DIGESTS,
+        )
+        self.assertEqual(
+            policy.required_snapshot_paths,
+            fixture.IMP010_CANDIDATE_REQUIRED_SNAPSHOT_PATHS,
+        )
+        self.assertIn("api/app/project_approval_manifests.py", policy.required_snapshot_paths)
+        self.assertIn("api/tests/test_project_approval_manifests.py", policy.required_snapshot_paths)
+        self.assertNotIn("PROJECT.md", policy.status_paths or ())
+
+    def test_imp010_snapshot_pins_exact_inputs_and_rejects_drift_or_extra_files(self) -> None:
+        base, policy = self.write_imp010_candidate()
+        snapshot = Path(self.temporary.name) / "imp010-candidate-snapshot"
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+        self.assertEqual(candidate.base_commit, base)
+        self.assertEqual(
+            {record.path for record in candidate.records},
+            {
+                path
+                for path, _status in (
+                    *policy.reviewed_inputs,
+                    *policy.nonruntime_test_changes,
+                    *policy.harness_changes,
+                )
+            },
+        )
+        self.assertEqual(
+            set(candidate.runtime_paths),
+            {path for path, _status in policy.reviewed_inputs},
+        )
+        self.assertFalse((snapshot / "web/src/FinalReview.test.tsx").exists())
+        self.assertFalse((snapshot / "scripts/local_browser_fixture.py").exists())
+        fixture.validate_candidate_snapshot_tree(snapshot, candidate)
+
+        extra = self.root / "web/src/unreviewed-final-review.tsx"
+        extra.write_text("not in the IMP-010 candidate allowlist\n", encoding="utf-8")
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                Path(self.temporary.name) / "imp010-extra-file",
+                private_home=self.private_home,
+                policy=policy,
+            )
+        extra.unlink()
+
+        (self.root / "web/src/FinalReview.tsx").write_text("changed after preflight\n", encoding="utf-8")
+        with self.assertRaises(fixture.FixtureError):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                Path(self.temporary.name) / "imp010-stale-fingerprint",
+                private_home=self.private_home,
+                expected_fingerprint=candidate.fingerprint,
+                policy=policy,
+            )
+
+    def test_imp010_profile_archives_this_exact_worktree_over_daf078c(self) -> None:
+        repository_root = Path(fixture.__file__).resolve().parent.parent
+        snapshot = Path(self.temporary.name) / "actual-imp010-profile-snapshot"
+        candidate = fixture.archive_candidate_snapshot(
+            repository_root,
+            snapshot,
+            private_home=self.private_home,
+            policy=fixture.IMP010_CANDIDATE_PREVIEW_POLICY,
+        )
+        self.assertEqual(
+            candidate.base_commit,
+            fixture.IMP010_CANDIDATE_BASE_COMMIT,
+        )
+        self.assertEqual(
+            {record.path for record in candidate.records},
+            {
+                path
+                for path, _status in (
+                    *fixture.IMP010_CANDIDATE_REVIEWED_RUNTIME_INPUTS,
+                    *fixture.IMP010_CANDIDATE_NONRUNTIME_TEST_CHANGES,
+                    *fixture.IMP010_CANDIDATE_HARNESS_CHANGES,
+                )
+            },
+        )
+        fixture.validate_candidate_dockerignore(snapshot, imp010=True)
+        for relative in fixture.IMP010_CANDIDATE_REQUIRED_SNAPSHOT_PATHS:
+            with self.subTest(path=relative):
+                self.assertTrue((snapshot / relative).is_file())
+        for path, status in fixture.IMP010_CANDIDATE_NONRUNTIME_TEST_CHANGES:
+            with self.subTest(test_path=path):
+                if status == "added":
+                    self.assertFalse((snapshot / path).exists())
+                else:
+                    self.assertNotEqual(
+                        (snapshot / path).read_bytes(),
+                        (repository_root / path).read_bytes(),
+                    )
+        for path, _status in fixture.IMP010_CANDIDATE_HARNESS_CHANGES:
+            with self.subTest(harness_path=path):
+                self.assertFalse((snapshot / path).exists())
 
     def test_imp014_test_token_exception_is_bound_to_exact_file_name_and_value(self) -> None:
         policy = fixture.IMP014_CANDIDATE_PREVIEW_POLICY
@@ -2766,6 +3014,63 @@ class CandidateSnapshotTests(unittest.TestCase):
                 allowed_literal_digests=allowed_literals,
             )
         self.assertNotIn(token, str(caught.exception))
+
+
+class Imp010PreflightTests(unittest.TestCase):
+    @unittest.skipUnless(
+        sys.version_info >= (3, 12),
+        "The pinned API backlog validator requires Python 3.12.",
+    )
+    def test_synthetic_whole_backlog_edit_passes_api_transition_rules_without_replacing_seed_ids(
+        self,
+    ) -> None:
+        repository_root = Path(fixture.__file__).resolve().parent.parent
+        api_root = repository_root / "api"
+        with patch.object(sys, "path", [str(api_root), *sys.path]):
+            from app.backlog_markdown import (
+                BacklogValidationError,
+                parse_backlog,
+                validate_backlog_write,
+            )
+
+            seed_content = (
+                repository_root / "overnight-agent" / "BACKLOG.md.example"
+            ).read_text(encoding="utf-8")
+            seed = parse_backlog(seed_content)
+            seed_task_view = {
+                "tasks": [
+                    {
+                        "id": task.id,
+                        "status": task.status,
+                        "dependencies": list(task.dependencies),
+                    }
+                    for task in seed.tasks
+                ]
+            }
+            synthetic_content = fixture.FixtureSupervisor._synthetic_imp010_backlog(
+                seed_task_view,
+            )
+            accepted = validate_backlog_write(seed_content, synthetic_content)
+
+            expected_identity = [
+                (task.id, task.status, task.dependencies) for task in seed.tasks
+            ]
+            observed_identity = [
+                (task.id, task.status, task.dependencies) for task in accepted.tasks
+            ]
+            self.assertEqual(observed_identity, expected_identity)
+            self.assertIn("**Scope:**", synthetic_content)
+            self.assertIn("**Acceptance:**", synthetic_content)
+            self.assertIn("**Verification:**", synthetic_content)
+            self.assertNotIn("<", synthetic_content)
+
+            replaced_ids = """# Backlog: Invalid synthetic review
+
+## [-] SYN-001 — Replace the seeded task identities
+**Depends on:** None
+"""
+            with self.assertRaisesRegex(BacklogValidationError, "cannot be deleted or renamed"):
+                validate_backlog_write(seed_content, replaced_ids)
 
 
 class Imp007BacklogPreflightTests(unittest.TestCase):
@@ -4444,6 +4749,11 @@ class SupervisorPidfdVerificationTests(unittest.TestCase):
                 self._supervisor_arguments()
                 + ["--imp014-candidate-fingerprint", "e" * 64],
             ),
+            (
+                "imp010 candidate",
+                self._supervisor_arguments()
+                + ["--imp010-candidate-fingerprint", "f" * 64],
+            ),
         )
         for name, arguments in cases:
             with self.subTest(name=name):
@@ -4468,8 +4778,20 @@ class SupervisorPidfdVerificationTests(unittest.TestCase):
         cases = (
             ("extra argument", base + ["unexpected"]),
             ("missing fingerprint value", base + ["--candidate-fingerprint"]),
+            (
+                "missing IMP-010 fingerprint value",
+                base + ["--imp010-candidate-fingerprint"],
+            ),
             ("forged candidate option", base + ["--other-option", fingerprint]),
+            (
+                "unknown IMP-010-like option",
+                base + ["--imp010-extra-fingerprint", fingerprint],
+            ),
             ("uppercase fingerprint", base + ["--candidate-fingerprint", "A" * 64]),
+            (
+                "uppercase IMP-010 fingerprint",
+                base + ["--imp010-candidate-fingerprint", "F" * 64],
+            ),
             ("short fingerprint", base + ["--candidate-fingerprint", "b" * 63]),
             ("long fingerprint", base + ["--candidate-fingerprint", "b" * 65]),
             (
@@ -4998,6 +5320,63 @@ class CandidateCliTests(unittest.TestCase):
             ["launch", "--imp013-candidate-fingerprint", fingerprint, "--imp014-candidate-fingerprint", fingerprint],
             ["start", "--imp014-candidate-fingerprint", fingerprint],
             ["launch", "--imp014-candidate-fingerprint", "E" * 64],
+        ):
+            with self.subTest(arguments=arguments), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    fixture._parse_args(arguments)
+
+    def test_imp010_uses_its_own_pinned_final_review_profile(self) -> None:
+        fingerprint = "f" * 64
+        self.assertEqual(
+            fixture._parse_args(["imp010-candidate-preflight"]).command,
+            "imp010-candidate-preflight",
+        )
+        launch = fixture._parse_args(
+            ["launch", "--imp010-candidate-fingerprint", fingerprint]
+        )
+        self.assertEqual(launch.imp010_candidate_fingerprint, fingerprint)
+        self.assertEqual(fixture._candidate_selection(launch), (fingerprint, "imp010"))
+        supervisor = fixture.FixtureSupervisor(
+            Path("/fixture-test"),
+            candidate_fingerprint=fingerprint,
+            candidate_variant="imp010",
+        )
+        self.assertIs(supervisor._candidate_policy(), fixture.IMP010_CANDIDATE_PREVIEW_POLICY)
+        with self.assertRaisesRegex(fixture.FixtureError, "explicit opt-in"):
+            fixture.FixtureSupervisor(Path("/fixture-test"), candidate_variant="imp010")
+
+        guardian = fixture._parse_args(
+            [
+                "_guardian",
+                "--handoff-dir",
+                "/tmp/review-handoff",
+                "--lifetime-minutes",
+                "30",
+                "--lock-fd",
+                "9",
+                "--imp010-candidate-fingerprint",
+                fingerprint,
+            ]
+        )
+        self.assertEqual(fixture._candidate_selection(guardian), (fingerprint, "imp010"))
+        supervisor_args = fixture._parse_args(
+            [
+                "_supervise",
+                "--handoff-dir",
+                "/tmp/review-handoff",
+                "--lifetime-minutes",
+                "30",
+                "--imp010-candidate-fingerprint",
+                fingerprint,
+            ]
+        )
+        self.assertEqual(fixture._candidate_selection(supervisor_args), (fingerprint, "imp010"))
+
+        for arguments in (
+            ["launch", "--candidate-fingerprint", fingerprint, "--imp010-candidate-fingerprint", fingerprint],
+            ["launch", "--imp014-candidate-fingerprint", fingerprint, "--imp010-candidate-fingerprint", fingerprint],
+            ["start", "--imp010-candidate-fingerprint", fingerprint],
+            ["launch", "--imp010-candidate-fingerprint", "F" * 64],
         ):
             with self.subTest(arguments=arguments), redirect_stderr(io.StringIO()):
                 with self.assertRaises(SystemExit):

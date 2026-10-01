@@ -43,14 +43,15 @@ collaboration/invitations, public signup, and importing runner outcomes. Downloa
 files are planning artifacts, not evidence that a repository is ready to run. The
 owner continues to prepare application repositories and launch the runner manually.
 
-### Current implementation boundary (human-only approval API on work branch)
+### Current implementation boundary (human-only planning and approval on work branch)
 
 The checkout has a limited application slice; the first-release scope above is
 not yet implemented. The current UI supports operator-provisioned sign-in,
 administrator-managed accounts, own-password changes, project creation with
 private drafts for `PROJECT.md`, `AGENTS.md`, and `BACKLOG.md`, human pair
-approval, and collapsible backlog task editing for title, body, dependencies, and
-`[-]`/`[ ]` readiness. The API validates task edits. Conflicts retain local edits
+approval, collapsible backlog task editing for title, body, dependencies, and
+`[-]`/`[ ]` readiness, and Stage 3 final review of the saved three-file tuple with
+individual exact approved downloads. The API validates task edits. Conflicts retain local edits
 and show the newer saved version for review and explicit reapplication rather than
 silently overwriting either version. This remains human-only: no chat, agent proposals, runner
 outcomes, or setting runner status markers.
@@ -61,9 +62,10 @@ projects, and administrator access is audited. Consult `docs/local-development.m
 for implemented project, revision, workspace-cache, and operator behavior and
 `BACKLOG.md` for committed delivery outcomes. IMP-014 candidate and rendered
 acceptance has been verified locally; consult BACKLOG.md for delivery references.
-Subsequent IMP-020/021 recovery verified persistence and human-only final
-approval/status/exact-download API behavior. This work branch is not a merged
-release; do not infer chat, agent gateway or release readiness from it.
+IMP-020/021 verified manifest persistence and human-only final approval/status/
+exact-download API behavior; IMP-010's Stage 3 UI and candidate review also passed
+locally. This work branch is not a merged release; do not infer chat, agent gateway
+or release readiness from it.
 
 The owner approved splitting blocked IMP-009 into independently verified
 persistence and integrated enforcement slices. IMP-020 adds only inert

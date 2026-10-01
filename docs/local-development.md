@@ -34,7 +34,7 @@ The helper/source map is local evidence, not a reusable unpinned setup command;
 refresh exact inputs before checking changed code. Reviewer uses in-repo material,
 not the denied temporary marker or snapshot content.
 
-## Human-only final approval and downloads (IMP-021)
+## Human-only final approval and downloads (IMP-021/010)
 
 ### Selected template compatibility (IMP-022)
 
@@ -68,10 +68,31 @@ pair/backlog and explicitly approve again; historical invalid manifests fail clo
 
 Authorized downloads return the recorded current tuple's exact UTF-8 bytes with
 canonical PROJECT.md, AGENTS.md and BACKLOG.md filenames. They do not initialize a
-repository, run a task or enable chat. These API checks do not deliver final-review
-UI, private HTTPS/media, agent isolation or release readiness. The ordinary-worktree
-template/build blocker remains. Local synthetic checks used the refreshed
-`check_imp021_12.py` harness in the same owned directory, not real project storage.
+repository, run a task or enable chat. These checks do not deliver chat, private
+HTTPS/media, agent isolation or release readiness. Local synthetic API checks used
+disposable storage, not real project data.
+
+### Using Stage 3 · Final review
+
+Open a project's **Final review and downloads** stage after reviewing the saved drafts. It
+shows the current saved PROJECT.md, AGENTS.md and BACKLOG.md revisions and their
+content digests. Review each file; the two-file pair approval, backlog task
+readiness/dependency eligibility, and final three-file approval are separate:
+readiness is metadata, pair approval covers only PROJECT.md + AGENTS.md, and final
+approval records the exact current three-file tuple. Approve the displayed tuple
+only after reviewing it. Each file has its own download action, enabled only while
+the server confirms that the displayed saved revisions and readiness snapshot
+match the current final approval. Downloads use the canonical filenames and exact
+approved saved bytes.
+
+If any document or task edit is pending locally, save or discard it and refresh
+status before approval or download. Saving a new revision of any document (even
+identical content) invalidates final approval; review the changed saved tuple and
+approve it again. A stale revision or readiness snapshot requires reloading the
+current drafts/status. On narrow screens, use the PROJECT.md, AGENTS.md and
+BACKLOG.md tabs to switch the visible review pane; keyboard arrows, Home and End
+move among tabs. Changing project stages may reset the selected file and scroll
+position.
 
 ## Prerequisites and pinned runtimes
 
@@ -545,6 +566,43 @@ local review, not a security control. Do not intentionally use those capabilitie
 claim a proven denial, or extend the exception to product-agent isolation or
 shared-server readiness.
 
+### Reviewing the dirty IMP-010 final-review candidate
+
+This operator-only profile is pinned to committed base `daf078c` and the scoped
+Stage 3 UI inputs (`web/src/App.tsx`, `web/src/ProjectWorkspace.tsx`, and
+`web/src/FinalReview.tsx`), their scoped tests, and fixture harness changes. It is
+not a general dirty-tree preview. From the repository root, run:
+
+```sh
+python3 scripts/local_browser_fixture.py imp010-candidate-preflight
+```
+
+The fresh disposable-stack preflight checks migration `20260930_0006`, approval,
+save invalidation and reapproval, exact downloads, cross-Member denials, and owned
+cleanup; it does not render the UI or publish credentials. If it passes, use only
+the fingerprint printed by that run, and only while the candidate inputs remain
+unchanged:
+
+```sh
+python3 scripts/local_browser_fixture.py launch \
+  --handoff-dir /tmp/opencode/impostr-review-handoff \
+  --lifetime-minutes 30 \
+  --imp010-candidate-fingerprint <FINGERPRINT_FROM_THIS_PREFLIGHT>
+```
+
+Use the generated short-lived Member login through normal sign-in; keep credentials,
+temporary origin and raw logs private. Coordinator-owned rendered review is separate
+from preflight. Stop the fixture and verify its sanitized cleanup status using the
+ownership and residual-risk precautions above. Any changed candidate input requires
+a fresh preflight and rendered review. Do not broaden the profile, preview arbitrary
+worktree changes, reuse a prior fingerprint, or treat this synthetic review as
+chat, private-HTTPS, isolation or release acceptance.
+
+The verified IMP-010 candidate passed preflight and rendered review, including
+normal Member approval, save invalidation/reapproval and three exact downloads;
+`ui-designer` passed the 1440/1024/768/375 px review. This evidence is only for that
+exact candidate snapshot, not a general preview permission or release claim.
+
 The separately gated live SIGKILL recovery test is run from the repository root
 with Docker available and an appropriate container image already cached. It does
 not pull an image; if none is cached, the test skips. The test starts two isolated
@@ -793,10 +851,12 @@ administrator-managed accounts, project creation, private draft/revision history
 and human-only pair approval for `PROJECT.md` and `AGENTS.md`. The human-only
 collapsible backlog editor supports title/body/dependency and `[-]`/`[ ]` readiness
 edits with local-edit conflict preservation, review of the newer saved version,
-and explicit reapplication. It does not provide chat, agent proposals, runner outcomes, or runner
-status editing. IMP-014's exact candidate preflight and rendered acceptance passed
-locally; consult BACKLOG.md for delivery references. The API supports approved
-downloads; this worktree does not provide chat or an agent gateway.
+and explicit reapplication. Stage 3 reviews the saved three-file tuple, records
+final approval, and offers individual exact approved downloads; edits invalidate
+that approval until the current tuple is reviewed and reapproved. IMP-014 and
+IMP-010 candidate preflight/rendered acceptance passed locally; consult BACKLOG.md
+for delivery references. It does not provide chat, agent proposals, runner outcomes,
+or runner status editing, and has no agent gateway.
 It has no TLS or domain setup, trusted external reverse-proxy/client-IP contract,
 verified backup/restore runbook, complete release security gate, or verified agent
 isolation. Do not expose it by changing the published binding, firewall, or proxy

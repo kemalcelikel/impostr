@@ -184,6 +184,7 @@ export default function App() {
   const [userOffset, setUserOffset] = useState(0);
   const [projectOffset, setProjectOffset] = useState(0);
   const [workspaceHasEdits, setWorkspaceHasEdits] = useState(false);
+  const [wideFinalReview, setWideFinalReview] = useState(false);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [accounts, setAccounts] = useState<User[]>([]);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
@@ -217,6 +218,7 @@ export default function App() {
     setProjectOffset(0);
     setUserOffset(0);
     setWorkspaceHasEdits(false);
+    setWideFinalReview(false);
     setWorkspaceLoading(false);
     setWorkspaceError("");
   }, []);
@@ -638,7 +640,9 @@ export default function App() {
         ) : null}
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-5 pb-14 pt-8 sm:px-8 sm:pt-12">
+      <main
+        className={`relative z-10 w-full px-5 pb-14 pt-8 sm:px-8 sm:pt-12 ${wideFinalReview ? "max-w-none" : "mx-auto max-w-6xl"}`}
+      >
         {pageState === "loading" ? (
           <section
             aria-live="polite"
@@ -824,6 +828,7 @@ export default function App() {
               onSessionExpired={handleWorkspaceSessionExpired}
               onPendingChange={reportWorkspacePending}
               onProjectPageChange={setProjectOffset}
+              onWideReviewChange={setWideFinalReview}
               projectOffset={projectOffset}
               projects={projects}
             />

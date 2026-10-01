@@ -65,6 +65,7 @@ IMP013_CANDIDATE_APP_REVISIONS = (
     IMP013_CANDIDATE_APP_MIGRATION,
 )
 IMP014_CANDIDATE_APP_MIGRATION = "20260930_0006"
+IMP010_CANDIDATE_BASE_COMMIT = "daf078c95119e549e57be62109aacbc0823b1915"
 IMP014_CANDIDATE_APP_REVISIONS = (
     *IMP013_CANDIDATE_APP_REVISIONS,
     IMP014_CANDIDATE_APP_MIGRATION,
@@ -543,6 +544,34 @@ IMP014_CANDIDATE_DOCKERIGNORE_RULES = (
     "api/**/.env",
     "api/**/.env.*",
 )
+IMP010_CANDIDATE_DOCKERIGNORE_RULES = (
+    "**",
+    "!api/",
+    "!api/Dockerfile",
+    "!api/requirements.lock",
+    "!api/requirements-dev.lock",
+    "!api/pyproject.toml",
+    "!api/alembic.ini",
+    "!api/app/",
+    "!api/app/**",
+    "!api/migrations/",
+    "!api/migrations/**",
+    "!api/tests/",
+    "!api/tests/**",
+    "!scripts/",
+    "!scripts/backlog.py",
+    "!overnight-agent/",
+    "!overnight-agent/PROJECT.md.example",
+    "!overnight-agent/AGENTS.md.example",
+    "!overnight-agent/BACKLOG.md.example",
+    "api/**/__pycache__/",
+    "api/**/.pytest_cache/",
+    "api/**/.mypy_cache/",
+    "api/**/.ruff_cache/",
+    "api/**/*.pyc",
+    "api/**/.env",
+    "api/**/.env.*",
+)
 
 IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS = (
     ".dockerignore",
@@ -559,6 +588,29 @@ IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS = (
     "web/src/BacklogPlanning.tsx",
     "web/src/BacklogPlanning.test.tsx",
     *NESTED_TEMPLATE_PATHS,
+)
+IMP010_CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
+    ("web/src/App.tsx", "modified"),
+    ("web/src/ProjectWorkspace.tsx", "modified"),
+    ("web/src/FinalReview.tsx", "added"),
+)
+IMP010_CANDIDATE_NONRUNTIME_TEST_CHANGES = (
+    ("web/src/ProjectWorkspace.test.tsx", "modified"),
+    ("web/src/FinalReview.test.tsx", "added"),
+)
+IMP010_CANDIDATE_HARNESS_CHANGES = (
+    ("scripts/local_browser_fixture.py", "modified"),
+    ("scripts/test_local_browser_fixture.py", "modified"),
+)
+IMP010_CANDIDATE_REQUIRED_SNAPSHOT_PATHS = (
+    *IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS,
+    "api/app/project_approval_manifests.py",
+    "api/tests/test_project_approval_manifests.py",
+)
+IMP010_CANDIDATE_TEST_LITERAL_DIGESTS = tuple(
+    literal
+    for literal in IMP007_CANDIDATE_TEST_LITERAL_DIGESTS
+    if literal[0] == "web/src/ProjectWorkspace.test.tsx"
 )
 REVIEW_IMAGE_PROJECT_LABEL = "io.impostr.local-browser-review.project"
 REVIEW_IMAGE_SERVICE_LABEL = "io.impostr.local-browser-review.service"
@@ -686,6 +738,20 @@ IMP014_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
     allowed_test_literal_digests=IMP014_CANDIDATE_TEST_LITERAL_DIGESTS,
     committed_support_paths=(".dockerignore", "scripts/backlog.py"),
     required_snapshot_paths=IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS,
+)
+IMP010_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=IMP010_CANDIDATE_BASE_COMMIT,
+    reviewed_inputs=IMP010_CANDIDATE_REVIEWED_RUNTIME_INPUTS,
+    nonruntime_test_changes=IMP010_CANDIDATE_NONRUNTIME_TEST_CHANGES,
+    fingerprint_test_changes=True,
+    strict_scope=True,
+    status_paths=(*CANDIDATE_STATUS_PATHS, "scripts"),
+    allowed_input_modes=frozenset({0o644, 0o664}),
+    harness_changes=IMP010_CANDIDATE_HARNESS_CHANGES,
+    fingerprint_harness_changes=True,
+    allowed_test_literal_digests=IMP010_CANDIDATE_TEST_LITERAL_DIGESTS,
+    committed_support_paths=(".dockerignore", "scripts/backlog.py"),
+    required_snapshot_paths=IMP010_CANDIDATE_REQUIRED_SNAPSHOT_PATHS,
 )
 
 
@@ -2795,6 +2861,7 @@ def validate_candidate_dockerignore(
     *,
     imp007: bool = False,
     imp014: bool = False,
+    imp010: bool = False,
 ) -> None:
     """Keep each candidate's root-context build limited to its reviewed inputs."""
     try:
@@ -2810,15 +2877,18 @@ def validate_candidate_dockerignore(
         )
     except UnicodeDecodeError:
         raise FixtureError("The candidate root build ignore file is invalid.") from None
-    if imp007 and imp014:
+    if sum((imp007, imp014, imp010)) > 1:
         raise FixtureError("The candidate root build profile is ambiguous.")
-    expected_rules = (
-        IMP014_CANDIDATE_DOCKERIGNORE_RULES
-        if imp014
-        else IMP007_CANDIDATE_DOCKERIGNORE_RULES
-        if imp007
-        else CANDIDATE_DOCKERIGNORE_RULES
-    )
+    if imp010 or imp014:
+        expected_rules = (
+            IMP010_CANDIDATE_DOCKERIGNORE_RULES
+            if imp010
+            else IMP014_CANDIDATE_DOCKERIGNORE_RULES
+        )
+    elif imp007:
+        expected_rules = IMP007_CANDIDATE_DOCKERIGNORE_RULES
+    else:
+        expected_rules = CANDIDATE_DOCKERIGNORE_RULES
     if rules != expected_rules:
         raise FixtureError("The candidate root build context is not safely allowlisted.")
 
@@ -3519,17 +3589,22 @@ class ComposeController:
         approval_candidate: bool = False,
         imp007_candidate: bool = False,
         imp014_candidate: bool = False,
+        imp010_candidate: bool = False,
         committed_migration_profile: str | None = None,
     ) -> None:
-        if sum((approval_candidate, imp007_candidate, imp014_candidate)) > 1:
+        if sum((approval_candidate, imp007_candidate, imp014_candidate, imp010_candidate)) > 1:
             raise FixtureError("A candidate snapshot cannot select two migration profiles.")
-        if (approval_candidate or imp007_candidate or imp014_candidate) and not candidate:
+        if (
+            approval_candidate or imp007_candidate or imp014_candidate or imp010_candidate
+        ) and not candidate:
             profile = (
                 "IMP-013"
                 if approval_candidate
                 else "IMP-007"
                 if imp007_candidate
                 else "IMP-014"
+                if imp014_candidate
+                else "IMP-010"
             )
             raise FixtureError(f"The {profile} migration profile requires a candidate snapshot.")
         if candidate and committed_migration_profile is not None:
@@ -3550,6 +3625,7 @@ class ComposeController:
         self.approval_candidate = approval_candidate
         self.imp007_candidate = imp007_candidate
         self.imp014_candidate = imp014_candidate
+        self.imp010_candidate = imp010_candidate
         self.committed_migration_profile = committed_migration_profile
 
     def command(self, arguments: Sequence[str]) -> list[str]:
@@ -3725,7 +3801,9 @@ class ComposeController:
         )
 
     def migrate(self) -> str:
-        if self.imp014_candidate:
+        if self.imp010_candidate:
+            migration_profile = "imp010"
+        elif self.imp014_candidate:
             migration_profile = "imp014"
         elif self.approval_candidate:
             migration_profile = "imp013"
@@ -3735,10 +3813,10 @@ class ComposeController:
             migration_profile = "imp004"
         else:
             migration_profile = self.committed_migration_profile
-        if migration_profile not in {"imp004", "imp007", "imp013", "imp014"}:
+        if migration_profile not in {"imp004", "imp007", "imp013", "imp014", "imp010"}:
             raise FixtureError("The committed app migration profile was not verified.")
         schema_0005_profile = migration_profile in {"imp007", "imp013"}
-        schema_0006_profile = migration_profile == "imp014"
+        schema_0006_profile = migration_profile in {"imp014", "imp010"}
 
         self.invoke(
             ["run", "--rm", "api", "alembic", "upgrade", "head"],
@@ -3812,7 +3890,11 @@ class ComposeController:
                 or self.committed_migration_profile == "imp013"
             )
             else IMP014_CANDIDATE_APP_MIGRATION
-            if self.imp014_candidate or self.committed_migration_profile == "imp014"
+            if (
+                self.imp014_candidate
+                or self.imp010_candidate
+                or self.committed_migration_profile == "imp014"
+            )
             else CANDIDATE_APP_MIGRATION
             if self.candidate
             else status
@@ -4391,6 +4473,7 @@ class ApiResponse:
     status: int
     payload: Any
     headers: Mapping[str, str]
+    body: bytes = b""
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -4492,6 +4575,7 @@ class ApiClient:
                     status=response.status,
                     payload=payload,
                     headers=dict(response.headers.items()),
+                    body=payload_bytes,
                 )
         except FixtureError:
             raise
@@ -4670,7 +4754,7 @@ class FixtureSupervisor:
             r"[0-9a-f]{64}", candidate_fingerprint
         ) is None:
             raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
-        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014"}:
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010"}:
             raise FixtureError("The candidate review scope is invalid.")
         self.candidate_preflight = candidate_preflight
         self.candidate_fingerprint = candidate_fingerprint
@@ -4684,6 +4768,8 @@ class FixtureSupervisor:
             raise FixtureError("The IMP-007 candidate scope requires explicit opt-in.")
         if candidate_variant == "imp014" and not self.candidate_mode:
             raise FixtureError("The IMP-014 candidate scope requires explicit opt-in.")
+        if candidate_variant == "imp010" and not self.candidate_mode:
+            raise FixtureError("The IMP-010 candidate scope requires explicit opt-in.")
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -4799,6 +4885,7 @@ class FixtureSupervisor:
                 self.source_dir,
                 imp007=self.candidate_variant == "imp007",
                 imp014=self.candidate_variant == "imp014",
+                imp010=self.candidate_variant == "imp010",
             )
             set_candidate_snapshot_loopback_host(self.source_dir, host)
             set_candidate_snapshot_review_images(self.source_dir, self.identity.project_name)
@@ -4831,6 +4918,7 @@ class FixtureSupervisor:
             approval_candidate=self.candidate_variant == "imp013",
             imp007_candidate=self.candidate_variant == "imp007",
             imp014_candidate=self.candidate_variant == "imp014",
+            imp010_candidate=self.candidate_variant == "imp010",
             committed_migration_profile=committed_migration_profile,
         )
 
@@ -4907,6 +4995,8 @@ class FixtureSupervisor:
         )
 
     def _candidate_policy(self) -> CandidatePreviewPolicy:
+        if self.candidate_variant == "imp010":
+            return IMP010_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp014":
             return IMP014_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp013":
@@ -5085,7 +5175,7 @@ class FixtureSupervisor:
             raise FixtureError("Candidate project creation did not return three draft documents.")
         template_sources = (
             NESTED_TEMPLATE_PATHS
-            if self.candidate_variant == "imp014"
+            if self.candidate_variant in {"imp014", "imp010"}
             else LEGACY_TEMPLATE_PATHS
         )
         expected_sources = {
@@ -5154,7 +5244,7 @@ class FixtureSupervisor:
         ):
             raise FixtureError("A second candidate Member read foreign project drafts.")
 
-        if self.candidate_variant in {"imp007", "imp014"}:
+        if self.candidate_variant in {"imp007", "imp014", "imp010"}:
             self._verify_candidate_backlog_tasks(
                 client,
                 other_client,
@@ -5180,6 +5270,16 @@ class FixtureSupervisor:
                 raise FixtureError("A fresh candidate project has an unexpected approval state.")
             if other_client.request("GET", pair_approval_path).status != 404:
                 raise FixtureError("A second candidate Member discovered a foreign approval status.")
+        elif self.candidate_variant == "imp010":
+            if other_client.request("GET", pair_approval_path).status != 404:
+                raise FixtureError("A second candidate Member discovered a foreign approval status.")
+            self._verify_candidate_final_approval(
+                client,
+                other_client,
+                project_id=project_id,
+                owner_id=owner_id,
+                seed_documents=document_response.payload,
+            )
         elif (
             self.candidate_variant == "imp004"
             and other_client.request("GET", pair_approval_path).status != 404
@@ -5193,6 +5293,12 @@ class FixtureSupervisor:
                 "draft creation, cross-Member denial, invalid/stale approval rejection, "
                 "version-bound pair approval, and approval invalidation after a saved edit."
             )
+        elif self.candidate_variant == "imp010":
+            self._say(
+                "IMP-010 candidate preflight passed: normal Member sign-in, final approval of the "
+                "displayed tuple, saved-edit invalidation/reapproval, exact individual downloads, "
+                "and cross-Member denials."
+            )
         elif self.candidate_variant in {"imp007", "imp014"}:
             self._say(
                 f"{self.candidate_variant.upper()} candidate preflight passed: normal Member "
@@ -5204,6 +5310,327 @@ class FixtureSupervisor:
                 "creation, three provenance-checked drafts, and cross-Member denial."
             )
 
+    def _verify_candidate_final_approval(
+        self,
+        client: ApiClient,
+        other_client: ApiClient,
+        *,
+        project_id: str,
+        owner_id: str,
+        seed_documents: Any,
+    ) -> None:
+        """Verify IMP-010's exact final approval/download lifecycle on fresh owned data."""
+        if (
+            not self.candidate_preflight
+            or self.candidate_variant != "imp010"
+            or not client.csrf_token
+            or not other_client.csrf_token
+        ):
+            raise FixtureError("The IMP-010 final-approval preflight is not configured safely.")
+
+        project_content = """# Fieldnotes
+
+## Purpose and scope
+Fieldnotes stores synthetic private observations for a local owner.
+- In scope: Save and search one observation.
+- Later/out of scope: Public sharing.
+
+## Important behavior
+| Workflow | Expected result | Important rules/failures |
+|---|---|---|
+| Save observation | Text remains searchable | Empty text is rejected |
+- Domain terms and examples: An observation is one dated note.
+- Important data/access rules: Only the local owner can read these notes.
+
+## Stack and architecture
+- Runtime/framework/package manager: Python 3.12 and pinned dependencies.
+- Storage/services: PostgreSQL stores immutable revisions.
+- Structure/data flow: The API stores saved text and the browser reviews it.
+- Existing implementation vs planned changes: The synthetic fixture exercises saved review.
+
+## Contracts and constraints
+- Important API/schema/file-format contracts: UTF-8 Markdown revisions.
+- Cross-service dependencies/compatibility: Same-origin API requests.
+- UI direction/components/devices: Three saved files have separate review panes.
+- Security/data/operating limits: Use only generated local fixture accounts.
+- Migration/performance/deployment requirements: Disposable local verification only.
+
+## Decisions still needed
+None.
+
+## Completion
+The displayed saved revisions are approved together and downloaded exactly.
+"""
+        agents_content = """# Agent guide: Fieldnotes
+
+## Project context
+- Product/architecture: PROJECT.md defines this synthetic local app.
+- Important contract/design references: The API owns immutable revisions.
+- Coding conventions and protected/generated paths: Preserve approved data.
+- Dependency/migration rules: Keep migrations versioned.
+- Environment limits: Use synthetic local fixture data only.
+
+## Commands
+| Purpose | Directory | Command | When to use |
+|---|---|---|---|
+| Focused test | api | python -m pytest | Verify the changed behavior |
+- UI URL/login/representative viewport: Use the generated local Member.
+- Essential task-level gates: Verify exact approval and download revisions.
+- CI/release-only checks: None.
+
+## Testing and review
+Check successful behavior and realistic stale-revision failures.
+
+## Execution and Git
+The fixture owns cleanup; it does not write repository state.
+- Git workflow: Do not push or merge.
+
+## Completion and communication
+Report only sanitized results and owned cleanup state.
+"""
+        if not isinstance(seed_documents, list):
+            raise FixtureError("The IMP-010 starter documents returned an unexpected shape.")
+        seed_backlogs = [
+            item
+            for item in seed_documents
+            if isinstance(item, dict) and item.get("kind") == "backlog"
+        ]
+        if len(seed_backlogs) != 1:
+            raise FixtureError("The IMP-010 candidate did not return one starter backlog.")
+        seed_backlog = seed_backlogs[0]
+        task_view = ApiClient._require_json_object(
+            client.request("GET", f"/api/projects/{project_id}/backlog/tasks"),
+            200,
+            "IMP-010 starter backlog task view",
+        )
+        if (
+            task_view.get("revision_number") != seed_backlog.get("revision_number")
+            or task_view.get("content") != seed_backlog.get("content")
+            or task_view.get("content_sha256") != seed_backlog.get("content_sha256")
+        ):
+            raise FixtureError("The IMP-010 task view was not bound to its starter backlog revision.")
+        backlog_content = self._synthetic_imp010_backlog(task_view)
+        write_base = f"/api/projects/{project_id}/documents"
+        for kind, content in (
+            ("project", project_content),
+            ("agents", agents_content),
+            ("backlog", backlog_content),
+        ):
+            saved = ApiClient._require_json_object(
+                client.request(
+                    "PUT",
+                    f"{write_base}/{kind}",
+                    body={"expected_revision": 1, "content": content},
+                    csrf_token=client.csrf_token,
+                ),
+                200,
+                f"IMP-010 synthetic {kind} revision",
+            )
+            if (
+                saved.get("revision_number") != 2
+                or saved.get("origin") != "human"
+                or saved.get("author_user_id") != owner_id
+                or not isinstance(saved.get("content_sha256"), str)
+            ):
+                raise FixtureError("A synthetic final-review save returned unexpected revision metadata.")
+        pair_path = f"/api/projects/{project_id}/document-pair-approval"
+        pair = ApiClient._require_json_object(
+            client.request(
+                "POST",
+                pair_path,
+                body={"expected_project_revision": 2, "expected_agents_revision": 2},
+                csrf_token=client.csrf_token,
+            ),
+            200,
+            "IMP-010 current pair approval",
+        )
+        pair_id = pair.get("id")
+        if (
+            not isinstance(pair_id, str)
+            or pair.get("actor_user_id") != owner_id
+            or pair.get("project_revision_number") != 2
+            or pair.get("agents_revision_number") != 2
+        ):
+            raise FixtureError("The IMP-010 pair approval was not bound to the saved revisions.")
+
+        final_path = f"/api/projects/{project_id}/final-approval"
+        initial = ApiClient._require_json_object(
+            client.request("GET", final_path),
+            200,
+            "initial IMP-010 final-approval status",
+        )
+        if (
+            initial.get("pair_approved") is not True
+            or initial.get("approved") is not False
+            or initial.get("current_pair_approval_id") != pair_id
+            or initial.get("current_project_revision", {}).get("revision_number") != 2
+            or initial.get("current_agents_revision", {}).get("revision_number") != 2
+            or initial.get("current_backlog_revision", {}).get("revision_number") != 2
+            or not isinstance(initial.get("validation_errors"), dict)
+            or initial["validation_errors"]
+        ):
+            raise FixtureError("The saved synthetic tuple is not ready for explicit final approval.")
+
+        stale = client.request(
+            "POST",
+            final_path,
+            body={"expected_pair_approval_id": pair_id, "expected_backlog_revision": 1},
+            csrf_token=client.csrf_token,
+        )
+        if stale.status != 409:
+            raise FixtureError("The IMP-010 final approval accepted a stale backlog revision.")
+
+        other_status = other_client.request("GET", final_path)
+        other_post = other_client.request(
+            "POST",
+            final_path,
+            body={"expected_pair_approval_id": pair_id, "expected_backlog_revision": 2},
+            csrf_token=other_client.csrf_token,
+        )
+        if other_status.status != 404 or other_post.status != 404:
+            raise FixtureError("Final approval data crossed synthetic Member ownership.")
+
+        kinds_and_files = {
+            "project": ("PROJECT.md", project_content.encode("utf-8")),
+            "agents": ("AGENTS.md", agents_content.encode("utf-8")),
+            "backlog": ("BACKLOG.md", backlog_content.encode("utf-8")),
+        }
+        for kind, (_filename, _content) in kinds_and_files.items():
+            if other_client.request("GET", f"{final_path}/files/{kind}").status != 404:
+                raise FixtureError("A second synthetic Member downloaded a foreign project file.")
+
+        def approve_and_verify(revision: int, *, expected_manifest_id: str | None = None) -> str:
+            manifest = ApiClient._require_json_object(
+                client.request(
+                    "POST",
+                    final_path,
+                    body={"expected_pair_approval_id": pair_id, "expected_backlog_revision": revision},
+                    csrf_token=client.csrf_token,
+                ),
+                200,
+                "IMP-010 human final approval",
+            )
+            manifest_id = manifest.get("id")
+            if (
+                not isinstance(manifest_id, str)
+                or manifest.get("pair_approval_id") != pair_id
+                or manifest.get("actor_user_id") != owner_id
+                or manifest.get("project", {}).get("revision_number") != 2
+                or manifest.get("agents", {}).get("revision_number") != 2
+                or manifest.get("backlog", {}).get("revision_number") != revision
+                or (expected_manifest_id is not None and manifest_id == expected_manifest_id)
+            ):
+                raise FixtureError("The final approval did not bind the exact displayed tuple.")
+            status = ApiClient._require_json_object(
+                client.request("GET", final_path),
+                200,
+                "final approval status after approval",
+            )
+            current_manifest = status.get("current_manifest")
+            if (
+                status.get("pair_approved") is not True
+                or status.get("approved") is not True
+                or not isinstance(current_manifest, dict)
+                or current_manifest.get("id") != manifest_id
+                or current_manifest.get("pair_approval_id") != pair_id
+                or current_manifest.get("backlog", {}).get("revision_number") != revision
+            ):
+                raise FixtureError("The approved final tuple was not reported as current.")
+            return manifest_id
+
+        first_manifest_id = approve_and_verify(2)
+
+        def verify_exact_downloads(expected_backlog: bytes) -> None:
+            expected_contents = {
+                "project": kinds_and_files["project"][1],
+                "agents": kinds_and_files["agents"][1],
+                "backlog": expected_backlog,
+            }
+            for kind, expected_content in expected_contents.items():
+                filename = kinds_and_files[kind][0]
+                response = client.request("GET", f"{final_path}/files/{kind}")
+                headers = {key.lower(): value for key, value in response.headers.items()}
+                if (
+                    response.status != 200
+                    or response.body != expected_content
+                    or headers.get("content-disposition") != f'attachment; filename="{filename}"'
+                    or headers.get("content-type") != "text/markdown; charset=utf-8"
+                    or headers.get("x-content-type-options") != "nosniff"
+                ):
+                    raise FixtureError("An IMP-010 approved download did not match its exact saved revision.")
+
+        verify_exact_downloads(backlog_content.encode("utf-8"))
+        updated_backlog = backlog_content + "\nA later saved edit requires another final review.\n"
+        updated = ApiClient._require_json_object(
+            client.request(
+                "PUT",
+                f"{write_base}/backlog",
+                body={"expected_revision": 2, "content": updated_backlog},
+                csrf_token=client.csrf_token,
+            ),
+            200,
+            "IMP-010 backlog edit after final approval",
+        )
+        invalidated = ApiClient._require_json_object(
+            client.request("GET", final_path),
+            200,
+            "final approval status after saved backlog edit",
+        )
+        if (
+            updated.get("revision_number") != 3
+            or invalidated.get("approved") is not False
+            or invalidated.get("pair_approved") is not True
+            or invalidated.get("current_backlog_revision", {}).get("revision_number") != 3
+            or not isinstance(invalidated.get("latest_manifest"), dict)
+            or invalidated["latest_manifest"].get("id") != first_manifest_id
+        ):
+            raise FixtureError("A saved backlog edit did not invalidate the current final approval.")
+        for kind in kinds_and_files:
+            if client.request("GET", f"{final_path}/files/{kind}").status != 409:
+                raise FixtureError("A stale final-approved file remained downloadable after an edit.")
+        if other_client.request("GET", f"{final_path}/files/backlog").status != 404:
+            raise FixtureError("A stale foreign backlog download revealed project state.")
+
+        approve_and_verify(3, expected_manifest_id=first_manifest_id)
+        verify_exact_downloads(updated_backlog.encode("utf-8"))
+
+    @staticmethod
+    def _synthetic_imp010_backlog(task_view: Mapping[str, Any]) -> str:
+        """Create valid review evidence without inventing or changing seeded task state."""
+        tasks = task_view.get("tasks")
+        expected_ids = ("TASK-001", "TASK-002")
+        if not isinstance(tasks, list) or len(tasks) != len(expected_ids):
+            raise FixtureError("The IMP-010 seeded task identities are not the reviewed profile.")
+
+        titles = (
+            "Review the generated three-file snapshot",
+            "Recheck final approval after a saved edit",
+        )
+        task_lines: list[str] = ["# Backlog: Synthetic final review", ""]
+        for index, (task, expected_id, title) in enumerate(zip(tasks, expected_ids, titles, strict=True)):
+            if (
+                not isinstance(task, dict)
+                or task.get("id") != expected_id
+                or task.get("status") != "-"
+                or not isinstance(task.get("dependencies"), list)
+                or any(not isinstance(item, str) for item in task["dependencies"])
+            ):
+                raise FixtureError("The IMP-010 seeded task state could not be preserved safely.")
+            dependencies = task["dependencies"]
+            dependency_text = ", ".join(dependencies) if dependencies else "None"
+            task_lines.extend(
+                (
+                    f"## [{task['status']}] {task['id']} — {title}",
+                    f"**Depends on:** {dependency_text}",
+                    "",
+                    f"**Scope:** Verify saved file review for synthetic step {index + 1}.",
+                    "**Acceptance:** The displayed saved tuple and individual download match.",
+                    "**Verification:** Approve, save an edit, reapprove, and compare exact bytes.",
+                    "",
+                )
+            )
+        return "\n".join(task_lines).rstrip() + "\n"
+
     def _verify_candidate_backlog_tasks(
         self,
         client: ApiClient,
@@ -5213,7 +5640,7 @@ class FixtureSupervisor:
         documents: Any,
     ) -> None:
         """Verify the backlog read view and deny another Member's backlog access."""
-        if not self.candidate_preflight or self.candidate_variant not in {"imp007", "imp014"}:
+        if not self.candidate_preflight or self.candidate_variant not in {"imp007", "imp014", "imp010"}:
             raise FixtureError("The candidate backlog preflight is not configured safely.")
         if not client.csrf_token or not other_client.csrf_token:
             raise FixtureError("The synthetic Member backlog sessions are unavailable.")
@@ -5986,6 +6413,14 @@ class FixtureSupervisor:
                 fingerprint_label = "IMP014_CANDIDATE_FINGERPRINT"
                 result_label = "IMP014_CANDIDATE_PREFLIGHT_RESULT"
                 cleanup_label = "IMP014_CANDIDATE_CLEANUP"
+            elif self.candidate_variant == "imp010":
+                self._say(
+                    "IMP010_CANDIDATE_PREFLIGHT_SCOPE=three-file-final-approval-download-api; "
+                    "rendered browser review was not performed."
+                )
+                fingerprint_label = "IMP010_CANDIDATE_FINGERPRINT"
+                result_label = "IMP010_CANDIDATE_PREFLIGHT_RESULT"
+                cleanup_label = "IMP010_CANDIDATE_CLEANUP"
             else:
                 self._say(
                     "CANDIDATE_PREFLIGHT_SCOPE=infrastructure-only; authenticated browser rendering "
@@ -6430,6 +6865,7 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
                 "--imp007-candidate-fingerprint",
                 "--imp013-candidate-fingerprint",
                 "--imp014-candidate-fingerprint",
+                "--imp010-candidate-fingerprint",
             }
             and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
         )
@@ -6726,6 +7162,7 @@ def _run_guardian(
                 "imp007": "--imp007-candidate-fingerprint",
                 "imp013": "--imp013-candidate-fingerprint",
                 "imp014": "--imp014-candidate-fingerprint",
+                "imp010": "--imp010-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -6860,8 +7297,8 @@ def launch_unattended(
     lock_fd = _open_control_lock(control_directory)
     guardian: subprocess.Popen[bytes] | None = None
     try:
-        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014"} or (
-            candidate_variant in {"imp007", "imp013", "imp014"}
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010"} or (
+            candidate_variant in {"imp007", "imp013", "imp014", "imp010"}
             and candidate_fingerprint is None
         ):
             raise FixtureError("The candidate review scope requires a valid opt-in fingerprint.")
@@ -6895,6 +7332,7 @@ def launch_unattended(
                 "imp007": "--imp007-candidate-fingerprint",
                 "imp013": "--imp013-candidate-fingerprint",
                 "imp014": "--imp014-candidate-fingerprint",
+                "imp010": "--imp010-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -6952,6 +7390,12 @@ def launch_unattended(
                 print(f"IMP007_CANDIDATE_FINGERPRINT={candidate_fingerprint}")
                 print(
                     "This exact IMP-007 candidate requires authenticated rendered review; "
+                    "candidate preflight alone is infrastructure evidence."
+                )
+            elif candidate_variant == "imp010":
+                print(f"IMP010_CANDIDATE_FINGERPRINT={candidate_fingerprint}")
+                print(
+                    "This exact IMP-010 candidate requires authenticated final-review rendering; "
                     "candidate preflight alone is infrastructure evidence."
                 )
             else:
@@ -7167,6 +7611,7 @@ def _add_candidate_fingerprint_arguments(
     *,
     include_imp007: bool = False,
     include_imp014: bool = False,
+    include_imp010: bool = False,
 ) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -7195,9 +7640,19 @@ def _add_candidate_fingerprint_arguments(
             type=_candidate_fingerprint_argument,
             help="opt into the pinned IMP-014 candidate after its UI preflight",
         )
+    if include_imp010:
+        group.add_argument(
+            "--imp010-candidate-fingerprint",
+            dest="imp010_candidate_fingerprint",
+            type=_candidate_fingerprint_argument,
+            help="opt into the pinned IMP-010 candidate after its final-review preflight",
+        )
 
 
 def _candidate_selection(parsed: argparse.Namespace) -> tuple[str | None, str]:
+    imp010_fingerprint = getattr(parsed, "imp010_candidate_fingerprint", None)
+    if imp010_fingerprint is not None:
+        return imp010_fingerprint, "imp010"
     imp014_fingerprint = getattr(parsed, "imp014_candidate_fingerprint", None)
     if imp014_fingerprint is not None:
         return imp014_fingerprint, "imp014"
@@ -7284,6 +7739,18 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "harness changes; this fresh-stack check validates the IMP-022 nested template bundle, "
         "0006 API schema, task view and authorization denials, but does not render the UI."
     )
+    imp010_preflight = subparsers.add_parser(
+        "imp010-candidate-preflight",
+        help=(
+            "build and verify the pinned IMP-010 final-review UI candidate, then clean up "
+            "without browser handoff"
+        ),
+    )
+    imp010_preflight.description = (
+        "Opt in to the exact IMP-010 runtime/test/fixture allowlist over committed HEAD daf078c; "
+        "this fresh-stack preflight exercises final approval, invalidation, exact downloads and "
+        "cross-Member denials but does not perform rendered browser review or publish credentials."
+    )
     launch = subparsers.add_parser(
         "launch",
         help="start the detached PTY supervisor and publish a private Member handoff",
@@ -7303,7 +7770,12 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
             f"default {DEFAULT_LIFETIME_MINUTES})"
         ),
     )
-    _add_candidate_fingerprint_arguments(launch, include_imp007=True, include_imp014=True)
+    _add_candidate_fingerprint_arguments(
+        launch,
+        include_imp007=True,
+        include_imp014=True,
+        include_imp010=True,
+    )
     stop = subparsers.add_parser(
         "stop",
         help="stop the recorded local fixture and wait for verified cleanup status",
@@ -7329,12 +7801,22 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     guardian.add_argument("--handoff-dir", type=Path, required=True)
     guardian.add_argument("--lifetime-minutes", type=int, required=True)
     guardian.add_argument("--lock-fd", type=int, required=True)
-    _add_candidate_fingerprint_arguments(guardian, include_imp007=True, include_imp014=True)
+    _add_candidate_fingerprint_arguments(
+        guardian,
+        include_imp007=True,
+        include_imp014=True,
+        include_imp010=True,
+    )
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
     supervise.add_argument("--handoff-dir", type=Path, required=True)
     supervise.add_argument("--lifetime-minutes", type=int, required=True)
-    _add_candidate_fingerprint_arguments(supervise, include_imp007=True, include_imp014=True)
+    _add_candidate_fingerprint_arguments(
+        supervise,
+        include_imp007=True,
+        include_imp014=True,
+        include_imp010=True,
+    )
 
     parsed = parser.parse_args(arguments)
     if parsed.command in {"start", "launch", "_guardian", "_supervise"} and not (
@@ -7404,6 +7886,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 root,
                 candidate_preflight=True,
                 candidate_variant="imp014",
+            ).run()
+        if parsed.command == "imp010-candidate-preflight":
+            return FixtureSupervisor(
+                root,
+                candidate_preflight=True,
+                candidate_variant="imp010",
             ).run()
         candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
         supervisor = FixtureSupervisor(
