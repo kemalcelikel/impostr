@@ -157,7 +157,7 @@ def setup_accept():
                 and re.fullmatch(r"imp024-verify-[0-9a-f]{12}", directory.name))
         # Validate runtime/directory and bind in trusted process before key input.
         broker = Broker(directory, persistent_directory=True,
-                        transport_factory=lambda _: inference)
+                        transport_factory=lambda _: inference.for_turn(), mode="operator")
         confirmation = terminal_input(
             "Only synthetic project data will reach this explicit provider. Type ACCEPT: ")
         require(confirmation == "ACCEPT")

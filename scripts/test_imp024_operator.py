@@ -99,7 +99,7 @@ class OperatorTests(unittest.TestCase):
                 operator.terminal_input("Key: ", secret=True)
             attrs.assert_not_called()
 
-    def test_planning_holds_tools_and_text_until_terminal_then_emits_safe_alias(self):
+    def test_planning_streams_safe_text_holds_tools_until_terminal_then_emits_safe_alias(self):
         body = b"".join(inference.native_response("Synthetic reply", [call()]))
         instance, response = planning(body)
         emitted = list(instance.normalize_planning(response, data(), threading.Event(), time.monotonic() + 2))
@@ -113,8 +113,12 @@ class OperatorTests(unittest.TestCase):
         partial = body.split(b"event: response.completed")[0]
         instance, response = planning(partial)
         stream = instance.normalize_planning(response, data(), threading.Event(), time.monotonic() + 2)
+        early = []
         with self.assertRaises(ValueError):
-            next(stream)  # NO text/tool output on incomplete responses.
+            while True:
+                early.append(next(stream))
+        self.assertIn(b"Synthetic reply", b"".join(early))
+        self.assertNotIn(b"function_call", b"".join(early))
 
     def test_credentials_split_text_arguments_call_ids_and_json_escapes_never_escape(self):
         bodies = [b"".join(inference.native_response("before " + KEY + " after")),
@@ -130,8 +134,11 @@ class OperatorTests(unittest.TestCase):
         for body in bodies:
             instance, response = planning(body)
             stream = instance.normalize_planning(response, data(), threading.Event(), time.monotonic() + 2)
+            emitted = []
             with self.assertRaises(ValueError):
-                next(stream)
+                while True:
+                    emitted.append(next(stream))
+            self.assertNotIn(KEY.encode(), b"".join(emitted))
         instance, _ = planning(b"")
         event = {"type": "function_call", "arguments": args}
         with self.assertRaises(ValueError):

@@ -60,10 +60,10 @@ def no_secret(value, key, depth=0):
 class PlanningHTTPSInference(HTTPSInference):
     """Same pinned public TLS dialer; bounded native planning, never host tools.
 
-    Hold one bounded response until full normalization AND contamination checks
-    finish. Neither partial text nor function data can escape a later secret echo.
-    This deliberately does not promise early live text deltas. Synthetic/default
-    streaming behavior is unchanged. No retry, redirect, provider IDs or errors.
+    Literal-key safe prefixes may stream before completion. Tools and terminal
+    frames remain held until full normalization. Late failure does not retract
+    already safe text and never authorizes proposals. Not an encoded/semantic
+    exfiltration guarantee. No retry, redirect, provider IDs or raw errors.
     """
 
     def acquire(self, key):
@@ -73,9 +73,19 @@ class PlanningHTTPSInference(HTTPSInference):
         require(key not in self.contract.host and key not in self.contract.route
                 and key not in self.contract.deployment)
         self.contract.key = checked.key
+        self.emitted_tail = ""
+
+    def for_turn(self):
+        # DNS/TLS are already pinned. Only this clone's tail spans the sequential
+        # model calls of ONE turn; no project-to-project text state is shared.
+        clone = object.__new__(type(self))
+        clone.__dict__.update(self.__dict__)
+        clone.emitted_tail = ""
+        return clone
 
     def clear(self):
         self.contract.key = ""
+        self.emitted_tail = ""
 
     def events(self, data, cancelled, deadline):
         require(bool(self.contract.key) and self.contract.key != "unacquired-placeholder")
@@ -121,6 +131,8 @@ class PlanningHTTPSInference(HTTPSInference):
             require(not watcher.is_alive())
 
     def normalize_planning(self, response, data, cancelled, deadline):
+        prior_tail = self.emitted_tail
+
         def blocks():
             while True:
                 require(not cancelled.is_set() and time.monotonic() < deadline)
@@ -138,7 +150,7 @@ class PlanningHTTPSInference(HTTPSInference):
                     name = event["type"]
                     if name == "response.output_text.delta":
                         text += event.get("delta", "")
-                        no_secret(text, self.contract.key)
+                        no_secret(prior_tail + text, self.contract.key)
                     if name == "response.function_call_arguments.delta":
                         item = event.get("output_index")
                         arguments[item] = arguments.get(item, "") + event.get("delta", "")
@@ -153,14 +165,57 @@ class PlanningHTTPSInference(HTTPSInference):
 
         normalized = normalized_events(guarded(), data)
         try:
-            ready = []
-            size = 0
+            ready, pending = [], ""
+            size, sequence = 0, 0
+            early = False
+            terminal = None
+
+            def emit(value):
+                nonlocal sequence
+                name = value.pop("type")
+                value.pop("sequence_number", None)
+                raw = frame(name, value, sequence)
+                sequence += 1
+                return raw
+
+            def delta(text):
+                keep = len(self.contract.key) - 1
+                self.emitted_tail = (self.emitted_tail + text)[-keep:] if keep else ""
+                return emit({"type": "response.output_text.delta", "output_index": 0,
+                             "content_index": 0, "item_id": "msg_planning", "delta": text})
+
             for raw in normalized:
                 size += len(raw)
                 require(size <= MAX_RESPONSE)
-                no_secret(decode(raw.split(b"data: ", 1)[1].strip()), self.contract.key)
-                ready.append(raw)
-            require(bool(ready))
-            yield from ready
+                value = decode(raw.split(b"data: ", 1)[1].strip())
+                no_secret(value, self.contract.key)
+                name = value["type"]
+                if name == "response.output_text.delta":
+                    pending += value["delta"]
+                    no_secret(self.emitted_tail + pending, self.contract.key)
+                    # Retain the LONGEST suffix that is a proper prefix of key.
+                    maximum = min(len(pending), len(self.contract.key) - 1)
+                    held = next((length for length in range(maximum, 0, -1)
+                                 if pending.endswith(self.contract.key[:length])), 0)
+                    safe = pending[:-held] if held else pending
+                    # First safe text is genuinely early; subsequent tiny deltas
+                    # coalesce to keep existing worker/API event bounds practical.
+                    if safe and (not early or len(safe.encode()) >= 1024):
+                        pending = pending[len(safe):]
+                        early = True
+                        yield delta(safe)
+                elif name in ("response.created", "response.content_part.added") or (
+                        name == "response.output_item.added" and value["item"]["type"] == "message"):
+                    yield emit(value)
+                else:
+                    ready.append(value)
+                    if name in ("response.completed", "error"):
+                        terminal = name
+            require(terminal is not None)
+            if terminal == "response.completed" and pending:
+                no_secret(self.emitted_tail + pending, self.contract.key)
+                yield delta(pending)
+            for value in ready:
+                yield emit(value)
         finally:
             normalized.close()

@@ -74,7 +74,8 @@ def main(*, failure_after_pair=False):
     try:
         fixture.prepare()
         broker = Broker(fixture.channel, persistent_directory=True,
-                        transport_factory=SyntheticRejectedBacklog if failure_after_pair else SyntheticAcceptance)
+                         transport_factory=SyntheticRejectedBacklog if failure_after_pair else SyntheticAcceptance,
+                         mode="synthetic")
         failed = threading.Event()
         thread = threading.Thread(target=run_broker, args=(broker, failed), daemon=True)
         thread.start()

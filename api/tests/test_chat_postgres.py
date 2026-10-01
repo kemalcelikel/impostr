@@ -132,7 +132,12 @@ def test_postgres_two_submitters_reserve_one_committed_turn_and_preserve_heads()
             app = create_app(engine, settings, workspace_root=Path(directory) / "workspace")
 
             # Prevent a failed assertion from leaving a fake dispatcher at lifespan cleanup.
+            from test_chat import FakeBroker
+
             class SubmitOnly:
+                broker = FakeBroker()
+                test_scope = None
+
                 def close(self):
                     pass
 

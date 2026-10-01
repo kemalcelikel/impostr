@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
+from app.chat_admission import TestScope, admission
 from app.chat_broker import Broker
 from app.chat_protocol import (
     MAX_EVENTS,
@@ -22,7 +23,6 @@ from app.chat_protocol import (
     TURN_SECONDS,
     ChannelError,
     escaped_size,
-    opaque,
     require,
 )
 from app.chat_protocol import event as validate_event
@@ -52,8 +52,11 @@ def command(turn: ChatTurn, operation: str) -> dict[str, Any]:
 
 
 class Dispatcher:
-    def __init__(self, engine: Engine, broker: Broker) -> None:
+    def __init__(
+        self, engine: Engine, broker: Broker, *, test_scope: TestScope | None = None
+    ) -> None:
         self.engine, self.broker = engine, broker
+        self.test_scope = test_scope
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.guard = threading.Lock()
@@ -134,12 +137,18 @@ class Dispatcher:
 
     def advance(self, turn_id: uuid.UUID) -> None:
         hello = self.broker.call({"op": "hello"})
-        epoch = uuid.UUID(opaque(hello.get("epoch")))
         start = None
         with Session(self.engine, expire_on_commit=False) as db:
             initial = db.get(ChatTurn, turn_id)
             if initial is None:
                 return
+            epoch = admission(
+                hello,
+                initial.project_id,
+                initial.actor_user_id,
+                self.test_scope,
+                new=initial.state == "queued",
+            )
             # Match application actor -> web-session -> project -> turn lock order.
             authorize(db, initiating_actor(db, initial), initial.project_id, lock=True)
             turn = db.scalar(select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update())

@@ -2,13 +2,21 @@
 # No default mounts, live activation, Docker socket, host HOME or credentials.
 services:
   api:
+    build:
+      target: development
+    command: ["python", "-B", "tests/imp005_scoped_server.py"]
     environment:
       IMPOSTR_CHAT_ENABLED: "1"
+      IMPOSTR_TEST_POSTGRES: "1"
+      IMPOSTR_TEST_CHAT_CHANNEL: "1"
+      IMPOSTR_TEST_CHAT_JOINED: "1"
     volumes:
       - type: bind
         source: ${IMPOSTR_SYNTHETIC_BROKER_DIR:?Owned reviewed broker directory required}
         target: /run/impostr-broker
         read_only: true
+        bind:
+          create_host_path: false
   api-integration-check:
     environment:
       IMPOSTR_TEST_CHAT_CHANNEL: "1"
@@ -19,3 +27,5 @@ services:
         source: ${IMPOSTR_SYNTHETIC_BROKER_DIR:?Owned reviewed broker directory required}
         target: /run/impostr-broker
         read_only: true
+        bind:
+          create_host_path: false

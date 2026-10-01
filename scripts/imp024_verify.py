@@ -257,9 +257,10 @@ class EmptyOutput:
 
 
 class CheckOutput(Output):
-    def __init__(self, check):
+    def __init__(self, check, *, check_files=CHECK_FILES):
         super().__init__()
         self.check = check
+        self.check_files = check_files
         self.reasons = set()
         self.findings = []
 
@@ -276,7 +277,7 @@ class CheckOutput(Output):
         elif self.check == "ruff_format" and line.startswith(b"Would reformat:"):
             self.reasons.add("format_mismatch")
             path = line.removeprefix(b"Would reformat:").strip().decode("utf-8", errors="replace")
-            if path in CHECK_FILES:
+            if path in self.check_files:
                 self.findings.append({"file": path, "code": "format_mismatch"})
         elif self.check == "ruff_lint" and re.search(rb"\b(?:E|F|I|UP|B)[0-9]{3}\b", line):
             self.reasons.add("lint_findings")
@@ -287,8 +288,9 @@ class CheckOutput(Output):
 class RuffJsonOutput:
     stdout_only = True
 
-    def __init__(self):
+    def __init__(self, *, check_files=CHECK_FILES):
         self.buffer = bytearray()
+        self.check_files = check_files
         self.reasons = set()
         self.findings = []
 
@@ -301,8 +303,8 @@ class RuffJsonOutput:
             rows = json.loads(self.buffer)
             require(isinstance(rows, list) and len(rows) <= 256)
             projected = []
-            filenames = {name: name for name in CHECK_FILES}
-            filenames.update({"/app/" + name: name for name in CHECK_FILES})
+            filenames = {name: name for name in self.check_files}
+            filenames.update({"/app/" + name: name for name in self.check_files})
             for row in rows:
                 require(isinstance(row, dict))
                 filename, code = row.get("filename"), row.get("code")

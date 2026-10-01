@@ -12,6 +12,101 @@ delivered release. Consult `BACKLOG.md` for task outcomes.
 
 ## Operator-only chat-safety prototype (IMP-002)
 
+### Ordinary foreground planning connection (IMP-005)
+
+Base `compose.yaml` remains chat-off and has no host broker attachment. The
+optional `compose.chat.yaml` enables only the API and mounts the retained channel
+read-only with `create_host_path: false`. It does not launch a broker, acquire a
+credential, enable synthetic inference or configure a provider. Independent boundary
+review and the coordinator's owned synthetic ordinary-stack proof passed. This is
+not real-provider or live acceptance; the owner deferred that test.
+
+The human-only connection command, run from repository root in a plain terminal, is:
+
+```sh
+/usr/bin/python3 -I -B scripts/imp005_connection.py connect
+```
+
+Supply the exact public HTTPS:443 authority, supported Responses route, deployment,
+and API-version (or literal `none`); none is guessed or discovered from installed
+agents, host environment/config/auth, or files. The measured UID/GID1000 runtime,
+owned runtime/channel and exclusive lock, DNS pin and CA/TLS setup are checked
+**before** verified no-echo API-key input. A failure/non-TTY refuses setup. The key
+is trusted foreground-process memory only, not an argument/env/file or API/worker/
+browser/DB/log value. Python copies and host swap/dumps/debuggers remain risks;
+this is not a secret-storage facility or an encoded/semantic-exfiltration guarantee.
+
+Keep the launcher foreground. In a separate operator terminal, use the existing
+local DB setup/project name and explicitly add the overlay (no provider key here):
+
+```sh
+IMPOSTR_CHAT_CHANNEL_DIR=/tmp/impostr-chat-1000/channel \
+  docker compose -p impostr-local -f compose.yaml -f compose.chat.yaml up -d --wait
+```
+
+This is a local loopback setup, not deployment/runner authorization. The launcher
+does not run Docker, migrations, fixture accounts or acceptance. Real-provider
+compatibility/testing remains owner-deferred. There is no automatic background
+service, persisted provider setting, host-auth reuse or reconnect credential cache.
+Restart always requires fresh explicit terminal facts and no-echo human key input.
+
+`Ctrl-C`, SIGTERM and SIGHUP disable the in-memory key and perform bounded owned
+worker/socket cleanup. `/tmp/impostr-chat-1000/channel` remains the **same inode**
+for the API's existing bind; its mode0700 sibling `private` contains only the
+exclusive lock and ephemeral confined turn scratch, never mounted into the API.
+Clean restart removes the lock, creates a new broker epoch and reconstructs from
+DB history. Uncertain dispatch is visibly interrupted, never automatically retried.
+On crash/SIGKILL/cleanup failure, stale lock/socket/scratch deliberately blocks
+restart. Do not delete/adopt it automatically: the operator must first stop the
+attached API and confirm the old launcher and all its workers are gone, then
+inspect/remove only that owned runtime and recreate/rebind the API. Unknown or
+foreign/symlink/writable state fails closed; no unsafe host fallback is provided.
+
+Capacity is deliberately bounded: **248 new turns per foreground broker epoch**
+(8 additional tombstones reserved for uncertain aborts), at most 8 concurrent turns
+and one file-writing turn per project. At capacity the broker stays alive, existing
+turns can drain, history/replay remain available, and new turn requests return 503.
+Stop after draining and restart with fresh human input; don't retry an uncertain
+turn. This is a practical session-capacity limitation, not transparent unlimited
+service. Existing 12-prior-turn/context/output/time bounds remain unchanged.
+
+The generated repository-owned `PLANNING_PROMPT` in `scripts/imp024_worker.py` is
+the vetted agent source, not unrestricted installed `tech-lead` permissions. It
+covers specification/AGENTS pair and backlog planning. Only canonical reads,
+questions and once-permitted proposal edits are admitted; approvals/readiness
+remain human/server-controlled. Normal API admission/dispatch accepts only explicit
+`planning` broker mode. Synthetic/operator/unknown mode cannot start ordinary
+account turns; test-only entrypoints use generated actor/project-ID scopes,
+without a normal environment/config allow-synthetic switch.
+
+Real transport now releases bounded literal-key-safe text prefixes before terminal
+completion. It retains the longest suffix that could complete the literal key;
+split/JSON-decoded key echoes fail closed, including emitted-tail matching across
+model calls within a turn. The first safe delta is early; later tiny deltas coalesce
+in roughly 1 KiB chunks within existing event/text budgets. Tool arguments/functions
+and successful terminal frames stay withheld until full validated completion.
+Late invalid output/error can leave honest partial safe chat text; it cannot
+authorize failed-terminal proposals or make a partial reply successful. This is
+not protection against arbitrary encodings or semantic disclosure by a provider.
+
+**Coordinator-only synthetic verification (already passed; not a live-provider test):**
+
+```sh
+/usr/bin/python3 -I -B scripts/imp005_verify.py
+```
+
+The coordinator reported 94 focused tests, build/migration/API checks, Ruff, format,
+and mypy passing, followed by joined restart/save-conflict/PostgreSQL-race/approval-
+invalidation/uncertain-start-and-reply-no-repeat/revocation checks, broker/worker/
+channel/DB outage checks, the ordinary frontdoor workflow, and all owned cleanup.
+Independent boundary and affected-repair review passed. The verifier uses generated
+inputs under `/tmp/opencode`, disposable Compose/DB resources, and controlled
+synthetic transport through the early-text normalizer. It never invokes the public
+operator entrypoint, real model or real accounts. Unit tests alone are not this
+runtime acceptance. Historical browser
+candidate fingerprints are unchanged past evidence, **not valid previews of this
+new boundary**; no new UI/profile rebuild is required for unchanged delivered UI.
+
 ### IMP-024 phase three — verified synthetic UI/front-door acceptance
 
 **Latest coordinator-verified outcome:** On exact base

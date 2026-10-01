@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.audit import record_audit
+from app.chat_admission import admission
 from app.chat_protocol import ChannelError, answer, encode, message_text
 from app.chat_state import TERMINAL, authorize, context, conversation, event, finish
 from app.dependencies import CurrentActor, DbSession, SettingsDependency
@@ -208,6 +209,15 @@ def submit(
         raise HTTPException(503, "Chat is disabled or broker unavailable")
     if db.get(ProjectTurnReservation, project_id) is not None:
         raise HTTPException(409, "Another project turn is active; retry after it finishes")
+    dispatcher = request.app.state.chat_dispatcher
+    try:
+        admission(
+            dispatcher.broker.call({"op": "hello"}), project_id, actor.id, dispatcher.test_scope
+        )
+    except (ChannelError, ValueError) as exc:
+        raise HTTPException(
+            503, "Planning broker unavailable or connection capacity reached"
+        ) from exc
     decision = consume_rate_bucket(
         db,
         settings=settings,

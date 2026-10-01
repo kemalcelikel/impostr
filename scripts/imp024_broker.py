@@ -1,7 +1,8 @@
-"""Host UID1000 synthetic-only product broker. REVIEW before channel/worker execution.
+"""Host UID1000 product broker. REVIEW before new channel/worker execution.
 
 Fixed framed Unix operations, API UID10001 peers only. No HTTP/OpenCode proxy,
-Docker, DB, host config/auth, operator/live modes or arbitrary inference upstream.
+Docker, DB, host config/auth or arbitrary inference upstream. Public CLI synthetic
+only; reviewed ordinary human launcher explicitly injects planning transport.
 Each turn owns the delivered bwrap boundary + inference relay; restart changes
 epoch. Runtime state is not trusted after a full restart: API interrupts unknowns.
 """
@@ -232,9 +233,10 @@ def send_pipe(process, value):
 
 
 class Turn:
-    def __init__(self, key, payload, *, transport_factory=SyntheticProduct):
+    def __init__(self, key, payload, *, transport_factory=SyntheticProduct, scratch_parent="/tmp/opencode"):
         self.key, self.payload = key, payload
         self.transport_factory = transport_factory
+        self.scratch_parent = scratch_parent
         self.events = []
         self.bytes = 0
         self.controls = []
@@ -255,7 +257,7 @@ class Turn:
         process = None
         terminal = False
         try:
-            with tempfile.TemporaryDirectory(prefix="imp024-turn-", dir="/tmp/opencode") as name:
+            with tempfile.TemporaryDirectory(prefix="imp024-turn-", dir=self.scratch_parent) as name:
                 root = Path(name)
                 root.chmod(0o700)
                 for directory in ("project", "code", "empty", "config"):
@@ -330,17 +332,21 @@ class Turn:
 
 
 class Broker:
-    def __init__(self, directory, *, persistent_directory=False, transport_factory=None):
+    def __init__(self, directory, *, persistent_directory=False, transport_factory=None,
+                 mode="synthetic", scratch_parent="/tmp/opencode", owned_runtime=False):
         require(os.getuid() == os.geteuid() == 1000 and os.getgid() == 1000)
         check_runtime()
-        require(directory.parent == Path("/tmp/opencode"))
+        require(directory.parent == Path("/tmp/opencode") or owned_runtime)
         self.persistent_directory = persistent_directory
         # Host-process injection ONLY. No channel field/CLI flag can choose a
         # transport, endpoint, credential or live activation for a worker.
+        require(mode in ("synthetic", "operator", "planning"))
+        require(mode == "synthetic" or transport_factory is not None)
         self.transport_factory = transport_factory or SyntheticProduct
-        self.mode = "operator" if transport_factory is not None else "synthetic"
-        # A bind mount pins the directory inode, not its pathname. The explicit
-        # disposable fixture mode retains that inode across broker restarts.
+        self.mode = mode  # Explicit trusted construction, NEVER inferred from injection.
+        self.scratch_parent = scratch_parent
+        # A bind mount pins the directory inode, not its pathname. Explicit
+        # retained-channel mode preserves that inode across clean restarts.
         # Never adopt a symlink, foreign/writable directory or stale socket.
         if persistent_directory and directory.exists():
             validate_persistent_directory(directory)
@@ -367,27 +373,31 @@ class Broker:
     def handle(self, value):
         value = request(value)
         if value["op"] == "hello":
-            return {"ok": True, "epoch": self.epoch, "mode": self.mode}
+            return {"ok": True, "epoch": self.epoch, "mode": self.mode,
+                    "admitting": len(self.turns) + len(self.aborted_unknown) < 248}
         require(value["epoch"] == self.epoch)
         key = scope(value)
         turn = self.turns.get(key[2])
         if value["op"] == "start":
             # Never resubmit, even after a completed/failed turn. Retained bounded
-            # tombstones; capacity failure requires a visible epoch restart.
+            # tombstones; bounded admission reserves 8 slots for uncertain aborts.
+            # At capacity the service remains available for polls/cleanup/history,
+            # but new turns require an explicit clean foreground human restart.
             require(turn is None and key[2] not in self.aborted_unknown
-                    and len(self.turns) + len(self.aborted_unknown) < 256)
+                    and len(self.turns) + len(self.aborted_unknown) < 248)
             require(sum(not item.stopped.is_set() for item in self.turns.values()) < 8)
             require(not any(item.key[0] == key[0] and not item.stopped.is_set()
                             for item in self.turns.values()))
-            turn = Turn(key, value["payload"], transport_factory=self.transport_factory)
+            turn = Turn(key, value["payload"], transport_factory=self.transport_factory,
+                        scratch_parent=self.scratch_parent)
             self.turns[key[2]] = turn
             turn.thread.start()
             return {"ok": True, "epoch": self.epoch}
         if turn is None:
             if value["op"] == "abort":
-                require(len(self.turns) + len(self.aborted_unknown) < 256)
                 existing = self.aborted_unknown.get(key[2])
                 require(existing is None or existing == key)
+                require(existing is not None or len(self.turns) + len(self.aborted_unknown) < 256)
                 # Abort can precede a delayed first start from a crashed API
                 # pump. Preserve a tombstone so that start cannot execute later.
                 self.aborted_unknown[key[2]] = key
@@ -454,8 +464,10 @@ class Broker:
         finally:
             for turn in self.turns.values():
                 turn.abort_requested.set()
+            deadline = time.monotonic() + 12
             for turn in self.turns.values():
-                turn.thread.join(8)
+                turn.thread.join(max(0, deadline - time.monotonic()))
+            require(all(not turn.thread.is_alive() for turn in self.turns.values()))
             self.listener.close()
             self.path.unlink()
             if not self.persistent_directory:

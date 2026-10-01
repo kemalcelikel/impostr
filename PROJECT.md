@@ -6,8 +6,11 @@
 not observed acceptance. The owner will test the application later; retain the live
 operator acceptance command but do not require it immediately. Synthetic preparation
 and review/backlog chat integrations are delivered. Ordinary Compose still defaults
-chat off and lacks a reusable configured live broker connection; IMP-005 finishes
-that wiring/lifecycle and resolves real transport's buffered-versus-incremental output.
+chat off. IMP-005 adds a reusable foreground explicit connection and optional
+ordinary Compose overlay. Its boundary review and coordinator synthetic ordinary-stack
+proof passed; real-provider operation remains untested and owner-deferred. See
+`docs/local-development.md` for setup/lifecycle, bounded admission and incremental
+literal-key-safe transport limits.
 No reusable host/file credential setup has been implemented or secretly authorized.
 Do not claim that default application chat works merely because its UI is delivered.
 
@@ -23,8 +26,10 @@ root in a plain terminal, after local verified commits. Await a sanitized human 
 agents must not run it. It accepts only explicit public HTTPS:443 Responses/API-key
 facts, with no guessed endpoint or settings, and fails closed if no-echo terminal input
 is unavailable. Secret-in-memory handling is not protection against host swap/dumps or
-memory copies. Real-provider compatibility remains unknown; responses are buffered
-until validation, so live early text deltas are not supported. This preparation does
+memory copies. Real-provider compatibility remains unknown. IMP-024 delivered
+buffered validation; IMP-005 streams bounded literal-key-safe prefixes, with tools/
+terminal held until validation and late-failure partial text retained (not arbitrary
+encoded/semantic-exfiltration protection). This preparation does
 not complete IMP-002/005/006/008, activate ordinary app chat, or satisfy first-release
 acceptance. Live remains disabled by default.
 

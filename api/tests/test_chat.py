@@ -18,6 +18,7 @@ from app.models import (
     AgentDocumentProposal,
     ChatInteraction,
     ChatTurn,
+    Project,
     ProjectDocument,
     ProjectDocumentRevision,
     ProjectTurnReservation,
@@ -34,11 +35,13 @@ class FakeBroker:
         self.events = []
         self.known = True
         self.fail_start = False
+        self.mode = "planning"
+        self.admitting = True
 
     def call(self, value):
         self.calls.append(value)
         if value["op"] == "hello":
-            return {"ok": True, "epoch": self.epoch}
+            return {"ok": True, "epoch": self.epoch, "mode": self.mode, "admitting": self.admitting}
         if value["op"] == "start" and self.fail_start:
             raise ChannelError()
         if value["op"] == "poll":
@@ -97,6 +100,57 @@ def submit(setup, request_id=None, prompt="Synthetic planning"):
     )
 
 
+@pytest.mark.parametrize("mode", ["synthetic", "operator", "unknown", None])
+def test_normal_api_denies_nonplanning_mode_and_keeps_history(chat_setup, mode):
+    client, engine, _, _, base, conv, broker, dispatcher = chat_setup
+    request_id = uuid.uuid4()
+    turn = submit(chat_setup, request_id).json()["id"]
+    broker.mode = mode
+    # Existing idempotent history remains accessible even when mode disappears.
+    assert submit(chat_setup, request_id).json()["id"] == turn
+    dispatcher.tick()
+    assert not any(call["op"] == "start" for call in broker.calls)
+    assert client.get(f"{base}/{conv}").json()["turns"][0]["state"] == "interrupted"
+    assert client.get(f"{base}/{conv}/events").status_code == 200
+    assert submit(chat_setup).status_code == 503
+    with Session(engine) as db:
+        assert len(list(db.scalars(select(ChatTurn)))) == 1
+
+
+def test_capacity_and_broker_outage_refuse_admission_without_losing_text(chat_setup):
+    client, _, _, _, base, conv, broker, dispatcher = chat_setup
+    request_id = uuid.uuid4()
+    submit(chat_setup, request_id)
+    broker.add("delta", {"text": "Safe partial survives outage"})
+    dispatcher.tick()
+    broker.admitting = False
+    # Capacity blocks only NEW dispatch; existing turn can finish and replay.
+    broker.add("completed", {"proposals": []})
+    dispatcher.tick()
+    assert submit(chat_setup).status_code == 503
+    original_call = broker.call
+    broker.call = lambda _: (_ for _ in ()).throw(ChannelError())
+    assert submit(chat_setup).status_code == 503
+    assert submit(chat_setup, request_id).status_code == 202
+    assert any(
+        row["data"].get("text") == "Safe partial survives outage"
+        for row in client.get(f"{base}/{conv}/events").json()["events"]
+    )
+    broker.call = original_call
+
+
+def test_synthetic_scope_is_specific_to_generated_actor_project_pair(chat_setup):
+    _, _, _, project, _, _, broker, dispatcher = chat_setup
+    with Session(dispatcher.engine) as db:
+        owner = db.get(Project, uuid.UUID(project)).owner_user_id
+    broker.mode = "synthetic"
+    dispatcher.test_scope = lambda pid, uid: pid == uuid.UUID(project) and uid == owner
+    assert submit(chat_setup).status_code == 202
+    dispatcher.test_scope = lambda pid, uid: False
+    dispatcher.tick()
+    assert not any(call["op"] == "start" for call in broker.calls)
+
+
 def test_disabled_auth_csrf_last_tab_and_cross_project(
     chat_setup, account_factory, settings, workspace_root: Path
 ):
@@ -133,7 +187,7 @@ def test_committed_idempotency_reservation_ordered_replay_and_restart(chat_setup
     assert submit(chat_setup, request_id).json()["id"] == turn_id
     assert submit(chat_setup, request_id, "Changed").status_code == 409
     assert submit(chat_setup).status_code == 409
-    assert broker.calls == []
+    assert all(call["op"] == "hello" for call in broker.calls)
     with Session(engine) as db:
         assert db.get(ChatTurn, uuid.UUID(turn_id)).state == "queued"
         assert db.get(ProjectTurnReservation, uuid.UUID(project)).turn_id == uuid.UUID(turn_id)
