@@ -1,4 +1,4 @@
-"""Coordinator-only executable joined phase-two checks, AFTER boundary review.
+"""Coordinator-only joined backend/workflow checks, AFTER boundary review.
 
 Run in the disposable api-integration-check container, never on the host/live DB.
 Real HTTP authentication, PostgreSQL, dispatcher, UnixBroker and confined worker.
@@ -9,6 +9,7 @@ real channel calls; it never fabricates a broker response or exposes a test rout
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -48,6 +49,13 @@ from app.models import (
 from app.passwords import hash_password
 
 ORIGIN = "http://127.0.0.1:8080"
+
+
+def restart_owned_broker():
+    input(
+        "ACTION: SIGTERM owned broker; wait for exit/worker cleanup; "
+        "restart with --persistent-directory; then press Enter: "
+    )
 
 
 def fixture_only():
@@ -274,8 +282,8 @@ class Checks:
         conv = self.mutate("POST", root + "/chat", {"title": "Joined synthetic"}, status=201)["id"]
         return project, root, root + "/chat/" + conv, PROJECT
 
-    def submit(self, base):
-        payload = {"request_id": str(uuid.uuid4()), "prompt": "Prepare only the synthetic proposal"}
+    def submit(self, base, prompt="Prepare only the synthetic proposal"):
+        payload = {"request_id": str(uuid.uuid4()), "prompt": prompt}
         first = self.mutate("POST", base + "/turns", payload, status=202)
         self.last_turn = first["id"]
         duplicate = self.mutate("POST", base + "/turns", payload, status=202)
@@ -458,6 +466,307 @@ class Checks:
                 )
                 is None
             )
+
+    def review(self, root):
+        files = {}
+        for kind in ("project", "agents", "backlog"):
+            result = self.client.get(root + "/documents/" + kind)
+            assert result.status_code == 200, "saved review inaccessible"
+            files[kind] = result.json()
+        return files
+
+    def pair(self, root, files):
+        pair = self.mutate(
+            "POST",
+            root + "/document-pair-approval",
+            {
+                "expected_project_revision": files["project"]["revision_number"],
+                "expected_agents_revision": files["agents"]["revision_number"],
+            },
+        )
+        assert pair["actor_user_id"] == str(self.user_id), "approval must be a human action"
+        assert self.client.get(root + "/document-pair-approval").json()["approved"] is True
+        return pair
+
+    def final(self, root, pair, files):
+        manifest = self.mutate(
+            "POST",
+            root + "/final-approval",
+            {
+                "expected_pair_approval_id": pair["id"],
+                "expected_backlog_revision": files["backlog"]["revision_number"],
+            },
+        )
+        assert manifest["actor_user_id"] == str(self.user_id)
+        assert manifest["pair_approval_id"] == pair["id"]
+        assert self.client.get(root + "/final-approval").json()["approved"] is True
+        self.downloads(root, manifest, files)
+        return manifest
+
+    def downloads(self, root, manifest, files):
+        for kind, file in files.items():
+            reference = manifest[kind]
+            assert reference["revision_number"] == file["revision_number"]
+            assert reference["content_sha256"] == file["content_sha256"]
+            with Session(self.engine) as db:
+                revision = db.get(ProjectDocumentRevision, uuid.UUID(reference["id"]))
+                assert str(revision.document_id) == file["id"]
+                assert revision.content == file["content"]
+            for _ in range(2):
+                response = self.client.get(root + "/final-approval/files/" + kind)
+                assert response.status_code == 200, "approved download inaccessible"
+                assert response.body == file["content"].encode("utf-8"), "download bytes drifted"
+                assert hashlib.sha256(response.body).hexdigest() == reference["content_sha256"]
+
+    def blocked_downloads(self, root):
+        for kind in ("project", "agents", "backlog"):
+            assert self.client.get(root + "/final-approval/files/" + kind).status_code == 409
+
+    def all_events(self, base):
+        # One conversation now spans several turns; the API intentionally pages
+        # at 64 events. Never mistake page one for the current turn/replay tail.
+        rows, cursor = [], 0
+        for _ in range(32):
+            response = self.client.get(base + f"/events?after={cursor}")
+            assert response.status_code == 200, "event history inaccessible"
+            page = response.json()
+            if not page["events"]:
+                return rows
+            assert page["after"] > cursor, "event cursor did not advance"
+            rows.extend(page["events"])
+            cursor = page["after"]
+        raise AssertionError("workflow event history exceeded fixture bound")
+
+    def replay(self, base):
+        """Reconnect twice using the same durable cursor, with real SSE HTTP reads."""
+        page = self.all_events(base)
+        assert len(page) >= 3
+        cursor = page[-3]["id"]
+        expected = page[-2:]
+        for _ in range(2):
+            with self.client.stream("GET", base + f"/stream?after={cursor}") as response:
+                assert response.status_code == 200
+                replayed = []
+                for line in response.iter_lines():
+                    if line.startswith("data: "):
+                        replayed.append(json.loads(line[6:]))
+                        if len(replayed) == len(expected):
+                            break
+                assert replayed == expected, "durable reconnect replay drifted"
+
+    def planned_turn(self, root, base, prompt, kinds):
+        before = self.review(root)
+        turn, _ = self.submit(base, prompt)
+        self.reply(base, self.pending(base, "question"))
+        for _ in kinds:
+            self.reply(base, self.pending(base, "permission"))
+        self.terminal(turn, "completed")
+        after = self.review(root)
+        with Session(self.engine) as db:
+            proposals = list(
+                db.scalars(
+                    select(AgentDocumentProposal).where(
+                        AgentDocumentProposal.turn_id == uuid.UUID(turn)
+                    )
+                )
+            )
+            assert len(proposals) == len(kinds), "unexpected agent proposal count"
+            for proposal in proposals:
+                assert proposal.state == "imported"
+                assert proposal.base_revision_id == proposal.observed_revision_id
+                revision = db.get(ProjectDocumentRevision, proposal.imported_revision_id)
+                assert revision.origin == "agent" and revision.author_user_id == self.user_id
+                assert revision.content == proposal.content
+        for kind in before:
+            if kind in kinds:
+                assert after[kind]["revision_number"] == before[kind]["revision_number"] + 1
+                assert after[kind]["origin"] == "agent"
+                assert after[kind]["content"] != before[kind]["content"]
+            else:
+                assert after[kind] == before[kind], "unproposed file changed"
+        events = self.all_events(base)
+        tools = [row["data"] for row in events if row["turn_id"] == turn and row["type"] == "tool"]
+        assert {"read", "question", "edit"} <= {
+            tool["tool"] for tool in tools if tool["status"] == "completed"
+        }
+        assert self.api.count("start", turn) == 1
+        assert self.api.count("reply", turn) == 1 + len(kinds)
+        return turn, after
+
+    def workflow(self):
+        # Start from the real immutable starter, with NO preseeded human approval.
+        project = self.mutate(
+            "POST",
+            "/api/projects",
+            {"name": "Synthetic workflow " + uuid.uuid4().hex[:12]},
+            status=201,
+        )["id"]
+        self.projects.append(uuid.UUID(project))
+        root = f"/api/projects/{project}"
+        conversation = self.mutate("POST", root + "/chat", {"title": "Workflow"}, status=201)["id"]
+        base = root + "/chat/" + conversation
+        self.blocked_downloads(root)
+        _, files = self.planned_turn(
+            root, base, "Synthetic acceptance: specify Fieldnotes", ("project", "agents")
+        )
+        assert self.client.get(root + "/document-pair-approval").json()["approved"] is False
+        self.blocked_downloads(root)
+        pair = self.pair(root, files)
+        # The unchanged backlog starter cannot be final-approved even with a valid pair.
+        self.mutate(
+            "POST",
+            root + "/final-approval",
+            {"expected_pair_approval_id": pair["id"], "expected_backlog_revision": 1},
+            status=422,
+        )
+        _, files = self.planned_turn(
+            root, base, "Synthetic acceptance: plan Fieldnotes backlog", ("backlog",)
+        )
+        assert self.client.get(root + "/document-pair-approval").json()["approved"] is True
+        tasks = self.client.get(root + "/backlog/tasks").json()
+        assert [task["id"] for task in tasks["tasks"]] == ["TASK-001", "TASK-002"]
+        assert all(task["status"] == "-" and not task["ready"] for task in tasks["tasks"])
+        assert tasks["summary"]["ready_count"] == 0
+        self.blocked_downloads(root)
+        # Explicit, authenticated human task-specific review/readiness action.
+        task = tasks["tasks"][0]
+        reviewed = self.mutate(
+            "PUT",
+            root + "/backlog/tasks/" + task["id"],
+            {
+                "expected_revision": tasks["revision_number"],
+                "title": task["title"],
+                "body": task["body"],
+                "dependencies": task["dependencies"],
+                "status": " ",
+            },
+        )
+        assert reviewed["summary"]["ready_count"] == 1
+        assert reviewed["tasks"][0]["ready"] and reviewed["tasks"][0]["eligible"]
+        assert not reviewed["tasks"][1]["ready"]
+        files = self.review(root)
+        assert files["backlog"]["origin"] == "human"
+        manifest = self.final(root, pair, files)
+        print(
+            "PASS agent pair/backlog imports, human readiness/approvals, exact three downloads",
+            flush=True,
+        )
+
+        # Same permission path, actual native edit; DB must reject agent readiness.
+        denied, _ = self.submit(base, "Synthetic acceptance: activate Fieldnotes task")
+        self.reply(base, self.pending(base, "question"))
+        permission = self.pending(base, "permission")
+        self.api.gate("after", "completion")
+        self.reply(base, permission)
+        # Prove actual native completion/proposal bytes reached the import seam,
+        # not merely an unrelated worker failure that happened to interrupt.
+        self.api.entered("after", "completion")
+        assert self.state(denied) == "running"
+        self.api.release("after", "completion")
+        # Import validation fails closed as a visible interruption, not a native
+        # worker failure: do not change delivered backend terminal semantics.
+        self.terminal(denied, "interrupted")
+        self.no_import(denied)
+        assert self.review(root) == files
+        self.downloads(root, manifest, files)
+        print(
+            "PASS native agent readiness change rejected without imports or approval drift",
+            flush=True,
+        )
+
+        _, files = self.planned_turn(
+            root, base, "Synthetic acceptance: revise Fieldnotes specification", ("project",)
+        )
+        self.invalidated(root)
+        self.blocked_downloads(root)
+        self.mutate(
+            "POST",
+            root + "/final-approval",
+            {
+                "expected_pair_approval_id": pair["id"],
+                "expected_backlog_revision": files["backlog"]["revision_number"],
+            },
+            status=409,
+        )
+        old_pair, old_manifest = pair, manifest
+        pair = self.pair(root, files)
+        manifest = self.final(root, pair, files)
+        assert pair["id"] != old_pair["id"] and manifest["id"] != old_manifest["id"]
+        print(
+            "PASS agent pair change invalidates both gates; explicit exact reapproval", flush=True
+        )
+
+        interrupted, payload = self.submit(base, "Synthetic acceptance: extend Fieldnotes backlog")
+        question = self.pending(base, "question")
+        self.replay(base)
+        before = self.all_events(base)
+        old_epoch = UnixBroker().call({"op": "hello"})["epoch"]
+        self.api.stop()
+        restart_owned_broker()
+        assert UnixBroker().call({"op": "hello"})["epoch"] != old_epoch
+        self.api.start()
+        self.terminal(interrupted, "interrupted")
+        self.no_import(interrupted)
+        history = self.client.get(base).json()
+        assert (
+            next(row for row in history["interactions"] if row["id"] == question["id"])["state"]
+            == "interrupted"
+        )
+        self.reply(base, question, status=409)
+        assert self.mutate("POST", base + "/turns", payload, status=202)["id"] == interrupted
+        assert (
+            self.api.count("start", interrupted) == 1 and self.api.count("reply", interrupted) == 0
+        )
+        after = self.all_events(base)
+        assert after[: len(before)] == before
+        assert self.review(root) == files
+        self.downloads(root, manifest, files)
+        assert self.client.get(root + "/chat").json()["last_conversation_id"] == conversation
+
+        recovered, files = self.planned_turn(
+            root, base, "Synthetic acceptance: extend Fieldnotes backlog", ("backlog",)
+        )
+        with Session(self.engine) as db:
+            row = db.get(ChatTurn, uuid.UUID(recovered))
+            assert any(
+                "Recorded turn state: interrupted" in item["text"]
+                for item in row.payload["history"]
+            )
+        assert any(
+            row["turn_id"] == recovered
+            and row["type"] == "started"
+            and row["data"]["context_reconstructed"]
+            for row in self.all_events(base)
+        )
+        final_status = self.client.get(root + "/final-approval").json()
+        assert final_status["pair_approved"] is True and final_status["approved"] is False
+        assert final_status["current_pair_approval_id"] == pair["id"]
+        self.blocked_downloads(root)
+        tasks = self.client.get(root + "/backlog/tasks").json()["tasks"]
+        assert [task["id"] for task in tasks] == ["TASK-001", "TASK-002", "TASK-003"]
+        assert [task["status"] for task in tasks] == [" ", "-", "-"]
+        self.mutate(
+            "POST",
+            root + "/final-approval",
+            {
+                "expected_pair_approval_id": pair["id"],
+                "expected_backlog_revision": manifest["backlog"]["revision_number"],
+            },
+            status=409,
+        )
+        reapproved = self.final(root, pair, files)
+        assert reapproved["id"] != manifest["id"]
+        assert reapproved["project"] == manifest["project"]
+        assert reapproved["agents"] == manifest["agents"]
+        assert reapproved["backlog"]["id"] != manifest["backlog"]["id"]
+        assert (
+            self.api.count("start", interrupted) == 1 and self.api.count("reply", interrupted) == 0
+        )
+        print(
+            "PASS reconnect/full restart interruption, new successful turn, "
+            "backlog-only invalidation and exact reapproval",
+            flush=True,
+        )
 
     def normal_restart_and_concurrency(self):
         project, root, base, captured = self.project()
@@ -697,10 +1006,7 @@ class Checks:
         old_epoch = UnixBroker().call({"op": "hello"})["epoch"]
         before = self.client.get(base + "/events").json()["events"]
         self.api.stop()
-        input(
-            "ACTION: SIGTERM owned broker; wait for exit/worker cleanup; "
-            "restart with --persistent-directory; then press Enter: "
-        )
+        restart_owned_broker()
         assert UnixBroker().call({"op": "hello"})["epoch"] != old_epoch
         self.api.start()
         self.terminal(turn, "interrupted")
@@ -802,7 +1108,7 @@ class Checks:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("check", "lifecycle", "serve"))
+    parser.add_argument("mode", choices=("check", "lifecycle", "workflow", "serve"))
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--port", type=int)
     args = parser.parse_args()
@@ -830,6 +1136,8 @@ def main():
             if args.mode == "check":
                 checks.normal_restart_and_concurrency()
                 checks.uncertain_reply_and_revocation()
+            elif args.mode == "workflow":
+                checks.workflow()
             else:
                 checks.lifecycle()
         except Exception:

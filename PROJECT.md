@@ -2,33 +2,34 @@
 
 ## Purpose and release boundary
 
-**Current verified chat UI:** Phase-three synthetic UI is delivered in `b72e98c`:
-conversation tabs, rendered questions/once-only permissions, proposal comparisons,
-human-save conflict preservation and actual front-door incremental output. Normal
-generated Member rendered review and narrow/desktop design checks passed. Full
-integrated workflow/operator relay handoff remains phase four; no live chat activation
-or real provider compatibility is claimed. Exact development handoff disclosure/tamper
-risk is owner-accepted only for temporary synthetic Member login/cleanup, not secrets.
+**Latest IMP-024 preparation:** Phases one and two (phase two's delivered 5/5 plus its
+focused additional 1/3 repair) and phase three (5/5) are delivered. Phase four uses 3/5;
+its integrated synthetic workflow/recovery proof, reviewed operator boundary, fresh
+candidate profile and rendered approval/download/reapproval acceptance passed. The
+rendered tests used a generated Member and synthetic project only; stop/cleanup verified
+removal of accounts, login, stack/images, private and broker state. No real credentials
+or live model operation were used. The only remaining IMP-024 step is the human-only
+`/usr/bin/python3 -I -B scripts/imp024_operator.py setup-accept` from the repository
+root in a plain terminal, after local verified commits. Await a sanitized human outcome;
+agents must not run it. It accepts only explicit public HTTPS:443 Responses/API-key
+facts, with no guessed endpoint or settings, and fails closed if no-echo terminal input
+is unavailable. Secret-in-memory handling is not protection against host swap/dumps or
+memory copies. Real-provider compatibility remains unknown; responses are buffered
+until validation, so live early text deltas are not supported. This preparation does
+not complete IMP-002/005/006/008, activate ordinary app chat, or satisfy first-release
+acceptance. Live remains disabled by default.
 
-**Current verified chat backend:** IMP-024 phases one/two are delivered locally
-(backend `a39a2f4`): confined planning interactions/proposals plus authenticated durable
-API/DB/broker flow, actual restart/outage/no-duplicate recovery, concurrent human-save
-protection, approval invalidation and active revocation. Joined synthetic acceptance
-and owned cleanup passed. Chat UI/front-door stream rendering and final operator
-handoff remain phase-three/four work; no live model/account acceptance or release claim.
-Older prototype-only/nonintegrated wording below records previous checkpoints, not
-the current backend capability. Default Compose still has no live chat activation.
+Earlier IMP-024 UI/backend checkpoints below describe delivered components and retain
+their historical evidence; they are not the latest phase-four state. Exact development
+handoff disclosure/tamper risk is owner-accepted only for temporary synthetic Member
+login/cleanup, not secrets.
 
-**Latest approved preparation:** Build the complete local text-chat path through
-synthetic end-to-end verification (IMP-024), reusing delivered IMP-023. Live access
-remains disabled until a reviewed human-operated fixed model connection and existing
-live acceptance pass. Use a restricted host broker/private authenticated Unix channel
-to the API; namespace-local OpenCode server/driver and shim; trusted model-only relay.
-Neither API nor worker receives host/provider credentials or a general OpenCode proxy.
-An explicit operator-owned endpoint/deployment/auth contract replaces reliance on the
-parked host-configuration resolver. A human may provide a secret through reviewed
-no-echo input into relay memory, never command arguments/environment/DB/browser/worker.
-Exact setup and supported account facts remain execution work, not invented settings.
+The implementation uses a restricted host broker/private authenticated Unix channel
+to the API; namespace-local OpenCode server/driver and shim; and a trusted model-only
+relay. Neither API nor worker receives host/provider credentials or a general OpenCode
+proxy. An explicit operator-owned endpoint/deployment/auth contract replaces reliance
+on the parked host-configuration resolver. Do not invent endpoint, deployment or
+API-version settings; real-provider compatibility remains unknown.
 
 The owner cancelled aggregate resource-quota prerequisites for personal-PC local
 text chat, accepting possible host disruption/exhaustion. This replaces older

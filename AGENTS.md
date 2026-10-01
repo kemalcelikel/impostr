@@ -1,25 +1,31 @@
 # Repository agent rules: Impostr
 
-## Current complete-chat runner handoff (IMP-024)
+## Current IMP-024 handoff — prepared; awaiting human outcome
 
-**Latest verified phase-three delivery:** UI/fixture/Nginx code is committed in
-`b72e98c`, including the exact synthetic handoff exception below. Phase three 5/5
-used, delivered; phase four 0/5. Coordinator 11 fixture tests and fresh exact-input
-preflight/launch passed fingerprint `0cd90624…9910fe` on base `1121bb3`. Normal
-generated Member rendered questions/allow-once/import, concurrent-human-save conflict,
-tab/composer retention, refresh/relogin selection and front-door delta while running
-passed. Designer PASS at 1440/1024/768/375; stop exited0 and sanitized cleanup verified
-accounts/login/stack/images/private state removed. Prior web92/checks and affected
-boundary review remain valid. No real provider credentials, operator/live run or chmod.
+Phase one (3/5) and phase three (5/5) are delivered. Phase two is delivered after
+historical 5/5 plus additional focused 1/3. Phase four uses 3/5. Its integrated synthetic workflow,
+operator boundary and affected profile were reviewed PASS; coordinator build/migration/
+Ruff/workflow/recovery and normal plus injected-failure operator verifiers passed with
+owned cleanup. Fresh rendered candidate fingerprint
+`252bfcb41a5759e18f761b74d3c1abe4424e95a1df14e493bb0fa6acb4f6dd7e` on `23e39ae`
+passed synthetic specification/backlog imports, human readiness and approvals, all
+three digest-matched downloads, then agent-revision invalidation and explicit reapproval.
+Stop exited 0 and sanitized cleanup verified accounts/login/stack/images/private and
+broker state removed. Coordinator reran all 93 focused unit tests successfully.
+Existing web92 and designer checks remain reused evidence.
 
-Next owner-started root runner continues **phase four only**: complete integrated
-synthetic review/backlog/approval/download and recovery proof, then independently reviewed
-human-only explicit relay setup/acceptance entrypoint. No rebuilding delivered phases,
-reopening phase-three budget or old private-resolver diagnostics. New runtime inputs
-need fresh exact-base/profile reconciliation; prior fingerprint is historical proof,
-not a universal preview. Interactive implementation stops at handoff; runner owns
-coordination at owner launch. Same local-only/no-push/no-auto-start/live-default-off
-limits and exact handoff exception remain. Whole IMP-024 is not yet delivered.
+After local verified commits, stop for the human-only sanitized result from repository
+root: `/usr/bin/python3 -I -B scripts/imp024_operator.py setup-accept`. Never run it
+through agent tools. It supports only explicit public HTTPS:443 Responses/API-key input;
+no endpoint/settings are guessed, and non-TTY/no-echo failure stops. Key-in-memory is
+not host swap/dump protection; real-provider compatibility is unknown, and responses
+are buffered until validation (no live early-text guarantee). Do not claim phase-four
+human acceptance yet. This preparation does not complete IMP-002/005/006/008, enable
+ordinary application chat or satisfy first-release acceptance; live remains disabled
+by default. No real credentials, live mode, permission changes, push or runner launch.
+
+The following entries preserve earlier phase-three/runner handoffs as history; their
+phase-four states and next-owner instructions are superseded by this current handoff.
 
 **Latest development handoff exception:** After phase-three stop at `1121bb3`, owner
 explicitly accepted the open development handoff directory and authorized continuing

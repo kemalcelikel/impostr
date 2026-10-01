@@ -256,9 +256,10 @@ SNAPSHOT_TEMPLATE_FILES = frozenset((*LEGACY_TEMPLATE_PATHS, *NESTED_TEMPLATE_PA
 # from the root build context. It is archived only as explicit candidate support;
 # the committed-HEAD browser fixture does not add scripts to its snapshot.
 APP_SNAPSHOT_SUPPORT_FILES = frozenset({"scripts/backlog.py"})
-# 1121bb3 changes only BACKLOG.md/DONE.md from 4a4d820; every scoped runtime,
-# build, test and host-helper blob/mode is identical. Keep this exact HEAD pin.
-IMP024_CANDIDATE_BASE_COMMIT = "1121bb3314c7f298a16854f2f21ac084b13b44ae"
+# Delivered phase-three UI/backend at the coordinator-verified phase-four base.
+# Dirty phase-four broker is the only executed overlay; evidence helpers below
+# are fingerprinted, never imported/copied/launched by the browser fixture.
+IMP024_CANDIDATE_BASE_COMMIT = "23e39ae108c452f72c9acfe7815a44374aa0104a"
 # Exact delivered backend helpers. No resolver, host config/auth, phase-four
 # operator code or arbitrary script directory is copied into the host snapshot.
 IMP024_HOST_INPUTS = (
@@ -267,10 +268,7 @@ IMP024_HOST_INPUTS = (
     "scripts/imp024_worker.py", "scripts/imp024_product_worker.py", "scripts/imp024_broker.py",
 )
 IMP024_RUNTIME_INPUTS = (
-    ("web/src/App.tsx", "modified"), ("web/src/ProjectWorkspace.tsx", "modified"),
-    ("web/src/BacklogPlanning.tsx", "modified"), ("web/src/FinalReview.tsx", "modified"),
-    ("web/src/ProjectChat.tsx", "added"), ("web/src/chat.ts", "added"),
-    ("web/nginx/default.conf", "modified"),
+    ("scripts/imp024_broker.py", "modified"),
 )
 IMP024_COMMITTED_INVENTORY = (
     ".dockerignore", "compose.yaml", "compose.chat-synthetic.yaml",
@@ -294,7 +292,11 @@ IMP024_COMMITTED_INVENTORY = (
     "web/Dockerfile", "web/.dockerignore", "web/.npmrc", "web/package.json", "web/package-lock.json",
     "web/index.html", "web/tsconfig.json", "web/tsconfig.app.json", "web/tsconfig.node.json", "web/vite.config.ts",
     "web/src/api.ts", "web/src/main.tsx", "web/src/index.css", "web/src/vite-env.d.ts",
-    "scripts/backlog.py", *IMP024_HOST_INPUTS, *NESTED_TEMPLATE_PATHS,
+    "web/src/App.tsx", "web/src/ProjectWorkspace.tsx", "web/src/BacklogPlanning.tsx",
+    "web/src/FinalReview.tsx", "web/src/ProjectChat.tsx", "web/src/chat.ts", "web/nginx/default.conf",
+    "scripts/imp024_browser.py", "scripts/backlog.py",
+    *tuple(path for path in IMP024_HOST_INPUTS if path != "scripts/imp024_broker.py"),
+    *NESTED_TEMPLATE_PATHS,
 )
 CANDIDATE_REVIEWED_RUNTIME_INPUTS = (
     (".dockerignore", "added"),
@@ -802,25 +804,23 @@ IMP010_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
 IMP024_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
     base_commit=IMP024_CANDIDATE_BASE_COMMIT,
     reviewed_inputs=IMP024_RUNTIME_INPUTS,
-    nonruntime_test_changes=(("web/src/ProjectChat.test.tsx", "added"), ("web/src/chat.test.ts", "added"),
-                            ("web/src/App.test.tsx", "modified"), ("web/src/ProjectWorkspace.test.tsx", "modified")),
+    nonruntime_test_changes=(("api/tests/imp024_joined.py", "modified"),
+                             ("api/tests/imp024_operator_member.py", "added")),
     fingerprint_test_changes=True, strict_scope=True,
-    # Existing UI tests use these exact synthetic response/request literals;
-    # pin path/name/value rather than exempting the file from secret checks.
-    allowed_test_literal_digests=(
-        ("web/src/App.test.tsx", "csrf_token", "4fad1d39fc3e247a5b3ec6df0ca7aecdf93b137b256cc5ab3262703d12be9ad6"),
-        ("web/src/App.test.tsx", "password", "5eb6112da82593728387cc0dcf40d308924aa77c9a4dd6cdd95102ac79836802"),
-        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "e4eada162d4496107d413f4af9c90e0d53512bf874548c68abddc947edfabd23"),
-        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "c1497906d2da8b30fc3e4e89cae4537a8a8c01fe46fadf5d7a3a60eb084f7acf"),
-        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "41b10626ff104fc15c3c463d0c75cdbb952000f8a69e703f4b5e5851d24032cf"),
-        ("web/src/ProjectWorkspace.test.tsx", "csrftoken", "d9819f97c00543ed0a6ea4c55d883b9bfd888f0cfc230a6cdcc62aca3082ea09"),
-    ),
     status_paths=(*CANDIDATE_STATUS_PATHS, "scripts", "compose.chat-synthetic.yaml"),
     harness_changes=(("scripts/local_browser_fixture.py", "modified"),
-                     ("scripts/imp024_browser.py", "added"),
-                     ("scripts/test_imp024_browser_fixture.py", "added")),
+                      ("scripts/test_imp024_browser_fixture.py", "modified"),
+                      ("scripts/imp024_verify.py", "modified"),
+                      ("scripts/test_imp024_verify.py", "modified"),
+                      ("scripts/test_imp024_channel.py", "modified"),
+                      ("scripts/imp024_operator.py", "added"),
+                      ("scripts/imp024_operator_transport.py", "added"),
+                      ("scripts/imp024_operator_helper.py", "added"),
+                      ("scripts/imp024_operator_product.py", "added"),
+                      ("scripts/imp024_operator_verify.py", "added"),
+                      ("scripts/test_imp024_operator.py", "added")),
     fingerprint_harness_changes=True,
-    committed_support_paths=(".dockerignore", "scripts/backlog.py", *IMP024_HOST_INPUTS),
+    committed_support_paths=(".dockerignore", "scripts/backlog.py", "scripts/imp024_browser.py", *IMP024_HOST_INPUTS),
     required_snapshot_paths=(
         "compose.yaml", "api/Dockerfile", "web/Dockerfile", "web/package-lock.json",
         "api/app/chat.py", "api/app/chat_broker.py", "api/app/chat_dispatch.py",
@@ -2226,7 +2226,10 @@ def validate_candidate_reviewed_paths(
             relative.is_absolute()
             or str(relative) != path
             or any(part in {"", ".", ".."} for part in relative.parts)
-            or not _is_candidate_build_scope(path)
+            or not (_is_candidate_build_scope(path) or (
+                policy is IMP024_CANDIDATE_PREVIEW_POLICY
+                and path == "scripts/imp024_broker.py"
+            ))
             or _is_candidate_secret_path(path)
         ):
             raise FixtureError("The candidate preview contains an unsafe or unrelated path.")
@@ -2951,7 +2954,6 @@ def archive_candidate_snapshot(
         )
     runtime_paths = {path for path, _status in policy.reviewed_inputs}
     if policy.host_inputs:
-        runtime_paths.add("scripts/imp024_browser.py")
         # The synthetic overlay is inventory-only: preview generates its one
         # validated API bind instead of executing the broader integration overlay.
         # This is a public worktree inventory input, not an extracted snapshot
@@ -3117,7 +3119,7 @@ def archive_head_snapshot(
     """Create an isolated source tree from one resolved HEAD commit, never the worktree."""
     allowed_support_files = APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES
     if expected_commit == IMP024_CANDIDATE_BASE_COMMIT:
-        allowed_support_files |= frozenset(IMP024_HOST_INPUTS)
+        allowed_support_files |= frozenset((*IMP024_HOST_INPUTS, "scripts/imp024_browser.py"))
     if len(set(additional_paths)) != len(additional_paths) or any(
         path not in allowed_support_files for path in additional_paths
     ):
@@ -6670,7 +6672,7 @@ Report only sanitized results and owned cleanup state.
             self._say(f"Cleanup warning: {cleanup_error}")
         if self.candidate_preflight:
             if self.candidate_variant == "imp024":
-                self._say("IMP024_CANDIDATE_PREFLIGHT_SCOPE=synthetic-chat-ui; browser/frontdoor incremental proof was not performed.")
+                self._say("IMP024_CANDIDATE_PREFLIGHT_SCOPE=synthetic-chat-workflow; rendered integrated approval/download proof was not performed.")
                 fingerprint_label = "IMP024_CANDIDATE_FINGERPRINT"
                 result_label = "IMP024_CANDIDATE_PREFLIGHT_RESULT"
                 cleanup_label = "IMP024_CANDIDATE_CLEANUP"

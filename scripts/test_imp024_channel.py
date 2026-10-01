@@ -52,6 +52,73 @@ class BytesPeer:
 
 
 class ContractTests(unittest.TestCase):
+    def test_named_workflow_inference_uses_only_valid_native_planning_calls(self):
+        value = payload()
+        scenarios = (
+            (broker.SPECIFY_PROMPT, {"PROJECT.md": broker.SYNTHETIC_PROJECT,
+                                    "AGENTS.md": broker.SYNTHETIC_AGENTS}),
+            (broker.BACKLOG_PROMPT, {"BACKLOG.md": broker.SYNTHETIC_BACKLOG}),
+            (broker.REVISE_PROMPT, None),
+            (broker.EXTEND_PROMPT, None),
+            (broker.READINESS_PROMPT, None),
+        )
+        # No OpenCode, socket or relay execution: exercise actual SSE inference
+        # normalization and validation over synthetic native tool outputs.
+        for prompt, expected in scenarios:
+            value["prompt"] = prompt
+            fixture = broker.SyntheticProduct(value)
+            data = {"model": relay.MODEL, "stream": True, "store": False,
+                    "tools": planning_protocol.fixture_definitions(),
+                    "max_output_tokens": planning_protocol.MAX_TOKENS,
+                    "input": [{"role": "user", "content": prompt}]}
+            edits, reads, names = {}, [], []
+            for _ in range(8):
+                validated = relay.validate("POST", relay.ROUTE, json.dumps(data).encode(), planning=True)
+                blocks = inference.normalized_events(fixture.events(validated, None, 0), validated)
+                terminal = [json.loads(raw.split(b"data: ", 1)[1]) for raw in blocks][-1]
+                output = terminal["response"]["output"]
+                if output[0]["type"] != "function_call":
+                    break
+                call = output[0]
+                args = json.loads(call["arguments"])
+                planning_protocol.arguments(call["name"], args)
+                names.append(call["name"])
+                if call["name"] == "read":
+                    reads.append(args["filePath"].removeprefix("/project/"))
+                elif call["name"] == "edit":
+                    filename = args["filePath"].removeprefix("/project/")
+                    self.assertEqual(args["oldString"], value["documents"][filename]["content"])
+                    edits[filename] = args["newString"]
+                data["input"].extend([
+                    {key: call[key] for key in ("type", "name", "call_id", "arguments")},
+                    {"type": "function_call_output", "call_id": call["call_id"], "output": "Synthetic result"}])
+            else:
+                self.fail("Named synthetic scenario did not terminate within existing call bound")
+            self.assertEqual(set(reads), set(edits))
+            self.assertEqual(names.count("question"), 1)
+            self.assertEqual(names, ["read"] * len(edits) + ["question"] + ["edit"] * len(edits))
+            if expected is not None:
+                self.assertEqual(edits, expected)
+            for filename, content in edits.items():
+                value["documents"][filename].update(content=content, sha256=protocol.digest(content))
+            if prompt == broker.BACKLOG_PROMPT:
+                self.assertIn("## [-] TASK-001", edits["BACKLOG.md"])
+                self.assertIn("## [-] TASK-002", edits["BACKLOG.md"])
+                # Model next turn after a real human has activated the first task.
+                value["documents"]["BACKLOG.md"]["content"] = broker.SYNTHETIC_BACKLOG.replace(
+                    "## [-] TASK-001", "## [ ] TASK-001")
+                value["documents"]["BACKLOG.md"]["sha256"] = protocol.digest(
+                    value["documents"]["BACKLOG.md"]["content"])
+            if prompt == broker.EXTEND_PROMPT:
+                self.assertIn("## [ ] TASK-001", edits["BACKLOG.md"])
+                self.assertIn("## [-] TASK-002", edits["BACKLOG.md"])
+                self.assertIn("## [-] TASK-003", edits["BACKLOG.md"])
+            if prompt == broker.READINESS_PROMPT:
+                self.assertIn("## [ ] TASK-002", edits["BACKLOG.md"])
+        # Exact-name opt-in: ordinary UI fixture prompts retain delivered behavior.
+        value["prompt"] = broker.SPECIFY_PROMPT + " extra"
+        self.assertIsNone(broker.SyntheticProduct(value).plan)
+
     def test_product_stream_wait_is_bound_to_original_deadline_not_idle_gap(self):
         from unittest.mock import Mock
 

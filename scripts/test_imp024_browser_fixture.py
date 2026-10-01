@@ -1,4 +1,4 @@
-"""Pure mocked phase-three profile/bind/lifecycle tests; no worker/Docker runs."""
+"""Pure exact-profile/bind/lifecycle tests; no worker/Docker runs."""
 import copy
 import hashlib
 import io
@@ -39,10 +39,17 @@ class ChatFixtureTests(unittest.TestCase):
 
     def test_profile_pins_delivered_base_and_fingerprints_host_helpers(self):
         policy = fixture.IMP024_CANDIDATE_PREVIEW_POLICY
-        self.assertEqual(policy.base_commit, "1121bb3314c7f298a16854f2f21ac084b13b44ae")
+        self.assertEqual(policy.base_commit, "23e39ae108c452f72c9acfe7815a44374aa0104a")
         self.assertTrue(policy.strict_scope and policy.fingerprint_harness_changes)
         self.assertIn("api/migrations/versions/20261001_0007_durable_chat.py", policy.required_snapshot_paths)
         self.assertEqual(policy.host_inputs, fixture.IMP024_HOST_INPUTS)
+        self.assertEqual(policy.reviewed_inputs, (("scripts/imp024_broker.py", "modified"),))
+        self.assertIn("web/src/ProjectChat.tsx", fixture.IMP024_COMMITTED_INVENTORY)
+        self.assertIn("scripts/imp024_browser.py", policy.committed_support_paths)
+        self.assertNotIn("scripts/imp024_broker.py", fixture.IMP024_COMMITTED_INVENTORY)
+        self.assertIn(("api/tests/imp024_joined.py", "modified"), policy.nonruntime_test_changes)
+        self.assertIn(("scripts/imp024_operator.py", "added"), policy.harness_changes)
+        self.assertNotIn("scripts/imp024_operator.py", policy.committed_support_paths)
         record = fixture.CandidateInputRecord("scripts/imp024_broker.py", "committed", 1, 0o644, hashlib.sha256(b"a").hexdigest())
         self.assertNotEqual(fixture._candidate_records_fingerprint(policy.base_commit, [record]), fixture._candidate_records_fingerprint(policy.base_commit, [fixture.CandidateInputRecord(record.path, record.status, 1, record.mode, hashlib.sha256(b"b").hexdigest())]))
 
@@ -83,7 +90,46 @@ class ChatFixtureTests(unittest.TestCase):
         with patch.object(fixture, "_candidate_status", return_value=changes):
             records, contents = fixture._collect_candidate_worktree_inputs(root, private_home=root, policy=policy)
         self.assertEqual({item.path for item in records if item.status == "committed"}, set(fixture.IMP024_COMMITTED_INVENTORY))
-        self.assertIn("scripts/imp024_browser.py", contents)
+        self.assertIn("scripts/imp024_broker.py", contents)
+        self.assertNotIn("scripts/imp024_browser.py", contents)
+        self.assertEqual(len(records), len({item.path for item in records}))
+        # Helpers/tests are fingerprinted but never runtime overlays. Unknown
+        # dirty UI/host code still fails exact scope rather than being ignored.
+        with patch.object(fixture, "_candidate_status", return_value={**changes, "web/src/FinalReview.tsx": "modified"}):
+            with self.assertRaises(fixture.FixtureError):
+                fixture._collect_candidate_worktree_inputs(root, private_home=root, policy=policy)
+
+    def test_host_overlay_permission_is_exact_imp024_broker_not_general_scripts(self):
+        policy = fixture.IMP024_CANDIDATE_PREVIEW_POLICY
+        self.assertEqual(fixture.validate_candidate_reviewed_paths(("scripts/imp024_broker.py",), policy=policy), ("scripts/imp024_broker.py",))
+        from dataclasses import replace
+        for path in ("scripts/imp024_operator.py", "scripts/imp002_transport.py", "scripts/unknown.py"):
+            expanded = replace(policy, reviewed_inputs=((path, "modified"),))
+            with self.assertRaises(fixture.FixtureError):
+                fixture.validate_candidate_reviewed_paths((path,), policy=expanded)
+
+    def test_archive_copies_only_dirty_broker_never_operator_or_acceptance_harness(self):
+        root = Path(__file__).resolve().parents[1]
+        policy = fixture.IMP024_CANDIDATE_PREVIEW_POLICY
+        sources = {
+            "scripts/imp024_broker.py": b"synthetic broker",
+            "scripts/imp024_operator.py": b"human-only not copied",
+            "api/tests/imp024_joined.py": b"acceptance not copied",
+        }
+        records = tuple(fixture.CandidateInputRecord(path, "modified" if path != "scripts/imp024_operator.py" else "added", len(content), 0o644, hashlib.sha256(content).hexdigest()) for path, content in sources.items())
+        with (
+            patch.object(fixture, "_resolve_head_commit", return_value=policy.base_commit),
+            patch.object(fixture, "_collect_candidate_worktree_inputs", return_value=(records, sources)),
+            patch.object(fixture, "archive_head_snapshot"),
+            patch.object(fixture, "_read_candidate_file", return_value=b"committed input"),
+            patch.object(fixture, "_read_candidate_file_with_mode", return_value=(b"services: {}\n", 0o644)),
+            patch.object(fixture, "_write_candidate_snapshot_file") as write,
+            patch.object(fixture, "validate_candidate_snapshot_tree"),
+            patch.object(fixture, "validate_candidate_worktree_snapshot"),
+        ):
+            snapshot = fixture.archive_candidate_snapshot(root, root / "mock-only-snapshot", private_home=root, policy=policy)
+        self.assertEqual(snapshot.runtime_paths, ("scripts/imp024_broker.py",))
+        self.assertEqual([call.args[1] for call in write.call_args_list], ["compose.chat-synthetic.yaml", "scripts/imp024_broker.py"])
 
     def test_archive_overlay_reread_uses_reviewed_worktree_modes_not_snapshot_modes(self):
         root = Path(__file__).resolve().parents[1]

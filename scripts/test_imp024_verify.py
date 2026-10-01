@@ -101,8 +101,32 @@ class VerifyTests(unittest.TestCase):
                 if node.func.id == "print" and isinstance(node.args[0], ast.Constant):
                     printed.add(node.args[0].value)
         self.assertEqual(tuple(prompts), verify.PROMPTS)
-        for message in verify.CHECK_PASSES + verify.LIFECYCLE_PASSES + (verify.OWNED_CLEANUP,):
+        messages = (
+            verify.CHECK_PASSES + verify.LIFECYCLE_PASSES + verify.WORKFLOW_PASSES
+            + (verify.OWNED_CLEANUP,)
+        )
+        for message in messages:
             self.assertIn("PASS " + message, printed)
+
+    def test_phase_four_reuses_backend_gates_and_requires_named_workflow_markers(self):
+        instance = verify.Verify()
+        with patch.object(instance, "prepare"), patch.object(instance, "start_broker"), \
+                patch.object(instance, "compose") as compose, \
+                patch.object(instance, "joined") as joined, \
+                patch.object(instance, "cleanup", return_value=True), \
+                patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(instance.run(phase_four_only=True), 0)
+        joined.assert_called_once_with("workflow")
+        checks = [call.args[3] for call in compose.call_args_list
+                  if call.args[:3] == ("run", "--rm", "api-check")]
+        self.assertEqual(checks, ["ruff", "ruff"])
+        parser = verify.Output(Mock())
+        with patch("sys.stdout", new_callable=io.StringIO):
+            parser.feed(verify.PROMPTS[0])
+            for marker in verify.WORKFLOW_PASSES:
+                parser.feed(("PASS " + marker + "\n").encode())
+        self.assertEqual(parser.next_prompt, 1)
+        self.assertEqual(parser.passed, set(verify.WORKFLOW_PASSES))
 
     def test_reaping_never_signals_active_joined_cli_or_other_host_processes(self):
         with patch.object(

@@ -40,12 +40,14 @@ Member accounts and removal of the login, owned stack/images, private state and
 broker/worker/channel resources. These are coordinator execution results, not
 developer Docker/browser runs.
 
-Phase three uses **5/5** substantive attempts. The narrow handoff correction and
-mechanical exact-base reconciliation are the same fifth attempt, not an additional
-budget. Phase four remains **0/5**, next for integrated proof and the reviewed human
-operator entrypoint. Whole IMP-024 is **not done**; phase-three proof is synthetic,
-not live model/account acceptance or release readiness. No operator/live mode or
-runner was started. Coordinator owns phase-three staging/commit and task bookkeeping.
+Phase three uses **5/5** substantive attempts and is delivered. Phase four uses
+**3/5**; phases one and two are delivered (phase two retained its historical 5/5
+plus one focused 1/3 repair). The phase-four candidate's integrated synthetic proof,
+human-only operator boundary and rendered approval/download workflow are now prepared
+and verified as described below. IMP-024 preparation stops for a human's sanitized
+result from the command at the end of this section; no agent runs it. This result does
+not establish real-provider compatibility or complete IMP-002/005/006/008, enable
+ordinary application chat, or satisfy first-release acceptance.
 
 **Preserved earlier runner checkpoint:** 92 focused web tests and lint/format/typecheck/build
 passed; fresh exact-input preflight passed migration0007, normal Member chat history,
@@ -145,8 +147,176 @@ session; verify private-state hiding/stream abort, same-user draft restoration a
 different-user isolation. Confirm the dedicated stream location forwards auth/cursor
 and unrelated API requests retain their ordinary timeout/buffering behavior. Always
 verify owned broker/worker/channel plus normal fixture cleanup. The latest run's
-rendered evidence is recorded above; phase four/operator entrypoint and live gates
-remain **not** implemented or claimed by this phase-three candidate.
+rendered evidence is recorded above. The subsequent phase-four integrated synthetic
+and rendered acceptance, and its pending human-only provider step, are recorded below.
+
+### IMP-024 phase four — verified synthetic preparation; awaiting human outcome
+
+The operator boundary and affected exact-input browser profile received independent
+review **PASS**. On coordinator base `23e39ae`,
+`/usr/bin/python3 -I -B scripts/imp024_verify.py --phase-four-only` passed build,
+migration, Ruff, all four integrated workflow/recovery gates and owned cleanup. The
+coordinator also passed `/usr/bin/python3 -I -B scripts/imp024_operator_verify.py`
+in both normal and `--failure-after-pair` modes: actual frontdoor/helper acceptance
+and expected native failure, respectively, with verified cleanup. A first lint run
+failed on E501; the mechanical correction was made, and the passing verification run
+cleaned its owned resources. Coordinator reran all 93 focused unit tests successfully.
+Existing web 92 and responsive designer
+reviews at 1440/1024/768/375 remain valid for unchanged inputs.
+
+Fresh exact candidate preflight and launch passed fingerprint
+`252bfcb41a5759e18f761b74d3c1abe4424e95a1df14e493bb0fa6acb4f6dd7e` on base
+`23e39ae`. Normal generated-Member rendered acceptance completed specification
+questions, two Allow-once edits, import, human pair approval, backlog import, human
+TASK-001 readiness, final approval, and all three downloads matching the approved
+manifest (PROJECT 1349 bytes, AGENTS 1288, BACKLOG 579). A subsequent agent revision
+invalidated pair/final approvals and disabled all downloads; explicit human pair and
+final reapproval restored all three downloads with matching digests (1399/1288/579
+bytes). Fixture stop exited 0; sanitized cleanup verified accounts, login, stack,
+images, private state and broker state removed. No credentials or live/operator mode
+were used.
+
+Phase four uses **3/5** attempts; phases one and three use **3/5** and **5/5** and
+are delivered, while phase two's delivered history is 5/5 plus the additional 1/3
+repair. Do not repeat unchanged gates or treat old checkpoints below as current.
+Preparation is complete; only the human-only step remains. It is not a general app
+activation, live compatibility claim, or completion of dependent chat/release tasks.
+
+**Fresh integrated browser profile (affected review required before preflight):**
+`IMP024_CANDIDATE_PREVIEW_POLICY` now pins committed HEAD
+`23e39ae108c452f72c9acfe7815a44374aa0104a`. Delivered UI/Nginx files and browser guardian
+are committed inventory; only dirty `scripts/imp024_broker.py` is overlaid/executed.
+Exact dirty joined/member tests and phase-four operator/verification scripts/tests are
+fingerprinted but never copied into or launched by the browser snapshot. Operator
+transport, credentials and private resolver are not browser host-runtime inputs.
+Strict unexpected-change, nofollow/owner/link/mode/size/token checks remain; neither
+the read-only single-API bind nor the exact synthetic Member handoff is broadened.
+Docs/task state/private logs/browser artifacts are outside this runtime scope.
+
+Coordinator after affected profile/failure-scenario review:
+
+```sh
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp024_*.py'
+/usr/bin/python3 -I -B scripts/imp024_operator_verify.py --failure-after-pair
+/usr/bin/python3 -I -B scripts/local_browser_fixture.py imp024-candidate-preflight
+/usr/bin/python3 -I -B scripts/local_browser_fixture.py launch --handoff-dir /tmp/opencode/impostr-review-handoff --lifetime-minutes 30 --imp024-candidate-fingerprint <fresh-IMP024_CANDIDATE_FINGERPRINT>
+# Normal generated Member sign-in and rendered integrated flow; always finish with:
+/usr/bin/python3 -I -B scripts/local_browser_fixture.py stop --handoff-dir /tmp/opencode/impostr-review-handoff
+```
+
+The failure verifier injects a fixed credential-free native terminal error on the
+backlog turn **after** real agent specification import and human pair approval.
+It requires a visible failed turn, no backlog import/false completion, no final approval,
+all downloads denied and owned teardown. Its coordinator PASS certifies expected
+rejection and cleanup, never successful model acceptance.
+
+**Coordinator rendered path, one newly created project/conversation:**
+
+1. Normal generated Member sign-in; create a new project from untouched starters.
+   Send exact prompt `Synthetic acceptance: specify Fieldnotes`. Answer Yes to the
+   native question; Allow once for each of the two file edits. Wait for completed
+   imports. Review saved PROJECT.md and AGENTS.md (both now fully valid); explicitly
+   click **Approve saved PROJECT.md + AGENTS.md pair**. If a stale-pair comparison is
+   shown, view both saved-version diffs and **I reviewed both latest documents** first.
+2. Send `Synthetic acceptance: plan Fieldnotes backlog`; answer Yes and Allow once.
+   Open BACKLOG.md/task rail and verify TASK-001/TASK-002 both start draft. Read task
+   scope/acceptance/verification, explicitly mark TASK-001 ready using its human
+   on-row readiness control; TASK-002 stays draft with its TASK-001 dependency. Do not send a
+   readiness prompt as a substitute for that human action.
+3. Open **Final review and downloads**, inspect all three saved files, revision IDs
+   and readiness summary; click **Approve displayed three-file snapshot**. Use each
+   rendered **Download PROJECT.md**, **Download AGENTS.md**, **Download BACKLOG.md**
+   button. Compare actual download UTF-8 bytes/digests with the current approved
+   manifest/reviewed saved contents through authenticated requests for this same
+   project. Each manifest reference must match that displayed saved revision.
+4. For rendered invalidation/reapproval in this same project, send
+   `Synthetic acceptance: revise Fieldnotes specification`, Yes/Allow once. Both
+   pair/final approvals and all downloads must become unavailable. Review/approve
+   the new pair, then exact three-file snapshot, and repeat all three downloads.
+   Optional backlog-only spot-check: `Synthetic acceptance: extend Fieldnotes backlog`
+   adds TASK-003 draft, preserves TASK-001 ready, keeps pair approval but invalidates
+   final approval; explicitly reapprove the new snapshot before downloads.
+
+Exact spelling selects deterministic synthetic tool DATA only; ordinary prompts keep
+the delivered append-only fixture. Do not substitute operator/live inference or reuse
+the historical phase-three fingerprint. Any further fingerprinted file changes require
+fresh reconciliation/preflight. Always verify stop/account/login/stack/images/private
+state/broker/worker/channel cleanup before delivery.
+
+One implemented **human-only** command from checkout root, in a real plain terminal:
+
+```sh
+/usr/bin/python3 -I -B scripts/imp024_operator.py setup-accept
+```
+
+Do not run this through agent tools or supply secret arguments, environment exports,
+files or redirected input. The command asks for the exact HTTPS authority (no path,
+public port443), exact `/openai/v1/responses` or
+`/openai/deployments/<deployment>/responses` route, exact `api-version` or literal
+`none`, and exact deployment. The deployment-bearing route must match that deployment.
+No account values or version defaults are guessed; unsupported routes/auth stop.
+Only literal API-key authentication with direct pinned public-address TLS443 and the
+fixed system CA file is supported—not OAuth, bearer tokens, arbitrary routes, proxy,
+private network endpoints, host config discovery, the parked resolver or plugin loader.
+DNS and TLS preparation happen before credential acquisition.
+
+A credential-free child, launched before key input with a clean environment and
+closed descriptors, owns a random disposable Compose stack, loopback frontdoor port,
+generated DB inputs and generated Member. The parent asks for explicit `ACCEPT`, then
+reads the key only after verifying terminal echo disabled; no getpass fallback exists.
+The trusted foreground parent alone holds the key and injects its transport into the
+broker. Post-key worker launches use the delivered clean-exec/bwrap boundary; provider
+key and host transport are not in worker code, arguments, environment, DB or browser.
+The already-running credential-free helper performs Docker work; no orchestration
+process is created from the credential-bearing parent after key input.
+
+Acceptance uses normal Member sign-in through the actual loopback Nginx/frontdoor,
+API, PostgreSQL, private broker and bwrap worker. The **real model**, not deterministic
+inference, must read/ask/edit and import exact synthetic PROJECT/AGENTS and backlog,
+leave tasks draft, accept explicit human readiness and pair/final approval actions,
+produce all three byte/digest-identical downloads, reconnect to durable SSE, and
+complete a new specification turn that invalidates both approvals before exact
+reapproval/download. Wrong bytes, unsupported native event shapes, tool errors,
+timeout or missing interactions fail—there is no ping-only acceptance or model fallback.
+These helper-driven human actions are restricted to disposable synthetic acceptance,
+not autonomous approval of real projects. Previously verified restart/concurrency/
+revocation and rendered UI evidence is reused, not claimed as new live proof.
+
+Planning Responses normalization retains existing canonical function/argument and
+time/output bounds (4096 output tokens maximum). It holds a bounded inference response
+until complete validation and literal credential-contamination checks finish, including
+text, accumulated argument chunks, decoded arguments and call IDs. This fails closed
+rather than exposing an echoed key; it cannot promise detection of arbitrary transformed
+secrets. The complete bounded response is validated before release, so live early text
+deltas are not provided; real-provider compatibility remains unknown until human use.
+Provider errors/IDs/headers are never forwarded; incomplete/error responses cannot
+be successful tools or completion. Worker model alias stays fixed and nonsecret.
+
+Success retains only this foreground disposable connection until Ctrl-C, not a saved
+configuration or enable flag. The generated Member remains helper-private; this command
+does not provide an owner-account/browser activation channel. Failure/stop clears the
+transport key, stops/reaps owned workers, asks the helper to remove accounts/projects,
+stack/volumes/images/channel/generated inputs and verifies cleanup. Share only the fixed
+sanitized result. SIGKILL, host/daemon loss or denied cleanup may leave disposable
+resources; a cleanup failure is never a passing result. Python memory copies, host
+swap/dumps/debuggers and accepted local synthetic scratch group-tampering risk remain;
+memory-only is not a confidentiality guarantee against the host.
+
+Pure synthetic checks (no operator/private/provider/network/Docker execution):
+`/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp024_operator.py'`.
+The **coordinator-only**
+`/usr/bin/python3 -I -B scripts/imp024_operator_verify.py` proves the new helper's
+fresh build/migration/generated-Member/frontdoor acceptance and owned cleanup using
+only an exact deterministic synthetic transport. It never calls the human entrypoint,
+key reader or HTTPS inference. Coordinator actual execution passed as recorded above;
+the developer did not run Docker. The `--failure-after-pair` variant separately proves
+failed-acceptance rejection and cleanup. The remaining human-only step is the command
+above: it supports only explicit public HTTPS:443 Responses and API-key authentication,
+with no guessed endpoint, deployment, API version or credentials. Non-interactive input
+or inability to disable terminal echo fails closed. The secret exists in trusted process
+memory; memory-only does not protect against host swap/dumps or other memory copies.
+After local verified commits, stop and await only a sanitized human outcome; no agent
+runs `setup-accept`.
 
 ### IMP-024 phase two — verified synthetic backend acceptance
 

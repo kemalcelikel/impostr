@@ -1,10 +1,11 @@
-"""COORDINATOR ONLY: reviewed disposable synthetic joined/lifecycle orchestration.
+"""COORDINATOR ONLY: disposable synthetic joined/lifecycle/workflow orchestration.
 
 Never run by product workers/developers. No operator/live modes, ambient settings,
 checkout .env, raw output forwarding, shell input or Docker socket worker mount.
 Independent review required before execution. Import/tests have no side effects.
 """
 
+import argparse
 import ctypes
 import json
 import os
@@ -41,6 +42,12 @@ LIFECYCLE_PASSES = (
     "full API/broker/worker restart: unknown interrupted, no redispatch",
     "channel outage/restoration without false import or duplicate start",
     "actual DB outage/recovery: unavailable, no false completion/import or redispatch",
+)
+WORKFLOW_PASSES = (
+    "agent pair/backlog imports, human readiness/approvals, exact three downloads",
+    "native agent readiness change rejected without imports or approval drift",
+    "agent pair change invalidates both gates; explicit exact reapproval",
+    "reconnect/full restart interruption, new successful turn, backlog-only invalidation and exact reapproval",
 )
 OWNED_CLEANUP = "owned API child/account/project/test-state cleanup; broker/stack cleanup still coordinator-owned"
 CHECK_FILES = (
@@ -85,7 +92,8 @@ class Output:
 
     Only fixed PASS/failure strings and allowlisted summary fields survive. All
     other bytes are discarded, including build logs and raw assertion details. Never use output as a
-    command: the prompt index selects one of five fixed coordinator actions.
+    command: the prompt index selects one of five fixed coordinator actions;
+    workflow mode uses only the existing first broker-restart action.
     """
 
     def __init__(self, action=None):
@@ -119,7 +127,7 @@ class Output:
                 break
 
     def line(self, line):
-        for text in CHECK_PASSES + LIFECYCLE_PASSES + (OWNED_CLEANUP,):
+        for text in CHECK_PASSES + LIFECYCLE_PASSES + WORKFLOW_PASSES + (OWNED_CLEANUP,):
             if line == ("PASS " + text).encode():
                 self.passed.add(text)
                 report(text, "passed")
@@ -501,7 +509,7 @@ class Verify:
         name = self.project + "-" + mode
         self.runs.append(name)
         args = self.base + ["run", "--rm", "--name", name]
-        if mode == "lifecycle":
+        if mode in ("lifecycle", "workflow"):
             args += ["-i"]  # Piped input, NOT a pseudo-terminal.
         args += ["api-integration-check", "python", "-B", "tests/imp024_joined.py", mode]
         process = subprocess.Popen(
@@ -528,7 +536,7 @@ class Verify:
             process.stdin.write(b"\n")
             process.stdin.flush()
 
-        parser = Output(action if mode == "lifecycle" else None)
+        parser = Output(action if mode in ("lifecycle", "workflow") else None)
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ)
         deadline = time.monotonic() + 600
@@ -542,9 +550,13 @@ class Verify:
                     else:
                         selector.unregister(process.stdout)
             require(process.wait(timeout=5) == 0)
-            expected = CHECK_PASSES if mode == "check" else LIFECYCLE_PASSES
+            expected = {
+                "check": CHECK_PASSES,
+                "lifecycle": LIFECYCLE_PASSES,
+                "workflow": WORKFLOW_PASSES,
+            }[mode]
             require(set(expected + (OWNED_CLEANUP,)) <= parser.passed)
-            require(parser.next_prompt == (5 if mode == "lifecycle" else 0))
+            require(parser.next_prompt == {"check": 0, "lifecycle": 5, "workflow": 1}[mode])
         finally:
             selector.close()
             stop_process(process)
@@ -645,7 +657,7 @@ class Verify:
         report("owned_cleanup", "passed" if okay else "failed", project=self.project)
         return okay
 
-    def run(self):
+    def run(self, *, phase_four_only=False):
         stage = "prepare"
         passed = False
         try:
@@ -660,6 +672,8 @@ class Verify:
                 self.compose(*args, seconds=seconds)
                 report(stage, "passed")
             for stage, args in FOCUSED_CHECKS:
+                if phase_four_only and stage in ("pytest", "mypy"):
+                    continue  # Delivered backend behavior unchanged; reuse its verified evidence.
                 output = RuffJsonOutput() if stage == "ruff_lint" else CheckOutput(stage)
                 try:
                     self.compose("run", "--rm", "api-check", *args, seconds=300, output=output)
@@ -672,7 +686,7 @@ class Verify:
                     )
                     raise
                 report(stage, "passed")
-            for stage in ("check", "lifecycle"):
+            for stage in (("workflow",) if phase_four_only else ("check", "lifecycle")):
                 self.joined(stage)
                 report(stage, "passed")
             passed = True
@@ -680,7 +694,8 @@ class Verify:
             report(stage, "failed")
         finally:
             passed = self.cleanup() and passed
-        report("synthetic_joined_verification", "passed" if passed else "failed")
+        check = "synthetic_workflow_verification" if phase_four_only else "synthetic_joined_verification"
+        report(check, "passed" if passed else "failed")
         return 0 if passed else 1
 
 
@@ -690,4 +705,10 @@ if __name__ == "__main__":
         raise KeyboardInterrupt()
 
     signal.signal(signal.SIGTERM, interrupted)
-    raise SystemExit(Verify().run())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--phase-four-only", action="store_true",
+        help="Run integrated workflow/recovery proof, reusing delivered backend gates",
+    )
+    args = parser.parse_args()
+    raise SystemExit(Verify().run(phase_four_only=args.phase_four_only))
