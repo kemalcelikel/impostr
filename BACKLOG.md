@@ -37,7 +37,7 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 
@@ -51,6 +51,19 @@ repair attempts per phase (12 total), counted across sessions; no automatic rene
 borrowing between exhausted phases. Initial counts 0/3 each. Mechanical formatting,
 capability inspection and check reruns do not consume attempts. Preserve all prior
 IMP-002/023 budgets. One phase's checkpoint is not this item's completion.
+
+**Execution checkpoint (2026-10-01):** Stopped before phase-one implementation at
+`eb1f10d` on `feature/impostr-v1`. Coordinator confirmed baseline and preserved
+unrelated operational artifacts; architect supplied a read-only boundary plan.
+Senior-developer's baseline Git call was permission-denied (combined status,
+`git --no-ext-diff --no-textconv log --oneline -8`, and branch inspection).
+Its effective rules allow narrower status/log forms but deny general Git; the
+tool did not identify the denied component. No retry or alternate tool/agent
+bypass, implementation, new boundary scenario or private/live operation occurred.
+All four phase counts remain **0/3**. Next requires owner resolution of the
+assigned developer's baseline-inspection capability and explicit requeue;
+then resume phase one with independent review before new worker/tool scenarios.
+Affected application/operator documentation is unchanged because no code changed.
 
 ### Implement in order
 
