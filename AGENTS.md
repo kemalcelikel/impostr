@@ -2,6 +2,21 @@
 
 ## Current IMP-024 handoff — prepared; awaiting human outcome
 
+**Latest owner decision — live test deferred:** Owner accepts provider compatibility
+as a planning assumption and will test the real model after application completion.
+Do not request or run `setup-accept` now; retain it as a later live test. This is not
+observed provider success or permission to enable fake/live chat automatically.
+IMP-024 stays delivered; IMP-006/008 synthetic integration is closed against its
+committed evidence. Ordinary-stack connection/lifecycle remains IMP-005, now depending
+on delivered IMP-024 rather than blocked historical IMP-002. Host-agent sourcing and
+buffered versus early-stream behavior must be resolved explicitly in that task.
+Do not reimplement verified editors/UI or perform more private-config diagnostics.
+IMP-002 remains a historical incomplete live-integration proof, not a queue gate for
+this remaining implementation. Live/release acceptance is owner-deferred, not passed.
+No runner launch, real credentials, installation, push/PR or deployment is authorized
+by this bookkeeping. Earlier mandatory-immediate operator instructions below are
+superseded; keep their safety restrictions for any later human test.
+
 Phase one (3/5) and phase three (5/5) are delivered. Phase two is delivered after
 historical 5/5 plus additional focused 1/3. Phase four uses 3/5. Its integrated synthetic workflow,
 operator boundary and affected profile were reviewed PASS; coordinator build/migration/

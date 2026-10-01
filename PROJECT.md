@@ -2,6 +2,15 @@
 
 ## Purpose and release boundary
 
+**Owner-deferred real-model testing:** Provider compatibility is a planning assumption,
+not observed acceptance. The owner will test the application later; retain the live
+operator acceptance command but do not require it immediately. Synthetic preparation
+and review/backlog chat integrations are delivered. Ordinary Compose still defaults
+chat off and lacks a reusable configured live broker connection; IMP-005 finishes
+that wiring/lifecycle and resolves real transport's buffered-versus-incremental output.
+No reusable host/file credential setup has been implemented or secretly authorized.
+Do not claim that default application chat works merely because its UI is delivered.
+
 **Latest IMP-024 preparation:** Phases one and two (phase two's delivered 5/5 plus its
 focused additional 1/3 repair) and phase three (5/5) are delivered. Phase four uses 3/5;
 its integrated synthetic workflow/recovery proof, reviewed operator boundary, fresh

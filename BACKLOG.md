@@ -39,6 +39,16 @@ histories; no automatic launch/push/PR or new scope after this job.
 
 ## [x] IMP-024 — Complete local text-chat preparation and one operator handoff
 
+**Owner acceptance decision:** Real-provider compatibility/testing is deferred until
+the application is finished; assume compatibility for implementation planning only.
+Keep the delivered `setup-accept` command as a later human live test, not an immediate
+gate or evidence of success. IMP-024 preparation remains done. Inspection found a
+separate ordinary-stack wiring gap: default Compose does not mount/enable the broker,
+standalone broker only serves synthetic inference, and operator acceptance owns a
+disposable stack. That implementation remains IMP-005 below. IMP-006/008 integration
+is delivered synthetically against IMP-024; do not rebuild it. This decision does not
+activate ordinary chat, claim live streaming/provider proof or waive release testing.
+
 **Delivered preparation:** Verified local implementation/docs commit `c518baf` on
 `feature/impostr-v1`, baseline `23e39ae`. Phase four **3/5 used and delivered**;
 phase one **3/5**, phase three **5/5**, and phase two historical **5/5** plus focused
@@ -765,9 +775,29 @@ remains immutable; selected-template integration is IMP-022.
 
 ## [ ] IMP-005 — Project-scoped resumable planning chats
 
-**Depends on:** IMP-002, IMP-004
+**Depends on:** IMP-024, IMP-004
 **Scope:** Authenticated `tech-lead` gateway and project session tabs; proposals
 become versioned drafts, never approvals.
+
+**Reconciled remaining implementation:** Tabs, DB histories/events/interactions,
+revision-safe proposals and UI already exist in IMP-024 commits `a39a2f4`, `b72e98c`,
+`c518baf`; reuse them. Implement reusable ordinary-stack broker/relay setup and owned
+lifecycle, not the disposable acceptance fixture. Keep default off unless explicitly
+configured; no synthetic fixture activation for real accounts, no credential copies
+to API/worker/browser/DB/logs and no host OpenCode server proxy. Determine the vetted
+planning-agent source rather than silently importing unrestricted installed permissions.
+Use the explicit relay contract already implemented; operator-owned file/host reuse
+is a separate unresolved setup choice, not authorized private discovery here. Keep
+real-provider testing for the owner after implementation as requested.
+
+Provide a usable normal-stack configuration/lifecycle path verified with synthetic
+inputs under existing local limits. Document what owner configuration is still required
+before actual use; don't guess credentials/endpoints or call unconfigured chat enabled.
+Resolve the requested incremental reply contract: actual real transport currently
+buffers until validation. Implement bounded safe early streaming or document a
+consequential product decision for owner approval, not a fabricated streaming pass.
+DB history reconstruction and visible interruption after worker loss are existing
+behavior; transparent native-worker restoration is not a new requirement.
 
 ### Acceptance
 
@@ -779,12 +809,26 @@ become versioned drafts, never approvals.
 ### Verification
 
 Adapter/browser reconnect, forged cross-user session/event/reply denials, concurrent
-edits and timeout preservation. Requires IMP-002's proven transport/isolation.
+edits and timeout preservation. Delivered synthetic transport/isolation is IMP-024;
+the older IMP-002 live prerequisite is superseded by the owner decision above.
 
-## [ ] IMP-006 — Integrate chat with first-stage document review
+Dependency correction: use IMP-024's delivered synthetic isolation/protocol evidence;
+IMP-002's historical live proof is owner-deferred, not an execution prerequisite.
+Focused normal-stack setup/shutdown, unavailable broker, reconnect/history, access
+revocation and credential-boundary checks apply to changed seams. Existing UI evidence
+is reused. A new runtime/fixture boundary needs independent review before execution.
+No real model/provider test or runner launch without separate owner operation.
 
-**Depends on:** IMP-005, IMP-013
+## [x] IMP-006 — Integrate chat with first-stage document review
+
+**Depends on:** IMP-024, IMP-013
 **Scope:** Add chat/proposals beside the delivered human pair-review surface.
+
+**Delivered integration:** Existing IMP-024 backend/UI/workflow commits `a39a2f4`,
+`b72e98c`, `c518baf` verify revision-safe imports/conflicts, approval invalidation,
+questions/permissions, desktop/narrow rendering and owned cleanup. Owner defers
+real-provider testing; this closure is synthetic integration, not ordinary-stack
+activation. IMP-005 owns that remaining wiring. Acceptance below is preserved.
 
 ### Acceptance
 
@@ -813,10 +857,16 @@ checks passed. Exact candidate `a2621b7…d4a2e` passed synthetic authenticated
 rendering/designer review, authorization denials and owned cleanup. Interrupted work,
 boundary/metadata repair findings and candidate authorizations remain in history.
 
-## [ ] IMP-008 — Integrate live chat with backlog planning layout
+## [x] IMP-008 — Integrate live chat with backlog planning layout
 
-**Depends on:** IMP-005, IMP-006, IMP-014
+**Depends on:** IMP-024, IMP-006, IMP-014
 **Scope:** Add chat and agent-added/updated task indicators beside IMP-014's rail.
+
+**Delivered integration:** IMP-024 commits `b72e98c`/`c518baf` and authenticated
+rendered/workflow evidence deliver shared conversation/backlog layout, draft/readiness
+controls, agent imports/conflicts and retained edits. Owner defers real-provider
+testing; historical title does not imply observed live success. No UI rebuilding;
+ordinary connection is IMP-005 and actual release checks remain separate.
 
 ### Acceptance
 
