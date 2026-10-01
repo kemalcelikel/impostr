@@ -59,7 +59,7 @@ stops after IMP-023 delivery/blocker. No task pushes/PRs, automatic launch, priv
 resolver reads or live model tests. Use direct root-runner mode, never optional sbx
 credential-copy/network/fallback setup. Run from this repository root.
 
-## [ ] IMP-023 — Prove confined synthetic session start, stream and resume
+## [x] IMP-023 — Prove confined synthetic session start, stream and resume
 
 **Depends on:** IMP-001
 
@@ -124,6 +124,24 @@ credentials are explicitly excluded and remain IMP-002 acceptance. No chat-depen
 task is unblocked by this outcome. Missing capability/exhausted budget means `[!]`
 with preserved partial work; a concrete in-budget next action may follow the existing
 bounded `[~]` continuation policy. Local task/bookkeeping commits only, no push/PR.
+
+**Outcome (2026-10-01):** Delivered locally in `1792898` on `feature/impostr-v1`
+from baseline `79fc38e`. Independent boundary review passed before new server runs;
+one affected repair/re-review corrected the terminal inference-error frame. Budget
+2/3 substantive attempts used, 1 unused; all IMP-002 histories remain intact.
+Coordinator verified 21 new and 51 existing focused unit tests. Actual confined
+`imp023_session.py startup`, `history`, `reconnect`, and `interrupt` all passed:
+authenticated version 1.18.34/401 denial/event/session startup; gated text delta before
+completion and history separation; history/status reconnect without resubmission;
+same-worker server restart/history continuation; abort cancellation and terminal
+failure not success. Relay calls 0/3/2/2, no denials, unchanged four-call ceiling.
+Existing `imp002_prototype.py synthetic`, `probes`, `synthetic-stream`, `outage`,
+and `timeout` regressions passed. File/socket/network/configuration-injection denials
+and owned child/listener/fixture/state cleanup passed. Verified exact commands and
+limits are in `docs/local-development.md`; PROJECT reflects synthetic-only proof.
+No private inputs/operator/live modes, product gateway, SSE replay/full-worker restart
+durability or aggregate quota proof. IMP-002 and chat dependents remain blocked.
+Local delivery only; stop this batch without push/PR or new scope.
 
 ## [x] IMP-001 — Bootstrap app and database baseline
 
