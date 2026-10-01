@@ -2,6 +2,21 @@
 
 ## Current complete-chat runner handoff (IMP-024)
 
+**Latest restart correction:** The first IMP-024 run stopped before implementation
+at `eb1f10d`; blocker bookkeeping is `2dc810f`. The preserved denial summary reports
+flags before the Git subcommand and a branch inspection, not proof that compliant
+read-only inspection is unavailable. Do not broaden permissions or retry the rejected
+call. On the next owner-started fresh assignment use coordinator-verified branch/HEAD
+facts and documented forms: `git log --no-ext-diff --no-textconv --oneline -8`,
+`git diff --no-ext-diff --no-textconv`, `git show --no-ext-diff --no-textconv`,
+`git status --short`, `git rev-parse HEAD`. Flags follow the subcommand; no developer
+`git branch`, writes or combined unapproved inspection bundles. Verify necessary
+compliant operations only during authorized execution; if denied, preserve exact
+arguments/displayed rules and stop without wrappers, alternate transports or retries.
+Installed permissions remain unverified; no claim of permission repair is made.
+All phase counts remain 0/3; task scope/budgets unchanged. This command-contract
+correction supersedes the checkpoint's demand for automatic permission broadening.
+
 Owner approved complete local text-chat preparation, synthetic first, followed by
 one prepared private model-connection step. Resource-limit item 4 is cancelled for
 personal-PC text chat, including local serving; history is archived in

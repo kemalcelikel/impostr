@@ -37,7 +37,7 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 
@@ -64,6 +64,19 @@ All four phase counts remain **0/3**. Next requires owner resolution of the
 assigned developer's baseline-inspection capability and explicit requeue;
 then resume phase one with independent review before new worker/tool scenarios.
 Affected application/operator documentation is unchanged because no code changed.
+
+**Restart preparation after reported stop:** Inspection of the preserved summary and
+documented developer contract identifies a command-form mismatch: permitted flags
+follow `log`/`diff`/`show`; branch inspection is not in that agent's Git allowlist.
+Raw rejected arguments/rules were not preserved, so genuine effective capability loss
+is not established. Owner's reported stop resumes preparation, not scope or permission
+expansion. Ready again for the next owner-started fresh root assignment using the
+documented forms and coordinator-verified `feature/impostr-v1`/baseline `2dc810f` facts.
+Do not repeat the denied bundle or bypass denial; no agent configuration was changed.
+If a necessary compliant operation is denied, record its exact arguments and rules,
+then stop. Preserve the prior blocked outcome, all phase counts **0/3**, live restrictions
+and file history. This is a corrected executable handoff, not proof of installed
+permissions or application delivery.
 
 ### Implement in order
 
