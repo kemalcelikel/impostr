@@ -37,7 +37,29 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
+
+**Phase-three runner checkpoint:** Candidate preserved uncommitted on
+`feature/impostr-v1`, baseline `4a4d820`, delivered backend `a39a2f4` unchanged.
+Phase three **4/5 used** (initial UI/profile, actual delta-contract repair,
+immutable React state repair, measured account/broker cleanup-order repair);
+phase four **0/5**. Independent candidate and affected repair reviews PASS.
+Coordinator owned web-check: **92 tests passed**, lint, formatting, typecheck and
+build passed. Fresh exact-input preflight fingerprint
+`1072055d4913a500f9f1f3826fe3c213db1463a97c6876e70736bcb8fd169a16`
+passed migration0007, normal Member conversation/history, cross-Member denial and
+verified account/stack/image/broker/worker/channel/private-state cleanup.
+
+**Blocked before rendered acceptance:** Exact-fingerprint `launch` stopped safely:
+`The private handoff directory must be owned and mode 0700.` Harmless marker
+write/read succeeded, but this does not satisfy the channel safety gate. No generated
+login was handed off, no browser/live/operator modes ran, and no permission change
+or alternate handoff was attempted. Coordinator web-check containers/network/image
+were removed. Owner must restore the approved private handoff's safe ownership/mode
+and authorize resumption; retain candidate and remaining phase-three attempt.
+Next: fresh exact-input preflight/launch, normal Member rendered/SSE/conflict/relogin
+review and owned cleanup before phase-three delivery, then phase four. Whole task
+is not accepted; no incomplete application commit, push/PR or automatic runner start.
 
 **Latest verified delivery / runner continuation:** Phase two code/docs are committed
 in `a39a2f4`. Owner-approved additional repair **1/3 used**, with historical phase-two
