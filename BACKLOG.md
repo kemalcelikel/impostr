@@ -41,8 +41,9 @@ new push or merge is authorized by this document edit.
 
 **Continuation after stopped-runner repair:** IMP-020/021 are verified local work;
 IMP-014 was subsequently verified on actual base `3b5d603` and delivered in `f67d33e`.
-There is no remaining dependency-eligible ready item; blocked prerequisites remain
-owner decisions. No earlier fingerprints or API-only harness templates certify future previews.
+IMP-010 is now dependency-eligible but is outside this one-item assignment; other
+blocked prerequisites remain owner decisions. No earlier fingerprints or API-only
+harness templates certify future previews.
 Other blockers retain their recorded unmet prerequisites. No automatic restart,
 new template integration, network provisioning or attachment limits are implied.
 
