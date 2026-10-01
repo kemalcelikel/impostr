@@ -37,7 +37,7 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 
@@ -49,10 +49,36 @@ Reuse delivered code; do not rebuild human editors or synthetic session proof.
 Owner revised the limit to four phased checkpoints, at most **five** substantive
 implementation/repair attempts per phase (**20 total**), counted across sessions; no
 automatic renewal or borrowing between exhausted phases. Current used counts:
-phase one **3/5 delivered**, phase two **3/5**, phases three/four **0/5 each**.
+phase one **3/5 delivered**, phase two **5/5 exhausted**, phases three/four **0/5 each**.
 Mechanical formatting,
 capability inspection and check reruns do not consume attempts. Preserve all prior
 IMP-002/023 budgets. One phase's checkpoint is not this item's completion.
+
+**Latest continuation outcome (2026-10-01):** Resumed on `feature/impostr-v1`
+at `1bf79bd`, preserving the phase-two candidate from `7f1e7d9`. Attempt four
+added joined synthetic HTTP/PostgreSQL/native-channel checks and retained the owned
+broker mount-directory inode across clean restarts. Attempt five replaced the
+unavailable `httpx` harness dependency with a bounded standard-library cookie/HTTP/
+stream client; no installation or lock change. Both affected independent reviews
+returned PASS. Developer verified 47 IMP-024 pure tests (21 IMP-023 and 51 IMP-002
+also passed at attempt four). Coordinator verified fresh owned builds/migration
+`20261001_0007`, 15 focused chat tests and Ruff lint/format of both harness modules.
+
+**Blocked after execution:** The real joined `python -B tests/imp024_joined.py check`
+passed normal Member login, project/conversation/native question setup and API-process
+restart assertions, then failed `Timed out: native pending permission` after the
+question reply. Cause is not established; no further repair is authorized within
+phase two's exhausted **5/5** ceiling. Save/import concurrency, joined revocation,
+uncertain-dispatch/reply and full broker/worker/DB lifecycle gates were not reached.
+Do not substitute component evidence for acceptance or commit incomplete phase-two
+application delivery. Candidate and affected docs remain preserved uncommitted.
+Owned API/account/project cleanup finished without secondary errors; broker exited,
+owned containers/volume/images and both networks were removed, channel directory and
+generated env inputs removed. No private/operator/live mode, push/PR or runner launch.
+Phase one remains delivered **3/5**, phases three/four remain **0/5**, not activated.
+Next requires renewed owner-authorized bounded phase-two diagnosis/completion, not a
+private diagnostic or another automatic requeue. Prior outcomes and budgets below
+are history; IMP-002/005/006/008 and live acceptance remain unchanged.
 
 **Execution checkpoint (2026-10-01):** Stopped before phase-one implementation at
 `eb1f10d` on `feature/impostr-v1`. Coordinator confirmed baseline and preserved
