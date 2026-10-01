@@ -37,7 +37,7 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [~] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 
@@ -99,6 +99,30 @@ before new boundary execution and fresh owned PostgreSQL checks. No extra phase-
 attempts are available; no borrowing or automatic renewal. Product integration,
 exact-input rendered proof and reviewed operator entrypoint are still outstanding;
 IMP-002/005/006/008 and all live acceptance remain unchanged.
+
+**Phase-two checkpoint (2026-10-01):** Candidate preserved uncommitted from
+`7f1e7d9` on `feature/impostr-v1`; phase two used **3/3** substantive attempts
+(initial broker/data implementation, inventory/context/CRLF repair, measured native
+SSE prompt-echo framing repair). Independent boundary and affected repair reviews
+passed before actual channel execution. Coordinator verified 327 focused API/migration/
+pair/manifest tests, Ruff, format (36 files), mypy (32 modules), fresh PostgreSQL
+upgrade/current `0007` and two preservation/reservation tests, five real UID10001 to
+UID1000 native channel cases, and host UID peer denial. Developer verified 41 IMP-024,
+21 IMP-023 and 51 affected IMP-002 pure tests. Initial fixture/import-order failures
+were mechanically corrected; final large-context/CRLF channel rerun passed.
+Owned broker, workers/channel directory, synthetic Compose containers/volume/networks,
+task images and generated inputs were removed. Useful docs distinguish proof from
+pending acceptance. No private/operator/live modes ran.
+
+**Blocked:** Phase two is not accepted: the joined authenticated API/DB/broker/worker
+flow, PostgreSQL human-save versus agent-import concurrency, actual full-process restart/
+outage recovery without duplicate dispatch/replies, and joined active-stream/reply
+revocation remain unproved. Component tests are not those gates. No substantive
+phase-two budget remains; preserve candidate without committing incomplete application
+delivery. Next requires owner decision on bounded completion of those focused gates
+and any resulting repair, not another private diagnostic. Phase one remains **3/3**
+delivered; phases three/four remain **0/3**, not activated. IMP-002/005/006/008 and live
+acceptance remain unchanged. Local checkpoint/bookkeeping only; no push/PR/restart.
 
 ### Implement in order
 
