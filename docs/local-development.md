@@ -54,8 +54,8 @@ work; it is not a free-form runtime template override.
 
 Compact scope prose, `Acceptance:` and inline `Verification:` are interpreted
 consistently by task editing and approval, without borrowing metadata or hidden
-examples. Fresh IMP-014 candidate proof/rendering is still required; repairing fixture
-inputs does not certify an old candidate profile or a rendered UI.
+examples. IMP-014's local candidate and rendered acceptance is verified; consult
+BACKLOG.md for delivery references.
 
 Final approval requires the current approved PROJECT.md/AGENTS.md pair and exact
 current BACKLOG.md revision with substantive task evidence. A ready task marker is
@@ -490,8 +490,53 @@ The latest reviewed candidate used an abbreviated fingerprint recorded as
 migration `20260929_0005` and confirmed cross-Member authorization denials. Normal
 synthetic Member sign-in and rendered review passed at 1440, 1024, 768 and 375 px;
 `ui-designer` returned PASS, and owned cleanup was verified with `stop` exit 0.
-This evidence applies only to that exact candidate snapshot; it does not mean the
-candidate was committed or that an IMP-014 task-editing UI is present.
+This evidence applies only to that exact candidate snapshot and does not mean the
+candidate was committed.
+
+### Reviewing the dirty IMP-014 backlog editor candidate
+
+This operator-only profile is based on committed `3b5d603` and overlays only
+`web/src/BacklogPlanning.tsx` and its test plus the host fixture scripts. It uses
+the IMP-015 synthetic fixture and approved private handoff; do not broaden the
+overlay or use real project data. From the repository root, run:
+
+```sh
+python3 scripts/local_browser_fixture.py imp014-candidate-preflight
+```
+
+For the exact snapshot that passed preflight, launch with the printed fingerprint:
+
+```sh
+python3 scripts/local_browser_fixture.py launch \
+  --handoff-dir /tmp/opencode/impostr-review-handoff \
+  --lifetime-minutes 30 \
+  --imp014-candidate-fingerprint <FINGERPRINT_FROM_THIS_PREFLIGHT>
+```
+
+The coordinator uses the generated short-lived Member login through normal sign-in
+and reviews the rendered UI. Keep credentials, session data, private fixture state
+and raw logs private. Stop the owned fixture and verify sanitized cleanup status
+through the permitted handoff; confirm generated accounts/login and owned resources,
+images and private state were removed. Do not use broad Docker cleanup or move
+handoff contents to another channel. Existing denied-path and residual shared
+Playwright host-risk rules above apply.
+
+The verified candidate fingerprint was
+`14074823ca05988bb8d0b091376c15419acfe62dab405031e2f901bf24758f13`. Its preflight
+passed migration `20260930_0006`, nested-template checks, authentication and
+cross-Member denials. Normal sign-in rendered review received `ui-designer` PASS at
+1440/1024/768/375 px. Review covered body preservation, missing-newline repair,
+invalid inputs, readiness, rail collapse, keyboard operation, and an actual 409 conflict
+that retained local edits and showed the newer saved version for explicit reapplication. Stop exited 0 and
+owned cleanup verified generated accounts/login, resources/images, and private
+state removed. These results verify local acceptance of that exact candidate only;
+consult BACKLOG.md for delivery references.
+
+Web verification was 73 tests plus lint, format, typecheck and build; toolkit was
+137 tests with one gated live-Docker test skipped. A proposed live setup using an
+empty backlog was rejected to preserve task state; unit coverage exists, but there
+is no live empty-backlog proof. Independent code review and focused repair review
+passed. If candidate inputs change, repeat preflight and rendered review.
 
 As with the other candidate reviews, this preview uses the local Docker daemon and
 the shared Playwright tool server is **not OS-confined**; it may access Docker,
@@ -600,8 +645,8 @@ Use the task view's `revision_number` as `expected_revision` for the next save.
 `ready` means the task has the `[ ]` marker; `eligible` means it is ready and all
 its prerequisites have `[x]`. A ready task can therefore still be waiting. Draft
 (`[-]`), ready (`[ ]`), and dependency eligibility are distinct. This summary is
-read-only: the current workspace offers no dedicated task-list editor, and IMP-014
-is a separate UI slice. Neither a ready marker nor eligibility approves the saved
+read-only; the IMP-014 task-list editor provides separate direct-edit and draft/ready
+controls. Neither a ready marker nor eligibility approves the saved
 backlog revision. Backlog approval/download is separate from these endpoints.
 
 Task IDs are permanent; tasks cannot be deleted or renamed. New tasks need a
@@ -745,11 +790,13 @@ use Alembic downgrade or `docker compose down -v` on the source stack as recover
 Compose binds the front door to loopback by default and does not publish the
 database or API ports. This worktree includes account authentication,
 administrator-managed accounts, project creation, private draft/revision history,
-and human-only pair approval for `PROJECT.md` and `AGENTS.md`. The dirty IMP-007
-backlog-task API candidate has passed the exact-snapshot operator preflight and
-rendered review described above, but remains uncommitted; that evidence is not a
-delivery or a dedicated task-editing UI. This worktree does not provide chat,
-exports, or an agent gateway.
+and human-only pair approval for `PROJECT.md` and `AGENTS.md`. The human-only
+collapsible backlog editor supports title/body/dependency and `[-]`/`[ ]` readiness
+edits with local-edit conflict preservation, review of the newer saved version,
+and explicit reapplication. It does not provide chat, agent proposals, runner outcomes, or runner
+status editing. IMP-014's exact candidate preflight and rendered acceptance passed
+locally; consult BACKLOG.md for delivery references. The API supports approved
+downloads; this worktree does not provide chat or an agent gateway.
 It has no TLS or domain setup, trusted external reverse-proxy/client-IP contract,
 verified backup/restore runbook, complete release security gate, or verified agent
 isolation. Do not expose it by changing the published binding, firewall, or proxy

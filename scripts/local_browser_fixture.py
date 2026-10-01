@@ -64,7 +64,13 @@ IMP013_CANDIDATE_APP_REVISIONS = (
     *CANDIDATE_APP_REVISIONS,
     IMP013_CANDIDATE_APP_MIGRATION,
 )
+IMP014_CANDIDATE_APP_MIGRATION = "20260930_0006"
+IMP014_CANDIDATE_APP_REVISIONS = (
+    *IMP013_CANDIDATE_APP_REVISIONS,
+    IMP014_CANDIDATE_APP_MIGRATION,
+)
 IMP007_CANDIDATE_BASE_COMMIT = "31d0f8f97bcf857b28d4e3f0c7bf51db8f7bf759"
+IMP014_CANDIDATE_BASE_COMMIT = "3b5d603096efa8f6fc2a835801336365059b9616"
 COMMITTED_APP_MIGRATION_FILES_0004 = (
     (
         "20260925_0001_initial_baseline.py",
@@ -88,6 +94,13 @@ COMMITTED_APP_MIGRATION_FILES_0005 = (
     (
         "20260929_0005_document_pair_approvals.py",
         "4d0e1cadf8a768f61fc8c1b3501ef640aa674d651a5a8395c0aa5fd92af2d358",
+    ),
+)
+COMMITTED_APP_MIGRATION_FILES_0006 = (
+    *COMMITTED_APP_MIGRATION_FILES_0005,
+    (
+        "20260930_0006_project_approval_manifests.py",
+        "88ee12bb30817f57d37c2b54bade9c2ff1bf2ccc41e0cec99ee04199dbb54433",
     ),
 )
 CANDIDATE_PREVIEW_SCHEMA_VERSION = 1
@@ -123,6 +136,11 @@ COMMITTED_APP_MIGRATION_PROFILES = (
         name="imp013",
         commit=None,
         revision_files=COMMITTED_APP_MIGRATION_FILES_0005,
+    ),
+    CommittedMigrationProfile(
+        name="imp014",
+        commit=IMP014_CANDIDATE_BASE_COMMIT,
+        revision_files=COMMITTED_APP_MIGRATION_FILES_0006,
     ),
 )
 SAFE_BOOTSTRAP_CLI = """\
@@ -423,6 +441,13 @@ IMP007_CANDIDATE_TEST_LITERAL_DIGESTS = (
         "d9819f97c00543ed0a6ea4c55d883b9bfd888f0cfc230a6cdcc62aca3082ea09",
     ),
 )
+IMP014_CANDIDATE_TEST_LITERAL_DIGESTS = (
+    (
+        "web/src/BacklogPlanning.test.tsx",
+        "csrftoken",
+        "4f4b28e09a66ef8f645e978cd4f97f25aee236493353f48fc8095981bc83211a",
+    ),
+)
 CANDIDATE_STATUS_PATHS = (
     ".dockerignore",
     "compose.yaml",
@@ -489,6 +514,51 @@ IMP007_CANDIDATE_DOCKERIGNORE_RULES = (
     "api/**/*.pyc",
     "api/**/.env",
     "api/**/.env.*",
+)
+IMP014_CANDIDATE_DOCKERIGNORE_RULES = (
+    "**",
+    "!api/",
+    "!api/Dockerfile",
+    "!api/requirements.lock",
+    "!api/requirements-dev.lock",
+    "!api/pyproject.toml",
+    "!api/alembic.ini",
+    "!api/app/",
+    "!api/app/**",
+    "!api/migrations/",
+    "!api/migrations/**",
+    "!api/tests/",
+    "!api/tests/**",
+    "!scripts/",
+    "!scripts/backlog.py",
+    "!overnight-agent/",
+    "!overnight-agent/PROJECT.md.example",
+    "!overnight-agent/AGENTS.md.example",
+    "!overnight-agent/BACKLOG.md.example",
+    "api/**/__pycache__/",
+    "api/**/.pytest_cache/",
+    "api/**/.mypy_cache/",
+    "api/**/.ruff_cache/",
+    "api/**/*.pyc",
+    "api/**/.env",
+    "api/**/.env.*",
+)
+
+IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS = (
+    ".dockerignore",
+    "api/Dockerfile",
+    "api/app/task_sections.py",
+    "api/app/template_profiles.py",
+    "api/migrations/versions/20260930_0006_project_approval_manifests.py",
+    "api/tests/test_template_profiles.py",
+    "scripts/backlog.py",
+    "web/src/App.tsx",
+    "web/src/App.test.tsx",
+    "web/src/ProjectWorkspace.tsx",
+    "web/src/ProjectWorkspace.test.tsx",
+    "web/src/BacklogPlanning.tsx",
+    "web/src/BacklogPlanning.test.tsx",
+    *NESTED_TEMPLATE_PATHS,
 )
 REVIEW_IMAGE_PROJECT_LABEL = "io.impostr.local-browser-review.project"
 REVIEW_IMAGE_SERVICE_LABEL = "io.impostr.local-browser-review.service"
@@ -569,6 +639,7 @@ class CandidatePreviewPolicy:
     fingerprint_harness_changes: bool = False
     allowed_test_literal_digests: tuple[tuple[str, str, str], ...] = ()
     committed_support_paths: tuple[str, ...] = ()
+    required_snapshot_paths: tuple[str, ...] = ()
 
 
 CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
@@ -601,6 +672,20 @@ IMP007_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
     fingerprint_harness_changes=True,
     allowed_test_literal_digests=IMP007_CANDIDATE_TEST_LITERAL_DIGESTS,
     committed_support_paths=(".dockerignore", "scripts/backlog.py"),
+)
+IMP014_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=IMP014_CANDIDATE_BASE_COMMIT,
+    reviewed_inputs=(("web/src/BacklogPlanning.tsx", "modified"),),
+    nonruntime_test_changes=(("web/src/BacklogPlanning.test.tsx", "modified"),),
+    fingerprint_test_changes=True,
+    strict_scope=True,
+    status_paths=(*CANDIDATE_STATUS_PATHS, "scripts"),
+    allowed_input_modes=frozenset({0o644, 0o664}),
+    harness_changes=IMP013_CANDIDATE_HARNESS_CHANGES,
+    fingerprint_harness_changes=True,
+    allowed_test_literal_digests=IMP014_CANDIDATE_TEST_LITERAL_DIGESTS,
+    committed_support_paths=(".dockerignore", "scripts/backlog.py"),
+    required_snapshot_paths=IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS,
 )
 
 
@@ -1445,19 +1530,86 @@ IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON = (
 )
 
 
+def _imp014_candidate_migration_diagnostic_program() -> str:
+    program = IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
+    replacements = (
+        (
+            '        "revision_0005": "unavailable",\n'
+            '    },\n'
+            '    "discovered_revisions": [],',
+            '        "revision_0005": "unavailable",\n'
+            '        "revision_0006": "unavailable",\n'
+            '    },\n'
+            '    "discovered_revisions": [],',
+        ),
+        (
+            '    "project_document_pair_approvals": "unavailable",\n'
+            '}',
+            '    "project_document_pair_approvals": "unavailable",\n'
+            '    "project_approval_manifests": "unavailable",\n'
+            '}',
+        ),
+        (
+            '        "revision_0005": file_status(\n'
+            '            "/app/migrations/versions/20260929_0005_document_pair_approvals.py"\n'
+            '        ),\n'
+            '    }',
+            '        "revision_0005": file_status(\n'
+            '            "/app/migrations/versions/20260929_0005_document_pair_approvals.py"\n'
+            '        ),\n'
+            '        "revision_0006": file_status(\n'
+            '            "/app/migrations/versions/20260930_0006_project_approval_manifests.py"\n'
+            '        ),\n'
+            '    }',
+        ),
+        (
+            '"20260925_0004", "20260929_0005"}',
+            '"20260925_0004", "20260929_0005", "20260930_0006"}',
+        ),
+        (
+            '            result["project_document_pair_approvals"] = (\n'
+            '                "yes" if "project_document_pair_approvals" in tables else "no"\n'
+            '            )\n'
+            '            if "projects" in tables:',
+            '            result["project_document_pair_approvals"] = (\n'
+            '                "yes" if "project_document_pair_approvals" in tables else "no"\n'
+            '            )\n'
+            '            result["project_approval_manifests"] = (\n'
+            '                "yes" if "project_approval_manifests" in tables else "no"\n'
+            '            )\n'
+            '            if "projects" in tables:',
+        ),
+        (
+            'elif current_revisions == ["20260929_0005"]:',
+            'elif current_revisions == ["20260930_0006"]:',
+        ),
+    )
+    for before, after in replacements:
+        if program.count(before) != 1:
+            raise RuntimeError("The IMP-014 migration diagnostic template changed unexpectedly.")
+        program = program.replace(before, after, 1)
+    return program
+
+
+IMP014_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON = (
+    _imp014_candidate_migration_diagnostic_program()
+)
+
+
 def parse_migration_diagnostic(
     output: str,
     *,
     candidate: bool = False,
     imp013_candidate: bool = False,
+    imp014_candidate: bool = False,
 ) -> dict[str, Any] | None:
     """Validate bounded diagnostic JSON and retain only allowlisted evidence."""
-    if candidate and imp013_candidate:
+    if sum((candidate, imp013_candidate, imp014_candidate)) > 1:
         return None
     try:
         maximum_bytes = (
             MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES
-            if candidate
+            if candidate or imp013_candidate or imp014_candidate
             else MAX_MIGRATION_DIAGNOSTIC_BYTES
         )
         if len(output.encode("utf-8")) > maximum_bytes:
@@ -1496,10 +1648,12 @@ def parse_migration_diagnostic(
         "project_document_revisions",
         "document_conflict_proposals",
     }
-    if candidate or imp013_candidate:
+    if candidate or imp013_candidate or imp014_candidate:
         expected_keys.update(candidate_schema_fields)
-    if imp013_candidate:
+    if imp013_candidate or imp014_candidate:
         expected_keys.add("project_document_pair_approvals")
+    if imp014_candidate:
+        expected_keys.add("project_approval_manifests")
     if not isinstance(raw, dict) or set(raw) != expected_keys:
         return None
 
@@ -1522,7 +1676,7 @@ def parse_migration_diagnostic(
         "current": {"expected", "empty", "table-absent", "other", "unavailable"},
         "users": {"yes", "no", "unavailable"},
     }
-    if candidate or imp013_candidate:
+    if candidate or imp013_candidate or imp014_candidate:
         status_fields.update(
             {
                 "projects_name_key": {"yes", "no", "unavailable"},
@@ -1531,8 +1685,10 @@ def parse_migration_diagnostic(
                 "document_conflict_proposals": {"yes", "no", "unavailable"},
             }
         )
-    if imp013_candidate:
+    if imp013_candidate or imp014_candidate:
         status_fields["project_document_pair_approvals"] = {"yes", "no", "unavailable"}
+    if imp014_candidate:
+        status_fields["project_approval_manifests"] = {"yes", "no", "unavailable"}
     if any(
         not isinstance(raw[field], str) or raw[field] not in allowed
         for field, allowed in status_fields.items()
@@ -1548,10 +1704,12 @@ def parse_migration_diagnostic(
 
     image_files = raw["image_files"]
     expected_file_keys = {"alembic_ini", "env_py", "revision_0001", "revision_0002"}
-    if candidate or imp013_candidate:
+    if candidate or imp013_candidate or imp014_candidate:
         expected_file_keys.update({"revision_0003", "revision_0004"})
-    if imp013_candidate:
+    if imp013_candidate or imp014_candidate:
         expected_file_keys.add("revision_0005")
+    if imp014_candidate:
+        expected_file_keys.add("revision_0006")
     if (
         not isinstance(image_files, dict)
         or set(image_files) != expected_file_keys
@@ -1568,7 +1726,9 @@ def parse_migration_diagnostic(
         if not isinstance(value, list) or len(value) > 8:
             return None
         expected_revisions = (
-            IMP013_CANDIDATE_APP_REVISIONS
+            IMP014_CANDIDATE_APP_REVISIONS
+            if imp014_candidate
+            else IMP013_CANDIDATE_APP_REVISIONS
             if imp013_candidate
             else CANDIDATE_APP_REVISIONS
             if candidate
@@ -1660,6 +1820,7 @@ def format_migration_diagnostic(
     *,
     candidate: bool = False,
     imp013_candidate: bool = False,
+    imp014_candidate: bool = False,
 ) -> str:
     """Render only fixed statuses, known revision IDs, and expected image paths."""
     script_location = (
@@ -1677,10 +1838,12 @@ def format_migration_diagnostic(
         ("0001", "revision_0001"),
         ("0002", "revision_0002"),
     )
-    if candidate or imp013_candidate:
+    if candidate or imp013_candidate or imp014_candidate:
         file_labels += (("0003", "revision_0003"), ("0004", "revision_0004"))
-    if imp013_candidate:
+    if imp013_candidate or imp014_candidate:
         file_labels += (("0005", "revision_0005"),)
+    if imp014_candidate:
+        file_labels += (("0006", "revision_0006"),)
     files = ",".join(
         f"{label}:{diagnostic['image_files'][key]}" for label, key in file_labels
     )
@@ -1706,7 +1869,7 @@ def format_migration_diagnostic(
         f"alembic_version_table={diagnostic['alembic_version_table']} "
         f"catalog_current={diagnostic['current']} users={diagnostic['users']}"
     )
-    if candidate or imp013_candidate:
+    if candidate or imp013_candidate or imp014_candidate:
         summary += (
             " candidate_schema="
             f"projects_name_key:{diagnostic['projects_name_key']},"
@@ -1716,11 +1879,13 @@ def format_migration_diagnostic(
             "document_conflict_proposals:"
             f"{diagnostic['document_conflict_proposals']}"
         )
-    if imp013_candidate:
+    if imp013_candidate or imp014_candidate:
         summary += (
             " project_document_pair_approvals="
             f"{diagnostic['project_document_pair_approvals']}"
         )
+    if imp014_candidate:
+        summary += f" project_approval_manifests={diagnostic['project_approval_manifests']}"
     return summary
 
 
@@ -1729,19 +1894,24 @@ def migration_diagnostic_is_complete(
     *,
     candidate: bool = False,
     imp013_candidate: bool = False,
+    imp014_candidate: bool = False,
 ) -> bool:
     """Require the committed IMP-003 image, head, and schema before auth setup."""
-    if candidate and imp013_candidate:
+    if sum((candidate, imp013_candidate, imp014_candidate)) > 1:
         return False
     expected_revisions = (
-        IMP013_CANDIDATE_APP_REVISIONS
+        IMP014_CANDIDATE_APP_REVISIONS
+        if imp014_candidate
+        else IMP013_CANDIDATE_APP_REVISIONS
         if imp013_candidate
         else CANDIDATE_APP_REVISIONS
         if candidate
         else EXPECTED_APP_REVISIONS
     )
     expected_head = (
-        IMP013_CANDIDATE_APP_MIGRATION
+        IMP014_CANDIDATE_APP_MIGRATION
+        if imp014_candidate
+        else IMP013_CANDIDATE_APP_MIGRATION
         if imp013_candidate
         else CANDIDATE_APP_MIGRATION
         if candidate
@@ -1769,7 +1939,7 @@ def migration_diagnostic_is_complete(
         and diagnostic["current"] == "expected"
         and diagnostic["users"] == "yes"
     )
-    if candidate or imp013_candidate:
+    if candidate or imp013_candidate or imp014_candidate:
         complete = complete and all(
             diagnostic[field] == "yes"
             for field in (
@@ -1778,6 +1948,11 @@ def migration_diagnostic_is_complete(
                 "project_document_revisions",
                 "document_conflict_proposals",
             )
+        )
+    if imp014_candidate:
+        return complete and all(
+            diagnostic[field] == "yes"
+            for field in ("project_document_pair_approvals", "project_approval_manifests")
         )
     if imp013_candidate:
         return complete and diagnostic["project_document_pair_approvals"] == "yes"
@@ -2086,7 +2261,7 @@ def select_committed_app_migration_profile(
         profile for profile in profiles if profile.commit is None
     )
     for profile in candidates:
-        if profile.name not in {"imp004", "imp013"}:
+        if profile.name not in {"imp004", "imp013", "imp014"}:
             continue
         expected = dict(profile.revision_files)
         if (
@@ -2569,6 +2744,12 @@ def archive_candidate_snapshot(
         expected_commit=commit,
         additional_paths=policy.committed_support_paths,
     )
+    for path in policy.required_snapshot_paths:
+        _read_candidate_file(
+            destination,
+            path,
+            maximum_bytes=policy.max_file_bytes,
+        )
     runtime_paths = {path for path, _status in policy.reviewed_inputs}
     for record in records:
         if record.path not in runtime_paths:
@@ -2609,7 +2790,12 @@ def archive_candidate_snapshot(
     return candidate
 
 
-def validate_candidate_dockerignore(source_dir: Path, *, imp007: bool = False) -> None:
+def validate_candidate_dockerignore(
+    source_dir: Path,
+    *,
+    imp007: bool = False,
+    imp014: bool = False,
+) -> None:
     """Keep each candidate's root-context build limited to its reviewed inputs."""
     try:
         raw = _read_candidate_file(
@@ -2624,8 +2810,14 @@ def validate_candidate_dockerignore(source_dir: Path, *, imp007: bool = False) -
         )
     except UnicodeDecodeError:
         raise FixtureError("The candidate root build ignore file is invalid.") from None
+    if imp007 and imp014:
+        raise FixtureError("The candidate root build profile is ambiguous.")
     expected_rules = (
-        IMP007_CANDIDATE_DOCKERIGNORE_RULES if imp007 else CANDIDATE_DOCKERIGNORE_RULES
+        IMP014_CANDIDATE_DOCKERIGNORE_RULES
+        if imp014
+        else IMP007_CANDIDATE_DOCKERIGNORE_RULES
+        if imp007
+        else CANDIDATE_DOCKERIGNORE_RULES
     )
     if rules != expected_rules:
         raise FixtureError("The candidate root build context is not safely allowlisted.")
@@ -3326,16 +3518,28 @@ class ComposeController:
         candidate: bool = False,
         approval_candidate: bool = False,
         imp007_candidate: bool = False,
+        imp014_candidate: bool = False,
         committed_migration_profile: str | None = None,
     ) -> None:
-        if approval_candidate and imp007_candidate:
+        if sum((approval_candidate, imp007_candidate, imp014_candidate)) > 1:
             raise FixtureError("A candidate snapshot cannot select two migration profiles.")
-        if (approval_candidate or imp007_candidate) and not candidate:
-            profile = "IMP-013" if approval_candidate else "IMP-007"
+        if (approval_candidate or imp007_candidate or imp014_candidate) and not candidate:
+            profile = (
+                "IMP-013"
+                if approval_candidate
+                else "IMP-007"
+                if imp007_candidate
+                else "IMP-014"
+            )
             raise FixtureError(f"The {profile} migration profile requires a candidate snapshot.")
         if candidate and committed_migration_profile is not None:
             raise FixtureError("A candidate snapshot cannot select a committed migration profile.")
-        if not candidate and committed_migration_profile not in {None, "imp004", "imp013"}:
+        if not candidate and committed_migration_profile not in {
+            None,
+            "imp004",
+            "imp013",
+            "imp014",
+        }:
             raise FixtureError("The committed migration profile is invalid.")
         self.docker = docker
         self.source_dir = source_dir
@@ -3345,6 +3549,7 @@ class ComposeController:
         self.candidate = candidate
         self.approval_candidate = approval_candidate
         self.imp007_candidate = imp007_candidate
+        self.imp014_candidate = imp014_candidate
         self.committed_migration_profile = committed_migration_profile
 
     def command(self, arguments: Sequence[str]) -> list[str]:
@@ -3520,7 +3725,9 @@ class ComposeController:
         )
 
     def migrate(self) -> str:
-        if self.approval_candidate:
+        if self.imp014_candidate:
+            migration_profile = "imp014"
+        elif self.approval_candidate:
             migration_profile = "imp013"
         elif self.imp007_candidate:
             migration_profile = "imp007"
@@ -3528,16 +3735,21 @@ class ComposeController:
             migration_profile = "imp004"
         else:
             migration_profile = self.committed_migration_profile
-        if migration_profile not in {"imp004", "imp007", "imp013"}:
+        if migration_profile not in {"imp004", "imp007", "imp013", "imp014"}:
             raise FixtureError("The committed app migration profile was not verified.")
         schema_0005_profile = migration_profile in {"imp007", "imp013"}
+        schema_0006_profile = migration_profile == "imp014"
 
         self.invoke(
             ["run", "--rm", "api", "alembic", "upgrade", "head"],
             label="fresh database migration",
             timeout=300,
         )
-        if schema_0005_profile:
+        if schema_0006_profile:
+            diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic(
+                imp014_candidate=True,
+            )
+        elif schema_0005_profile:
             diagnostic_exit, diagnostic_output, stderr_category = self.run_migration_diagnostic(
                 imp013_candidate=True,
             )
@@ -3549,6 +3761,7 @@ class ComposeController:
             diagnostic_output,
             candidate=migration_profile == "imp004",
             imp013_candidate=schema_0005_profile,
+            imp014_candidate=schema_0006_profile,
         )
         if diagnostic is None:
             raise FixtureError(
@@ -3559,6 +3772,7 @@ class ComposeController:
             diagnostic,
             candidate=migration_profile == "imp004",
             imp013_candidate=schema_0005_profile,
+            imp014_candidate=schema_0006_profile,
         )
         current = self.invoke(
             ["run", "--rm", "api", "alembic", "current"],
@@ -3567,7 +3781,9 @@ class ComposeController:
             capture_stdout=True,
         )
         expected_migration = (
-            IMP013_CANDIDATE_APP_MIGRATION
+            IMP014_CANDIDATE_APP_MIGRATION
+            if schema_0006_profile
+            else IMP013_CANDIDATE_APP_MIGRATION
             if schema_0005_profile
             else EXPECTED_APP_MIGRATION
         )
@@ -3579,6 +3795,7 @@ class ComposeController:
                 diagnostic,
                 candidate=migration_profile == "imp004",
                 imp013_candidate=schema_0005_profile,
+                imp014_candidate=schema_0006_profile,
             )
         ):
             expected_label = "candidate" if self.candidate else "committed"
@@ -3594,6 +3811,8 @@ class ComposeController:
                 or self.imp007_candidate
                 or self.committed_migration_profile == "imp013"
             )
+            else IMP014_CANDIDATE_APP_MIGRATION
+            if self.imp014_candidate or self.committed_migration_profile == "imp014"
             else CANDIDATE_APP_MIGRATION
             if self.candidate
             else status
@@ -3616,9 +3835,12 @@ class ComposeController:
         *,
         candidate: bool = False,
         imp013_candidate: bool = False,
+        imp014_candidate: bool = False,
     ) -> tuple[int, str, str]:
         """Capture only bounded stdout from the fixed in-container probe."""
-        if imp013_candidate:
+        if imp014_candidate:
+            program = IMP014_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
+        elif imp013_candidate:
             program = IMP013_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
         elif candidate:
             program = CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON
@@ -3626,7 +3848,7 @@ class ComposeController:
             program = MIGRATION_DIAGNOSTIC_PYTHON
         maximum_bytes = (
             MAX_CANDIDATE_MIGRATION_DIAGNOSTIC_BYTES
-            if candidate or imp013_candidate
+            if candidate or imp013_candidate or imp014_candidate
             else MAX_MIGRATION_DIAGNOSTIC_BYTES
         )
         try:
@@ -4448,7 +4670,7 @@ class FixtureSupervisor:
             r"[0-9a-f]{64}", candidate_fingerprint
         ) is None:
             raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
-        if candidate_variant not in {"imp004", "imp007", "imp013"}:
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014"}:
             raise FixtureError("The candidate review scope is invalid.")
         self.candidate_preflight = candidate_preflight
         self.candidate_fingerprint = candidate_fingerprint
@@ -4460,6 +4682,8 @@ class FixtureSupervisor:
             raise FixtureError("The IMP-013 candidate scope requires explicit opt-in.")
         if candidate_variant == "imp007" and not self.candidate_mode:
             raise FixtureError("The IMP-007 candidate scope requires explicit opt-in.")
+        if candidate_variant == "imp014" and not self.candidate_mode:
+            raise FixtureError("The IMP-014 candidate scope requires explicit opt-in.")
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -4574,6 +4798,7 @@ class FixtureSupervisor:
             validate_candidate_dockerignore(
                 self.source_dir,
                 imp007=self.candidate_variant == "imp007",
+                imp014=self.candidate_variant == "imp014",
             )
             set_candidate_snapshot_loopback_host(self.source_dir, host)
             set_candidate_snapshot_review_images(self.source_dir, self.identity.project_name)
@@ -4605,6 +4830,7 @@ class FixtureSupervisor:
             candidate=self.candidate_mode,
             approval_candidate=self.candidate_variant == "imp013",
             imp007_candidate=self.candidate_variant == "imp007",
+            imp014_candidate=self.candidate_variant == "imp014",
             committed_migration_profile=committed_migration_profile,
         )
 
@@ -4681,6 +4907,8 @@ class FixtureSupervisor:
         )
 
     def _candidate_policy(self) -> CandidatePreviewPolicy:
+        if self.candidate_variant == "imp014":
+            return IMP014_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp013":
             return IMP013_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp007":
@@ -4855,15 +5083,22 @@ class FixtureSupervisor:
             or len(document_response.payload) != 3
         ):
             raise FixtureError("Candidate project creation did not return three draft documents.")
+        template_sources = (
+            NESTED_TEMPLATE_PATHS
+            if self.candidate_variant == "imp014"
+            else LEGACY_TEMPLATE_PATHS
+        )
         expected_sources = {
-            "project": ("PROJECT.md", "PROJECT.md.example"),
-            "agents": ("AGENTS.md", "AGENTS.md.example"),
-            "backlog": ("BACKLOG.md", "BACKLOG.md.example"),
+            kind: (filename, source)
+            for kind, filename, source in zip(
+                ("project", "agents", "backlog"),
+                ("PROJECT.md", "AGENTS.md", "BACKLOG.md"),
+                template_sources,
+                strict=True,
+            )
         }
-        if not all((self.source_dir / path).is_file() for path in LEGACY_TEMPLATE_PATHS):
-            # Old candidate policies cannot certify replacement inputs. The later
-            # exact IMP-014 profile must explicitly authorize the new inventory.
-            raise FixtureError("This candidate profile requires its reviewed legacy templates.")
+        if not all((self.source_dir / path).is_file() for path in template_sources):
+            raise FixtureError("This candidate profile requires its reviewed template bundle.")
         observed_kinds: set[str] = set()
         for document in document_response.payload:
             if not isinstance(document, dict):
@@ -4919,7 +5154,7 @@ class FixtureSupervisor:
         ):
             raise FixtureError("A second candidate Member read foreign project drafts.")
 
-        if self.candidate_variant == "imp007":
+        if self.candidate_variant in {"imp007", "imp014"}:
             self._verify_candidate_backlog_tasks(
                 client,
                 other_client,
@@ -4935,6 +5170,16 @@ class FixtureSupervisor:
                 project_id=project_id,
                 owner_id=owner_id,
             )
+        elif self.candidate_variant == "imp014":
+            owner_status = ApiClient._require_json_object(
+                client.request("GET", pair_approval_path),
+                200,
+                "IMP-014 initial document-pair approval status",
+            )
+            if owner_status.get("approved") is not False:
+                raise FixtureError("A fresh candidate project has an unexpected approval state.")
+            if other_client.request("GET", pair_approval_path).status != 404:
+                raise FixtureError("A second candidate Member discovered a foreign approval status.")
         elif (
             self.candidate_variant == "imp004"
             and other_client.request("GET", pair_approval_path).status != 404
@@ -4948,10 +5193,10 @@ class FixtureSupervisor:
                 "draft creation, cross-Member denial, invalid/stale approval rejection, "
                 "version-bound pair approval, and approval invalidation after a saved edit."
             )
-        elif self.candidate_variant == "imp007":
+        elif self.candidate_variant in {"imp007", "imp014"}:
             self._say(
-                "IMP-007 candidate preflight passed: normal Member sign-in, revision-bound "
-                "backlog task view, and cross-Member task read/write denial."
+                f"{self.candidate_variant.upper()} candidate preflight passed: normal Member "
+                "sign-in, revision-bound backlog task view, and cross-Member task read/write denial."
             )
         else:
             self._say(
@@ -4967,9 +5212,9 @@ class FixtureSupervisor:
         project_id: str,
         documents: Any,
     ) -> None:
-        """Verify the IMP-007 read view and deny another Member's backlog access."""
-        if not self.candidate_preflight or self.candidate_variant != "imp007":
-            raise FixtureError("The IMP-007 backlog preflight is not configured safely.")
+        """Verify the backlog read view and deny another Member's backlog access."""
+        if not self.candidate_preflight or self.candidate_variant not in {"imp007", "imp014"}:
+            raise FixtureError("The candidate backlog preflight is not configured safely.")
         if not client.csrf_token or not other_client.csrf_token:
             raise FixtureError("The synthetic Member backlog sessions are unavailable.")
         if not isinstance(documents, list):
@@ -5733,6 +5978,14 @@ class FixtureSupervisor:
                 fingerprint_label = "IMP007_CANDIDATE_FINGERPRINT"
                 result_label = "IMP007_CANDIDATE_PREFLIGHT_RESULT"
                 cleanup_label = "IMP007_CANDIDATE_CLEANUP"
+            elif self.candidate_variant == "imp014":
+                self._say(
+                    "IMP014_CANDIDATE_PREFLIGHT_SCOPE=committed-ui-template-task-api; "
+                    "rendered browser review was not performed."
+                )
+                fingerprint_label = "IMP014_CANDIDATE_FINGERPRINT"
+                result_label = "IMP014_CANDIDATE_PREFLIGHT_RESULT"
+                cleanup_label = "IMP014_CANDIDATE_CLEANUP"
             else:
                 self._say(
                     "CANDIDATE_PREFLIGHT_SCOPE=infrastructure-only; authenticated browser rendering "
@@ -6176,6 +6429,7 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
                 "--candidate-fingerprint",
                 "--imp007-candidate-fingerprint",
                 "--imp013-candidate-fingerprint",
+                "--imp014-candidate-fingerprint",
             }
             and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
         )
@@ -6471,6 +6725,7 @@ def _run_guardian(
                 "imp004": "--candidate-fingerprint",
                 "imp007": "--imp007-candidate-fingerprint",
                 "imp013": "--imp013-candidate-fingerprint",
+                "imp014": "--imp014-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -6605,8 +6860,9 @@ def launch_unattended(
     lock_fd = _open_control_lock(control_directory)
     guardian: subprocess.Popen[bytes] | None = None
     try:
-        if candidate_variant not in {"imp004", "imp007", "imp013"} or (
-            candidate_variant in {"imp007", "imp013"} and candidate_fingerprint is None
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014"} or (
+            candidate_variant in {"imp007", "imp013", "imp014"}
+            and candidate_fingerprint is None
         ):
             raise FixtureError("The candidate review scope requires a valid opt-in fingerprint.")
         validate_approved_handoff_directory(handoff_directory)
@@ -6638,6 +6894,7 @@ def launch_unattended(
                 "imp004": "--candidate-fingerprint",
                 "imp007": "--imp007-candidate-fingerprint",
                 "imp013": "--imp013-candidate-fingerprint",
+                "imp014": "--imp014-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -6909,6 +7166,7 @@ def _add_candidate_fingerprint_arguments(
     parser: argparse.ArgumentParser,
     *,
     include_imp007: bool = False,
+    include_imp014: bool = False,
 ) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -6930,9 +7188,19 @@ def _add_candidate_fingerprint_arguments(
             type=_candidate_fingerprint_argument,
             help="opt into the pinned IMP-007 candidate after its backlog preflight",
         )
+    if include_imp014:
+        group.add_argument(
+            "--imp014-candidate-fingerprint",
+            dest="imp014_candidate_fingerprint",
+            type=_candidate_fingerprint_argument,
+            help="opt into the pinned IMP-014 candidate after its UI preflight",
+        )
 
 
 def _candidate_selection(parsed: argparse.Namespace) -> tuple[str | None, str]:
+    imp014_fingerprint = getattr(parsed, "imp014_candidate_fingerprint", None)
+    if imp014_fingerprint is not None:
+        return imp014_fingerprint, "imp014"
     imp007_fingerprint = getattr(parsed, "imp007_candidate_fingerprint", None)
     if imp007_fingerprint is not None:
         return imp007_fingerprint, "imp007"
@@ -7004,6 +7272,18 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "this fresh-stack preflight verifies the authenticated backlog task view and cross-Member "
         "denial but does not perform rendered browser review or publish credentials."
     )
+    imp014_preflight = subparsers.add_parser(
+        "imp014-candidate-preflight",
+        help=(
+            "build and verify the exact committed IMP-014 UI/template/task API base, "
+            "then clean up without browser handoff"
+        ),
+    )
+    imp014_preflight.description = (
+        "Pin committed HEAD 3b5d603 and the reviewed BacklogPlanning UI/test plus fixture "
+        "harness changes; this fresh-stack check validates the IMP-022 nested template bundle, "
+        "0006 API schema, task view and authorization denials, but does not render the UI."
+    )
     launch = subparsers.add_parser(
         "launch",
         help="start the detached PTY supervisor and publish a private Member handoff",
@@ -7023,7 +7303,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
             f"default {DEFAULT_LIFETIME_MINUTES})"
         ),
     )
-    _add_candidate_fingerprint_arguments(launch, include_imp007=True)
+    _add_candidate_fingerprint_arguments(launch, include_imp007=True, include_imp014=True)
     stop = subparsers.add_parser(
         "stop",
         help="stop the recorded local fixture and wait for verified cleanup status",
@@ -7049,12 +7329,12 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     guardian.add_argument("--handoff-dir", type=Path, required=True)
     guardian.add_argument("--lifetime-minutes", type=int, required=True)
     guardian.add_argument("--lock-fd", type=int, required=True)
-    _add_candidate_fingerprint_arguments(guardian, include_imp007=True)
+    _add_candidate_fingerprint_arguments(guardian, include_imp007=True, include_imp014=True)
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
     supervise.add_argument("--handoff-dir", type=Path, required=True)
     supervise.add_argument("--lifetime-minutes", type=int, required=True)
-    _add_candidate_fingerprint_arguments(supervise, include_imp007=True)
+    _add_candidate_fingerprint_arguments(supervise, include_imp007=True, include_imp014=True)
 
     parsed = parser.parse_args(arguments)
     if parsed.command in {"start", "launch", "_guardian", "_supervise"} and not (
@@ -7118,6 +7398,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 root,
                 candidate_preflight=True,
                 candidate_variant="imp007",
+            ).run()
+        if parsed.command == "imp014-candidate-preflight":
+            return FixtureSupervisor(
+                root,
+                candidate_preflight=True,
+                candidate_variant="imp014",
             ).run()
         candidate_fingerprint, candidate_variant = _candidate_selection(parsed)
         supervisor = FixtureSupervisor(

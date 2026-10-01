@@ -190,6 +190,19 @@ class CommittedMigrationProfileTests(unittest.TestCase):
             "imp013",
         )
 
+        for filename, _digest in fixture.COMMITTED_APP_MIGRATION_FILES_0006[-1:]:
+            source = repository_root / "api" / "migrations" / "versions" / filename
+            target = self.versions / filename
+            target.write_bytes(source.read_bytes())
+            target.chmod(0o644)
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(
+                self.source,
+                fixture.IMP014_CANDIDATE_BASE_COMMIT,
+            ),
+            "imp014",
+        )
+
     def test_committed_0004_and_0005_profiles_require_exact_revision_bytes(self) -> None:
         filenames_0004 = (
             "20260925_0001_initial_baseline.py",
@@ -371,6 +384,18 @@ class MigrationDiagnosticTests(unittest.TestCase):
         diagnostic["project_document_pair_approvals"] = "yes"
         return diagnostic
 
+    @classmethod
+    def valid_imp014_candidate_diagnostic(cls) -> dict[str, object]:
+        diagnostic = cls.valid_imp013_candidate_diagnostic()
+        diagnostic["image_files"] = {
+            **diagnostic["image_files"],
+            "revision_0006": "present",
+        }
+        diagnostic["discovered_revisions"] = list(fixture.IMP014_CANDIDATE_APP_REVISIONS)
+        diagnostic["heads"] = [fixture.IMP014_CANDIDATE_APP_MIGRATION]
+        diagnostic["project_approval_manifests"] = "yes"
+        return diagnostic
+
     def test_runtime_diagnostic_code_compiles_without_reading_database_settings(self) -> None:
         compile(fixture.MIGRATION_DIAGNOSTIC_PYTHON, "<migration-diagnostic>", "exec")
 
@@ -473,6 +498,55 @@ class MigrationDiagnosticTests(unittest.TestCase):
         assert parsed_wrong_head is not None
         self.assertFalse(
             fixture.migration_diagnostic_is_complete(parsed_wrong_head, imp013_candidate=True)
+        )
+
+    def test_imp014_diagnostic_requires_exact_0006_head_and_manifest_schema(self) -> None:
+        compile(
+            fixture.IMP014_CANDIDATE_MIGRATION_DIAGNOSTIC_PYTHON,
+            "<imp014-candidate-migration-diagnostic>",
+            "exec",
+        )
+        diagnostic = self.valid_imp014_candidate_diagnostic()
+        parsed = fixture.parse_migration_diagnostic(
+            json.dumps(diagnostic, separators=(",", ":")),
+            imp014_candidate=True,
+        )
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertTrue(fixture.migration_diagnostic_is_complete(parsed, imp014_candidate=True))
+        self.assertIn("0006:present", fixture.format_migration_diagnostic(parsed, imp014_candidate=True))
+        self.assertIn("project_approval_manifests=yes", fixture.format_migration_diagnostic(parsed, imp014_candidate=True))
+
+        missing_manifest = self.valid_imp014_candidate_diagnostic()
+        missing_manifest["project_approval_manifests"] = "no"
+        parsed_missing = fixture.parse_migration_diagnostic(
+            json.dumps(missing_manifest),
+            imp014_candidate=True,
+        )
+        self.assertIsNotNone(parsed_missing)
+        assert parsed_missing is not None
+        self.assertFalse(
+            fixture.migration_diagnostic_is_complete(parsed_missing, imp014_candidate=True)
+        )
+
+        wrong_head = self.valid_imp014_candidate_diagnostic()
+        wrong_head["heads"] = [fixture.IMP013_CANDIDATE_APP_MIGRATION]
+        parsed_wrong = fixture.parse_migration_diagnostic(
+            json.dumps(wrong_head),
+            imp014_candidate=True,
+        )
+        self.assertIsNotNone(parsed_wrong)
+        assert parsed_wrong is not None
+        self.assertFalse(
+            fixture.migration_diagnostic_is_complete(parsed_wrong, imp014_candidate=True)
+        )
+
+        self.assertIsNone(
+            fixture.parse_migration_diagnostic(
+                json.dumps(diagnostic),
+                imp013_candidate=True,
+            ),
+            "the previous 0005 profile must reject current 0006 diagnostic evidence",
         )
 
     def test_only_allowlisted_image_revision_and_database_evidence_is_formatted(self) -> None:
@@ -755,6 +829,83 @@ class MigrationDiagnosticTests(unittest.TestCase):
             ["run", "--rm", "api", "alembic", "current"],
         )
         diagnose.assert_called_once_with(imp013_candidate=True)
+
+    def test_imp014_migrate_requires_the_pinned_0006_manifest_schema(self) -> None:
+        diagnostic = json.dumps(
+            self.valid_imp014_candidate_diagnostic(),
+            separators=(",", ":"),
+        )
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/imp014-candidate-source"),
+            env_file=Path("/tmp/imp014-candidate-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            candidate=True,
+            imp014_candidate=True,
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260930_0006 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260930_0006", evidence)
+        self.assertIn("project_approval_manifests=yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(imp014_candidate=True)
+
+    def test_committed_imp014_profile_uses_the_0006_migration_diagnostic(self) -> None:
+        diagnostic = json.dumps(
+            self.valid_imp014_candidate_diagnostic(),
+            separators=(",", ":"),
+        )
+        compose = fixture.ComposeController(
+            docker=object(),
+            source_dir=Path("/tmp/committed-imp014-source"),
+            env_file=Path("/tmp/committed-imp014-env"),
+            project_name="impostr-review-0123456789abcdef0123",
+            committed_migration_profile="imp014",
+        )
+        with (
+            patch.object(
+                compose,
+                "invoke",
+                side_effect=["", "20260930_0006 (head)\n"],
+            ) as invoke,
+            patch.object(
+                compose,
+                "run_migration_diagnostic",
+                return_value=(0, diagnostic, "empty"),
+            ) as diagnose,
+        ):
+            evidence = compose.migrate()
+
+        self.assertIn("alembic_current=20260930_0006", evidence)
+        self.assertIn("project_approval_manifests=yes", evidence)
+        self.assertEqual(
+            invoke.call_args_list[0].args[0],
+            ["run", "--rm", "api", "alembic", "upgrade", "head"],
+        )
+        self.assertEqual(
+            invoke.call_args_list[1].args[0],
+            ["run", "--rm", "api", "alembic", "current"],
+        )
+        diagnose.assert_called_once_with(imp014_candidate=True)
 
     def test_candidate_migrate_requires_single_head_and_candidate_diagnostics(self) -> None:
         diagnostic = json.dumps(self.valid_candidate_diagnostic(), separators=(",", ":"))
@@ -1051,6 +1202,41 @@ class GitArchiveTests(unittest.TestCase):
             with self.subTest(directory=directory.relative_to(snapshot)):
                 self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o755)
 
+    def test_imp014_profile_archives_the_actual_pinned_base_and_all_required_nested_inputs(
+        self,
+    ) -> None:
+        repository_root = Path(fixture.__file__).resolve().parent.parent
+        snapshot = Path(self.temporary.name) / "actual-imp014-profile-snapshot"
+        commit = fixture.archive_head_snapshot(
+            repository_root,
+            snapshot,
+            private_home=self.private_home,
+            expected_commit=fixture.IMP014_CANDIDATE_BASE_COMMIT,
+            additional_paths=fixture.IMP014_CANDIDATE_PREVIEW_POLICY.committed_support_paths,
+        )
+
+        self.assertEqual(commit, fixture.IMP014_CANDIDATE_BASE_COMMIT)
+        self.assertEqual(
+            fixture.select_committed_app_migration_profile(snapshot, commit),
+            "imp014",
+        )
+        fixture.validate_candidate_dockerignore(snapshot, imp014=True)
+        for relative in fixture.IMP014_CANDIDATE_REQUIRED_SNAPSHOT_PATHS:
+            with self.subTest(path=relative):
+                self.assertTrue((snapshot / relative).is_file())
+        self.assertEqual(
+            fixture.select_snapshot_templates(
+                tuple(
+                    path.relative_to(snapshot).as_posix()
+                    for path in snapshot.rglob("*.example")
+                )
+            ),
+            fixture.NESTED_TEMPLATE_PATHS,
+        )
+        for legacy_path in fixture.LEGACY_TEMPLATE_PATHS:
+            self.assertFalse((snapshot / legacy_path).exists())
+        self.assertFalse((snapshot / "overnight-agent" / "opencode.json").exists())
+
     def test_tracked_dotenv_file_blocks_snapshot_before_build_context_creation(self) -> None:
         self.initialize_committed_app()
         dotenv_value = secrets.token_hex(32)
@@ -1237,6 +1423,70 @@ class CandidateSnapshotTests(unittest.TestCase):
             base_commit=base_commit,
         )
 
+    def initialize_imp014_checkout(self) -> str:
+        self.initialize_checkout()
+        for relative in fixture.LEGACY_TEMPLATE_PATHS:
+            (self.root / relative).unlink()
+        files = (
+            (".dockerignore", "\n".join(fixture.IMP014_CANDIDATE_DOCKERIGNORE_RULES) + "\n"),
+            ("api/Dockerfile", "committed nested-template API image\n"),
+            ("api/app/task_sections.py", "committed task-section parser\n"),
+            ("api/app/template_profiles.py", "committed starter profiles\n"),
+            (
+                "api/migrations/versions/20260930_0006_project_approval_manifests.py",
+                "committed manifest migration\n",
+            ),
+            ("api/tests/test_template_profiles.py", "committed template profile tests\n"),
+            ("scripts/backlog.py", "committed root compatibility parser\n"),
+            ("web/src/App.test.tsx", "committed app-shell tests\n"),
+            ("web/src/ProjectWorkspace.tsx", "committed backlog workspace UI\n"),
+            ("web/src/ProjectWorkspace.test.tsx", "committed backlog workspace tests\n"),
+            ("web/src/BacklogPlanning.tsx", "committed backlog planner UI\n"),
+            ("web/src/BacklogPlanning.test.tsx", "committed backlog planner tests\n"),
+            ("overnight-agent/PROJECT.md.example", "nested project example\n"),
+            ("overnight-agent/AGENTS.md.example", "nested agent example\n"),
+            ("overnight-agent/BACKLOG.md.example", "nested backlog example\n"),
+        )
+        for relative, content in files:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            path.chmod(0o644)
+        self.git("add", "-A")
+        self.git(
+            "-c",
+            "user.name=Fixture Test",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "IMP-014 exact committed base fixture",
+        )
+        return self.git("rev-parse", "HEAD")
+
+    def imp014_policy(self, base_commit: str) -> fixture.CandidatePreviewPolicy:
+        return replace(
+            fixture.IMP014_CANDIDATE_PREVIEW_POLICY,
+            base_commit=base_commit,
+        )
+
+    def write_imp014_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
+        base = self.initialize_imp014_checkout()
+        policy = self.imp014_policy(base)
+        all_changes = (
+            *policy.reviewed_inputs,
+            *policy.nonruntime_test_changes,
+            *policy.harness_changes,
+        )
+        for relative, status in all_changes:
+            self.assertEqual(status, "modified")
+            (self.root / relative).write_text(
+                f"updated exact-profile harness input: {relative}\n",
+                encoding="utf-8",
+            )
+            (self.root / relative).chmod(0o644)
+        return base, policy
+
     def write_imp007_candidate(self) -> tuple[str, fixture.CandidatePreviewPolicy]:
         base = self.initialize_imp007_checkout()
         policy = self.imp007_policy(base)
@@ -1414,6 +1664,270 @@ class CandidateSnapshotTests(unittest.TestCase):
                         reviewed_inputs=((unapproved, "modified"),),
                     ),
                 )
+
+    def test_imp014_policy_pins_the_committed_base_and_single_ui_overlay(self) -> None:
+        policy = fixture.IMP014_CANDIDATE_PREVIEW_POLICY
+        self.assertEqual(
+            policy.base_commit,
+            "3b5d603096efa8f6fc2a835801336365059b9616",
+        )
+        self.assertEqual(policy.reviewed_inputs, (("web/src/BacklogPlanning.tsx", "modified"),))
+        self.assertEqual(
+            policy.nonruntime_test_changes,
+            (("web/src/BacklogPlanning.test.tsx", "modified"),),
+        )
+        self.assertTrue(policy.fingerprint_test_changes)
+        self.assertEqual(
+            policy.allowed_test_literal_digests,
+            fixture.IMP014_CANDIDATE_TEST_LITERAL_DIGESTS,
+        )
+        self.assertEqual(
+            set(policy.harness_changes),
+            {
+                ("scripts/local_browser_fixture.py", "modified"),
+                ("scripts/test_local_browser_fixture.py", "modified"),
+            },
+        )
+        self.assertTrue(policy.strict_scope)
+        self.assertTrue(policy.fingerprint_harness_changes)
+        self.assertEqual(policy.status_paths, (*fixture.CANDIDATE_STATUS_PATHS, "scripts"))
+        self.assertEqual(policy.committed_support_paths, (".dockerignore", "scripts/backlog.py"))
+        self.assertEqual(
+            set(policy.required_snapshot_paths),
+            {
+                ".dockerignore",
+                "api/Dockerfile",
+                "api/app/task_sections.py",
+                "api/app/template_profiles.py",
+                "api/migrations/versions/20260930_0006_project_approval_manifests.py",
+                "api/tests/test_template_profiles.py",
+                "scripts/backlog.py",
+                "web/src/App.tsx",
+                "web/src/App.test.tsx",
+                "web/src/ProjectWorkspace.tsx",
+                "web/src/ProjectWorkspace.test.tsx",
+                "web/src/BacklogPlanning.tsx",
+                "web/src/BacklogPlanning.test.tsx",
+                *fixture.NESTED_TEMPLATE_PATHS,
+            },
+        )
+        self.assertEqual(
+            fixture.validate_candidate_reviewed_paths(
+                tuple(path for path, _status in policy.reviewed_inputs),
+                policy=policy,
+            ),
+            ("web/src/BacklogPlanning.tsx",),
+        )
+        self.assertNotIn("PROJECT.md.example", policy.required_snapshot_paths)
+        self.assertNotIn("AGENTS.md.example", policy.required_snapshot_paths)
+        self.assertNotIn("BACKLOG.md.example", policy.required_snapshot_paths)
+
+    def test_imp014_test_token_exception_is_bound_to_exact_file_name_and_value(self) -> None:
+        policy = fixture.IMP014_CANDIDATE_PREVIEW_POLICY
+        path = "web/src/BacklogPlanning.test.tsx"
+        allowed_literals = frozenset(policy.allowed_test_literal_digests)
+        repository_root = Path(fixture.__file__).resolve().parent.parent
+        fixture._reject_candidate_test_secrets(
+            path,
+            (repository_root / path).read_bytes(),
+            allowed_literal_digests=allowed_literals,
+        )
+
+        changed_value = 'csrfToken = "csrf-backlog-test-changed"\n'
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture._reject_candidate_test_secrets(
+                path,
+                changed_value.encode("utf-8"),
+                allowed_literal_digests=allowed_literals,
+            )
+        self.assertNotIn("csrf-backlog-test-changed", str(caught.exception))
+
+        wrong_path = "web/src/App.test.tsx"
+        with self.assertRaises(fixture.FixtureError):
+            fixture._reject_candidate_test_secrets(
+                wrong_path,
+                'csrfToken = "csrf-backlog-test"\n'.encode("utf-8"),
+                allowed_literal_digests=allowed_literals,
+            )
+
+    def test_imp014_snapshot_pins_harness_and_archives_exact_nested_committed_runtime(self) -> None:
+        base, policy = self.write_imp014_candidate()
+        snapshot = Path(self.temporary.name) / "imp014-candidate-snapshot"
+        (self.root / "PROJECT.md").write_text("unrelated live planning\n", encoding="utf-8")
+        (self.root / ".opencode" / "progress.md").write_text(
+            "unrelated local runner state\n",
+            encoding="utf-8",
+        )
+
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        self.assertEqual(candidate.base_commit, base)
+        self.assertRegex(candidate.fingerprint, r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            {record.path for record in candidate.records},
+            {
+                path
+                for path, _status in (
+                    *policy.reviewed_inputs,
+                    *policy.nonruntime_test_changes,
+                    *policy.harness_changes,
+                )
+            },
+        )
+        self.assertEqual(
+            set(candidate.runtime_paths),
+            {path for path, _status in policy.reviewed_inputs},
+        )
+        self.assertEqual(
+            candidate.support_file_digests,
+            tuple(
+                (
+                    path,
+                    hashlib.sha256((snapshot / path).read_bytes()).hexdigest(),
+                )
+                for path in policy.committed_support_paths
+            ),
+        )
+        for relative in policy.required_snapshot_paths:
+            with self.subTest(path=relative):
+                if relative == "web/src/BacklogPlanning.tsx":
+                    self.assertEqual(
+                        (snapshot / relative).read_text(encoding="utf-8"),
+                        "updated exact-profile harness input: web/src/BacklogPlanning.tsx\n",
+                    )
+                elif relative == "web/src/BacklogPlanning.test.tsx":
+                    self.assertEqual(
+                        (snapshot / relative).read_text(encoding="utf-8"),
+                        "committed backlog planner tests\n",
+                    )
+                else:
+                    self.assertEqual(
+                        (snapshot / relative).read_bytes(),
+                        (self.root / relative).read_bytes(),
+                    )
+        self.assertEqual(
+            (snapshot / "web/src/BacklogPlanning.test.tsx").read_text(encoding="utf-8"),
+            "committed backlog planner tests\n",
+            "changed web tests are fingerprinted, never copied into the app snapshot",
+        )
+        self.assertEqual(
+            fixture.select_snapshot_templates(
+                tuple(path.relative_to(snapshot).as_posix() for path in snapshot.rglob("*.example"))
+            ),
+            fixture.NESTED_TEMPLATE_PATHS,
+        )
+        self.assertFalse((snapshot / "PROJECT.md.example").exists())
+        self.assertFalse((snapshot / "AGENTS.md.example").exists())
+        self.assertFalse((snapshot / "BACKLOG.md.example").exists())
+        self.assertFalse((snapshot / ".opencode").exists())
+        self.assertFalse((snapshot / "PROJECT.md").exists())
+        fixture.validate_candidate_dockerignore(snapshot, imp014=True)
+        with self.assertRaisesRegex(fixture.FixtureError, "not safely allowlisted"):
+            fixture.validate_candidate_dockerignore(snapshot)
+        fixture.validate_candidate_snapshot_tree(snapshot, candidate)
+        fixture.validate_candidate_worktree_snapshot(
+            self.root,
+            candidate,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+    def test_imp014_snapshot_rejects_dirty_runtime_inputs_and_stale_harness_fingerprints(self) -> None:
+        _base, policy = self.write_imp014_candidate()
+        snapshot = Path(self.temporary.name) / "imp014-scope-snapshot"
+        candidate = fixture.archive_candidate_snapshot(
+            self.root,
+            snapshot,
+            private_home=self.private_home,
+            policy=policy,
+        )
+
+        extra_runtime = self.root / "api" / "app" / "unreviewed_imp014.py"
+        extra_runtime.write_text("unreviewed runtime input\n", encoding="utf-8")
+        with self.assertRaisesRegex(fixture.FixtureError, "unexpected scoped input"):
+            fixture.validate_candidate_worktree_snapshot(
+                self.root,
+                candidate,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        extra_runtime.unlink()
+
+        unreviewed_web = self.root / "web/src/ProjectWorkspace.tsx"
+        original_web = unreviewed_web.read_bytes()
+        unreviewed_web.write_bytes(original_web + b"\n// unreviewed UI input\n")
+        unreviewed_web.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "unexpected scoped input"):
+            fixture.validate_candidate_worktree_snapshot(
+                self.root,
+                candidate,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        unreviewed_web.write_bytes(original_web)
+        unreviewed_web.chmod(0o644)
+
+        runtime_path = self.root / "web/src/BacklogPlanning.tsx"
+        current_runtime = runtime_path.read_bytes()
+        synthetic_secret = "synthetic-rendered-review-secret"
+        runtime_path.write_text(
+            f'DB_PASSWORD = "{synthetic_secret}"\n',
+            encoding="utf-8",
+        )
+        runtime_path.chmod(0o644)
+        secret_snapshot = Path(self.temporary.name) / "imp014-secret-snapshot"
+        with self.assertRaises(fixture.FixtureError) as caught:
+            fixture.archive_candidate_snapshot(
+                self.root,
+                secret_snapshot,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        self.assertNotIn(synthetic_secret, str(caught.exception))
+        self.assertFalse(secret_snapshot.exists())
+        runtime_path.write_bytes(current_runtime)
+        runtime_path.chmod(0o644)
+
+        test_path = self.root / "web/src/BacklogPlanning.test.tsx"
+        current_test = test_path.read_bytes()
+        test_path.write_bytes(current_test + b"\n// changed after preflight\n")
+        test_path.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "changed during preview"):
+            fixture.validate_candidate_worktree_snapshot(
+                self.root,
+                candidate,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        test_path.write_bytes(current_test)
+        test_path.chmod(0o644)
+
+        harness_path = self.root / "scripts/local_browser_fixture.py"
+        original = harness_path.read_bytes()
+        harness_path.write_bytes(original + b"\n# changed after exact preflight\n")
+        harness_path.chmod(0o644)
+        with self.assertRaisesRegex(fixture.FixtureError, "changed during preview"):
+            fixture.validate_candidate_worktree_snapshot(
+                self.root,
+                candidate,
+                private_home=self.private_home,
+                policy=policy,
+            )
+        stale = Path(self.temporary.name) / "imp014-stale-fingerprint"
+        with self.assertRaisesRegex(fixture.FixtureError, "fingerprint changed"):
+            fixture.archive_candidate_snapshot(
+                self.root,
+                stale,
+                private_home=self.private_home,
+                expected_fingerprint=candidate.fingerprint,
+                policy=policy,
+            )
+        self.assertFalse(stale.exists())
 
     def test_candidate_fingerprint_binds_commit_path_status_mode_and_content_digest(self) -> None:
         content = b"candidate bytes that do not appear in a fingerprint"
@@ -3925,6 +4439,11 @@ class SupervisorPidfdVerificationTests(unittest.TestCase):
                 self._supervisor_arguments()
                 + ["--imp013-candidate-fingerprint", "c" * 64],
             ),
+            (
+                "imp014 candidate",
+                self._supervisor_arguments()
+                + ["--imp014-candidate-fingerprint", "e" * 64],
+            ),
         )
         for name, arguments in cases:
             with self.subTest(name=name):
@@ -4426,6 +4945,63 @@ class CandidateCliTests(unittest.TestCase):
             )
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             fixture._parse_args(["launch", "--imp007-candidate-fingerprint", "A" * 64])
+
+    def test_imp014_uses_its_own_committed_base_preflight_and_launch_fingerprint(self) -> None:
+        fingerprint = "e" * 64
+        self.assertEqual(
+            fixture._parse_args(["imp014-candidate-preflight"]).command,
+            "imp014-candidate-preflight",
+        )
+        launch = fixture._parse_args(
+            ["launch", "--imp014-candidate-fingerprint", fingerprint]
+        )
+        self.assertEqual(launch.imp014_candidate_fingerprint, fingerprint)
+        self.assertEqual(fixture._candidate_selection(launch), (fingerprint, "imp014"))
+        supervisor = fixture.FixtureSupervisor(
+            Path("/fixture-test"),
+            candidate_fingerprint=fingerprint,
+            candidate_variant="imp014",
+        )
+        self.assertIs(supervisor._candidate_policy(), fixture.IMP014_CANDIDATE_PREVIEW_POLICY)
+        with self.assertRaisesRegex(fixture.FixtureError, "explicit opt-in"):
+            fixture.FixtureSupervisor(Path("/fixture-test"), candidate_variant="imp014")
+
+        guardian = fixture._parse_args(
+            [
+                "_guardian",
+                "--handoff-dir",
+                "/tmp/review-handoff",
+                "--lifetime-minutes",
+                "30",
+                "--lock-fd",
+                "9",
+                "--imp014-candidate-fingerprint",
+                fingerprint,
+            ]
+        )
+        self.assertEqual(fixture._candidate_selection(guardian), (fingerprint, "imp014"))
+        supervisor_args = fixture._parse_args(
+            [
+                "_supervise",
+                "--handoff-dir",
+                "/tmp/review-handoff",
+                "--lifetime-minutes",
+                "30",
+                "--imp014-candidate-fingerprint",
+                fingerprint,
+            ]
+        )
+        self.assertEqual(fixture._candidate_selection(supervisor_args), (fingerprint, "imp014"))
+
+        for arguments in (
+            ["launch", "--candidate-fingerprint", fingerprint, "--imp014-candidate-fingerprint", fingerprint],
+            ["launch", "--imp013-candidate-fingerprint", fingerprint, "--imp014-candidate-fingerprint", fingerprint],
+            ["start", "--imp014-candidate-fingerprint", fingerprint],
+            ["launch", "--imp014-candidate-fingerprint", "E" * 64],
+        ):
+            with self.subTest(arguments=arguments), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    fixture._parse_args(arguments)
 
     def test_candidate_fingerprint_rejects_malformed_values(self) -> None:
         for value in ("A" * 64, "0" * 63, "0" * 65, "../" + "0" * 61):

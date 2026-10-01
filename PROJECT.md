@@ -49,17 +49,21 @@ The checkout has a limited application slice; the first-release scope above is
 not yet implemented. The current UI supports operator-provisioned sign-in,
 administrator-managed accounts, own-password changes, project creation with
 private drafts for `PROJECT.md`, `AGENTS.md`, and `BACKLOG.md`, human pair
-approval, and read-only backlog status. The API supports validated task edits.
+approval, and collapsible backlog task editing for title, body, dependencies, and
+`[-]`/`[ ]` readiness. The API validates task edits. Conflicts retain local edits
+and show the newer saved version for review and explicit reapplication rather than
+silently overwriting either version. This remains human-only: no chat, agent proposals, runner
+outcomes, or setting runner status markers.
 The first administrator is created or recovered through an offline CLI; there is no public
 signup or network recovery route. Administrators can create, reset, and deactivate
 accounts. Members can access projects they own; administrators can access all
 projects, and administrator access is audited. Consult `docs/local-development.md`
 for implemented project, revision, workspace-cache, and operator behavior and
-`BACKLOG.md` for committed delivery outcomes. The owner committed prior IMP-009/014
-partial work in `e2412b1`; that was not acceptance. Subsequent IMP-020/021 recovery
-verified persistence and human-only final approval/status/exact-download API behavior.
-IMP-014 UI still lacks final candidate/rendered acceptance. This work branch is not
-a merged release; do not infer chat, agent gateway or release readiness from it.
+`BACKLOG.md` for committed delivery outcomes. IMP-014 candidate and rendered
+acceptance has been verified locally; consult BACKLOG.md for delivery references.
+Subsequent IMP-020/021 recovery verified persistence and human-only final
+approval/status/exact-download API behavior. This work branch is not a merged
+release; do not infer chat, agent gateway or release readiness from it.
 
 The owner approved splitting blocked IMP-009 into independently verified
 persistence and integrated enforcement slices. IMP-020 adds only inert

@@ -222,8 +222,10 @@ function hasDependencyLine(body: string): boolean {
 }
 
 function bodyForTaskUpdate(body: string, originalBody: string, dependencies: string[]): string {
-  if (!hasDependencyLine(originalBody) || hasDependencyLine(body)) return body;
-  const lineEnding = originalBody.includes("\r\n") ? "\r\n" : "\n";
+  const lineEnding = originalBody.match(/\r\n|\r|\n/)?.[0] ?? "\n";
+  if (!hasDependencyLine(originalBody) || hasDependencyLine(body)) {
+    return body.endsWith("\n") || body.endsWith("\r") ? body : `${body}${lineEnding}`;
+  }
   const separator =
     body.length === 0 || body.endsWith("\n") || body.endsWith("\r")
       ? lineEnding

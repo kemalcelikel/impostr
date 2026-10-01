@@ -271,6 +271,79 @@ describe("human backlog planning", () => {
     expect(screen.getByRole("textbox", { name: "Markdown source" })).toHaveValue(nextContent);
   });
 
+  it.each([
+    ["ordinary body replacement", "Replacement scope."],
+    ["removing only the terminal newline", "Original scope."],
+  ])("preserves a task boundary when saving after %s", async (_caseName, attemptedBody) => {
+    const originalBody = "Original scope.\n";
+    const attempted = attemptedBody;
+    const expectedBody = `${attempted}\n`;
+    const originalContent =
+      "# Task plan\n\n" +
+      "## [-] TASK-001 — Note-boundary task\n" +
+      `${originalBody}## Reference notes\n` +
+      "**Depends on:** None\n\n";
+    const initial = makeSnapshot(
+      1,
+      [makeTask("TASK-001", "-", "Note-boundary task", [], originalBody)],
+      originalContent,
+    );
+    const savedContent = originalContent.replace(originalBody, expectedBody);
+    const saved = makeSnapshot(
+      attemptedBody === "Original scope." ? 1 : 2,
+      [makeTask("TASK-001", "-", "Note-boundary task", [], expectedBody)],
+      savedContent,
+    );
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      const method = init?.method ?? "GET";
+      if (path.endsWith("/backlog/tasks") && method === "GET")
+        return Promise.resolve(jsonResponse(initial));
+      if (path.endsWith("/backlog/tasks/TASK-001") && method === "PUT") {
+        const payload = JSON.parse(String(init?.body)) as {
+          body: string;
+          dependencies: string[];
+        };
+        const dependencyLines = payload.body.match(/^\s*(?:\*\*)?Depends on:/gm) ?? [];
+        if (!payload.body.endsWith("\n") || dependencyLines.length !== 0) {
+          return Promise.resolve(
+            jsonResponse(
+              { detail: "Task TASK-001 edit would merge a preserved level-two section." },
+              422,
+            ),
+          );
+        }
+        return Promise.resolve(jsonResponse(saved));
+      }
+      throw new Error(`Unexpected request: ${path} ${method}`);
+    });
+    renderPlanner(fetchMock, { initial });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select task TASK-001: Note-boundary task" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Task body · Markdown" }), {
+      target: { value: attempted },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save task changes" }));
+
+    expect(
+      await screen.findByText(`Saved TASK-001 to BACKLOG.md revision ${saved.revision_number}.`),
+    ).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        pathOf(input).endsWith("/backlog/tasks/TASK-001") && init?.method === "PUT",
+    );
+    expect(call).toBeDefined();
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+      body: expectedBody,
+      dependencies: [],
+    });
+    expect(saved.content.match(/^\*\*Depends on:/gm)).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(screen.getByRole("textbox", { name: "Markdown source" })).toHaveValue(savedContent);
+  });
+
   it("rejects a cyclic dependency edit and leaves both the saved list and Markdown unchanged", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = pathOf(input);
