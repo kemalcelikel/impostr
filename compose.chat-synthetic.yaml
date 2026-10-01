@@ -1,0 +1,21 @@
+# Coordinator-owned disposable fixture ONLY, after independent boundary review.
+# No default mounts, live activation, Docker socket, host HOME or credentials.
+services:
+  api:
+    environment:
+      IMPOSTR_CHAT_ENABLED: "1"
+    volumes:
+      - type: bind
+        source: ${IMPOSTR_SYNTHETIC_BROKER_DIR:?Owned reviewed broker directory required}
+        target: /run/impostr-broker
+        read_only: true
+  api-integration-check:
+    environment:
+      IMPOSTR_TEST_CHAT_CHANNEL: "1"
+      IMPOSTR_TEST_CHAT_JOINED: "1"
+      IMPOSTR_CHAT_ENABLED: "1"
+    volumes:
+      - type: bind
+        source: ${IMPOSTR_SYNTHETIC_BROKER_DIR:?Owned reviewed broker directory required}
+        target: /run/impostr-broker
+        read_only: true

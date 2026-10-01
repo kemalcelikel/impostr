@@ -18,6 +18,9 @@ from starlette.responses import JSONResponse
 from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.backlog_tasks import router as backlog_tasks_router
+from app.chat import router as chat_router
+from app.chat_broker import UnixBroker
+from app.chat_dispatch import Dispatcher
 from app.config import AppSettings
 from app.database import get_database_engine
 from app.dependencies import require_browser_mutation
@@ -61,7 +64,15 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         # Keep the API available for its health endpoint during a DB outage. The
         # first healthy probe retries legacy template backfill from PostgreSQL.
         logger.warning("Project document initialization deferred until the database is available.")
-    yield
+    if application.state.settings.chat_enabled:
+        dispatcher = Dispatcher(database_engine, UnixBroker())
+        application.state.chat_dispatcher = dispatcher
+        dispatcher.thread.start()
+    try:
+        yield
+    finally:
+        if application.state.chat_dispatcher is not None:
+            application.state.chat_dispatcher.close()
 
 
 def _initialize_project_documents(
@@ -90,6 +101,7 @@ def create_app(
     )
     application.state.database_engine = engine
     application.state.settings = settings
+    application.state.chat_dispatcher = None
     application.state.workspace_store = WorkspaceStore(
         workspace_root
         if workspace_root is not None
@@ -108,6 +120,7 @@ def create_app(
     api_router.include_router(backlog_tasks_router)
     api_router.include_router(document_pair_approvals_router)
     api_router.include_router(project_approval_manifests_router)
+    api_router.include_router(chat_router)
     application.include_router(api_router)
 
     @application.middleware("http")

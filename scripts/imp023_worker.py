@@ -303,14 +303,14 @@ class Driver:
         return status.get(session, {"type": "idle"}).get("type") == "idle"
 
 
-def parse_event(stream):
+def parse_event(stream, *, max_line=8192, max_event=32768):
     data = []
     total = 0
     while True:
-        line = stream.readline(8193)
-        require(line and len(line) <= 8192)
+        line = stream.readline(max_line + 1)
+        require(line and len(line) <= max_line)
         total += len(line)
-        require(total <= 32768)
+        require(total <= max_event)
         if line in (b"\n", b"\r\n"):
             if not data:
                 continue
@@ -322,6 +322,9 @@ def parse_event(stream):
 
 
 class Events:
+    parse_event = staticmethod(parse_event)
+    stream_timeout = 8
+
     def __init__(self, driver):
         self.connection, self.response = driver.open("GET", "event")
         try:
@@ -329,8 +332,8 @@ class Events:
             require(self.response.getheader("Content-Type", "").startswith("text/event-stream"))
             owned_socket = getattr(self.connection, "_imp023_socket", None)
             if owned_socket is not None:
-                owned_socket.settimeout(8)
-            event, size = parse_event(self.response)
+                owned_socket.settimeout(self.stream_timeout)
+            event, size = self.parse_event(self.response)
             require(event["type"] == "server.connected")
         except Exception:
             self.close()
@@ -344,7 +347,7 @@ class Events:
     def read(self):
         try:
             while not self.stopped.is_set():
-                event, size = parse_event(self.response)
+                event, size = self.parse_event(self.response)
                 self.bytes += size
                 require(self.bytes <= MAX_EVENT_BYTES)
                 self.queue.put_nowait(event)

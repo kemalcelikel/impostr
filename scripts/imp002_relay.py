@@ -45,9 +45,13 @@ def decode(body):
         raise Denied("invalid JSON") from exc
 
 
-def validate(method, route, body, *, planning=False):
+def validate(method, route, body, *, planning=False, input_text_limit=64000):
     from imp024_protocol import (MAX_REQUEST as PLANNING_REQUEST, MAX_ITEMS, MAX_TOKENS,
                                 Invalid, arguments, bounded_text, definitions, identifier)
+    # Product text-history reconstruction is explicit; all prototype/phase-one
+    # callers keep the original bound. No arbitrary or unbounded caller setting.
+    if input_text_limit != 64000 and not (planning and input_text_limit == 384 * 1024):
+        raise Denied("input bound")
     if method != "POST" or route != ROUTE or len(body) > (PLANNING_REQUEST if planning else MAX_REQUEST):
         raise Denied("not inference")
     data = decode(body)
@@ -137,7 +141,7 @@ def validate(method, route, body, *, planning=False):
         content = message.get("content")
         # Native Responses permits plain text system/developer messages.
         if isinstance(content, str):
-            if len(content.encode()) > 64000:
+            if len(content.encode()) > input_text_limit:
                 raise Denied("text bound")
             continue
         if not isinstance(content, list) or not 1 <= len(content) <= 16:
@@ -147,7 +151,7 @@ def validate(method, route, body, *, planning=False):
                 raise Denied("text only")
             if part["type"] not in ("input_text", "output_text"):
                 raise Denied("media forbidden")
-            if not isinstance(part["text"], str) or len(part["text"].encode()) > 64000:
+            if not isinstance(part["text"], str) or len(part["text"].encode()) > input_text_limit:
                 raise Denied("text bound")
     if pending:
         raise Denied("unpaired function result")
@@ -240,7 +244,7 @@ class SyntheticRelay:
     is copied into the worker; this relay's default is still entirely synthetic.
     """
 
-    def __init__(self, path: Path, lifetime=30, transport=None, *, planning=False):
+    def __init__(self, path: Path, lifetime=30, transport=None, *, planning=False, input_text_limit=64000):
         if not 1 <= lifetime <= 60:
             raise ValueError("lifetime")
         self.path = path
@@ -252,6 +256,9 @@ class SyntheticRelay:
         self.observed = []  # Only protocol shape/errors; never prompt/body/header values.
         self.transport = transport
         self.planning = planning
+        if input_text_limit != 64000 and not (planning and input_text_limit == 384 * 1024):
+            raise ValueError("input bound")
+        self.input_text_limit = input_text_limit
         if planning:
             from imp024_protocol import MAX_REQUEST as request_bound, MAX_RESPONSE as response_bound, MAX_CALLS as call_bound
             self.max_request, self.max_response, self.max_calls = request_bound, response_bound, call_bound
@@ -324,7 +331,11 @@ class SyntheticRelay:
                     # Never retain attacker-controlled route or JSON key values.
                     self.observed.append({"inference_route": route == ROUTE})
                     try:
-                        data = validate(method, route, body, planning=self.planning)
+                        if self.input_text_limit == 64000:
+                            data = validate(method, route, body, planning=self.planning)
+                        else:
+                            data = validate(method, route, body, planning=self.planning,
+                                            input_text_limit=self.input_text_limit)
                     except Denied as exc:
                         self.observed[-1]["denial"] = str(exc)
                         raise

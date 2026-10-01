@@ -1560,7 +1560,7 @@ def _pair_validation_errors(
             not raw
             or len(raw) > MAX_DOCUMENT_BYTES
             or b"\x00" in raw
-            or revision.origin not in {"template", "human"}
+            or revision.origin not in {"template", "human", "agent"}
             or hashlib.sha256(raw).hexdigest() != revision.content_sha256
         ):
             errors[DOCUMENT_FILENAMES[kind]] = [

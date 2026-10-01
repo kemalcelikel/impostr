@@ -1,0 +1,342 @@
+"""Host UID1000 synthetic-only product broker. REVIEW before channel/worker execution.
+
+Fixed framed Unix operations, API UID10001 peers only. No HTTP/OpenCode proxy,
+Docker, DB, host config/auth, operator/live modes or arbitrary inference upstream.
+Each turn owns the delivered bwrap boundary + inference relay; restart changes
+epoch. Runtime state is not trusted after a full restart: API interrupts unknowns.
+"""
+
+import argparse
+import os
+from pathlib import Path
+import selectors
+import select
+import signal
+import socket
+import stat
+import struct
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
+from app.chat_protocol import (MAX_CONTEXT, MAX_EVENTS, MAX_FRAME, TURN_SECONDS, encode, event,
+                               receive, request, require, scope)
+from imp002_prototype import check_runtime, command
+from imp002_relay import SyntheticRelay
+from imp024_inference import native_response
+
+WORKER_CODE_FILES = (
+    "imp002_worker.py", "imp002_relay.py", "imp023_worker.py", "imp024_protocol.py",
+    "imp024_inference.py", "imp024_worker.py", "imp024_product_worker.py",
+)
+
+
+def copy_worker_code(destination):
+    for filename in WORKER_CODE_FILES:
+        (destination / filename).write_bytes(Path(__file__).with_name(filename).read_bytes())
+    (destination / "imp024_channel.py").write_bytes(
+        Path(__file__).resolve().parents[1].joinpath("api/app/chat_protocol.py").read_bytes())
+
+
+class SyntheticProduct:
+    """Deterministic fixture inference data; tools execute only in OpenCode."""
+    def __init__(self, payload):
+        self.payload = payload
+        self.calls = 0
+
+    def events(self, data, cancelled, deadline):
+        self.calls += 1
+        require(self.calls <= 8)
+        results = [item for item in data["input"] if item.get("type") == "function_call_output"]
+        stage = len(results)
+        require(stage <= 3)
+        if stage == 3:
+            yield from native_response("Synthetic planning proposal prepared.")
+            return
+        if stage == 0:
+            name, args = "read", {"filePath": "/project/PROJECT.md"}
+        elif stage == 1:
+            name, args = "question", {"questions": [{"question": "Prepare the synthetic proposal?",
+                "header": "Planning", "options": [{"label": "Yes", "description": "Synthetic only"}]}]}
+        else:
+            name, args = "edit", {"filePath": "/project/PROJECT.md",
+                "oldString": self.payload["documents"]["PROJECT.md"]["content"],
+                "newString": self.payload["documents"]["PROJECT.md"]["content"]
+                             + "\nSynthetic planning proposal.\n"}
+        import json
+        yield from native_response(calls=[{"type": "function_call", "name": name,
+            "call_id": "call_product_" + str(stage), "arguments": json.dumps(args)}])
+
+
+def worker_command(root):
+    args = command(root, "imp024-planning", 0)
+    bootstrap = "import sys; sys.path.insert(0, '/prototype'); import imp024_product_worker; raise SystemExit(imp024_product_worker.main())"
+    args[args.index("-c") + 1] = bootstrap
+    return args
+
+
+def send_pipe(process, value):
+    value = encode(value)
+    fd = process.stdin.fileno()
+    os.set_blocking(fd, False)
+    deadline = time.monotonic() + 3
+    while value:
+        require(time.monotonic() < deadline and process.poll() is None)
+        if select.select([], [fd], [], 0.05)[1]:
+            count = os.write(fd, value)
+            require(count > 0)
+            value = value[count:]
+
+
+class Turn:
+    def __init__(self, key, payload):
+        self.key, self.payload = key, payload
+        self.events = []
+        self.bytes = 0
+        self.controls = []
+        self.lock = threading.Lock()
+        self.stopped = threading.Event()
+        self.abort_requested = threading.Event()
+        self.deadline = time.monotonic() + TURN_SECONDS
+        self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def add(self, value):
+        value = event(value)
+        with self.lock:
+            self.bytes += len(encode(value))
+            require(self.bytes <= MAX_FRAME and len(self.events) < MAX_EVENTS - 2)
+            self.events.append({"sequence": len(self.events) + 1, "event": value})
+
+    def run(self):
+        process = None
+        terminal = False
+        try:
+            with tempfile.TemporaryDirectory(prefix="imp024-turn-", dir="/tmp/opencode") as name:
+                root = Path(name)
+                root.chmod(0o700)
+                for directory in ("project", "code", "empty", "config"):
+                    (root / directory).mkdir(mode=0o700)
+                (root / "config" / "opencode").mkdir(mode=0o700)
+                (root / "config" / "opencode" / ".gitignore").write_text("node_modules\n")
+                copy_worker_code(root / "code")
+                for filename, document in self.payload["documents"].items():
+                    (root / "project" / filename).write_bytes(document["content"].encode("utf-8"))
+                    (root / "project" / filename).chmod(0o600)
+                with SyntheticRelay(root / "relay.sock", lifetime=60,
+                                    transport=SyntheticProduct(self.payload), planning=True,
+                                    input_text_limit=MAX_CONTEXT):
+                    process = subprocess.Popen(worker_command(root), stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                        env={"PATH": "/usr/bin:/bin"}, close_fds=True, start_new_session=True)
+                    send_pipe(process, self.payload)
+                    # Incremental bounded framing; no unbounded readline or process
+                    # wait before draining. Abort/control never exposes host sockets.
+                    selector = selectors.DefaultSelector()
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    buffer = bytearray()
+                    try:
+                        while time.monotonic() < self.deadline:
+                            if self.abort_requested.is_set():
+                                break
+                            with self.lock:
+                                controls, self.controls = self.controls, []
+                            for control in controls:
+                                send_pipe(process, control)
+                            for _, _ in selector.select(0.05):
+                                block = os.read(process.stdout.fileno(), 8192)
+                                if not block:
+                                    require(not buffer)
+                                    return
+                                buffer.extend(block)
+                                require(len(buffer) <= MAX_FRAME + 4)
+                                while len(buffer) >= 4:
+                                    size = struct.unpack("!I", buffer[:4])[0]
+                                    require(0 < size <= MAX_FRAME)
+                                    if len(buffer) < size + 4:
+                                        break
+                                    from app.chat_protocol import decode
+                                    value = decode(bytes(buffer[4:size + 4]))
+                                    del buffer[:size + 4]
+                                    self.add(value)
+                                    terminal = value["type"] in ("completed", "failed", "cancelled")
+                                    if terminal:
+                                        return
+                    finally:
+                        selector.close()
+                        if process.poll() is None:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=3)
+        except Exception:
+            pass
+        finally:
+            if process is not None:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=3)
+                process.stdin.close()
+                process.stdout.close()
+            if not terminal:
+                try:
+                    cancelled = self.abort_requested.is_set()
+                    self.add({"type": "cancelled" if cancelled else "failed",
+                              "data": {} if cancelled else {"reason": "broker_worker_error"}})
+                except Exception:
+                    pass
+            self.stopped.set()
+
+
+class Broker:
+    def __init__(self, directory, *, persistent_directory=False):
+        require(os.getuid() == os.geteuid() == 1000 and os.getgid() == 1000)
+        check_runtime()
+        require(directory.parent == Path("/tmp/opencode"))
+        self.persistent_directory = persistent_directory
+        # A bind mount pins the directory inode, not its pathname. The explicit
+        # disposable fixture mode retains that inode across broker restarts.
+        # Never adopt a symlink, foreign/writable directory or stale socket.
+        if persistent_directory and directory.exists():
+            validate_persistent_directory(directory)
+        else:
+            require(not directory.exists())
+            directory.mkdir(mode=0o711)
+            directory.chmod(0o711)
+        info = directory.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == 1000)
+        self.directory = directory
+        self.path = directory / "channel.sock"
+        self.epoch = str(uuid.uuid4())
+        self.turns = {}
+        self.aborted_unknown = {}
+        self.stop = threading.Event()
+        self.listener = socket.socket(socket.AF_UNIX)
+        self.listener.bind(str(self.path))
+        # The API container cannot share the host user's group. Linux SO_PEERCRED
+        # admits ONLY UID10001; no secret file/env token or worker mount is needed.
+        self.path.chmod(0o666)
+        self.listener.listen(8)
+        self.listener.settimeout(0.25)
+
+    def handle(self, value):
+        value = request(value)
+        if value["op"] == "hello":
+            return {"ok": True, "epoch": self.epoch, "mode": "synthetic"}
+        require(value["epoch"] == self.epoch)
+        key = scope(value)
+        turn = self.turns.get(key[2])
+        if value["op"] == "start":
+            # Never resubmit, even after a completed/failed turn. Retained bounded
+            # tombstones; capacity failure requires a visible epoch restart.
+            require(turn is None and key[2] not in self.aborted_unknown
+                    and len(self.turns) + len(self.aborted_unknown) < 256)
+            require(sum(not item.stopped.is_set() for item in self.turns.values()) < 8)
+            require(not any(item.key[0] == key[0] and not item.stopped.is_set()
+                            for item in self.turns.values()))
+            turn = Turn(key, value["payload"])
+            self.turns[key[2]] = turn
+            turn.thread.start()
+            return {"ok": True, "epoch": self.epoch}
+        if turn is None:
+            if value["op"] == "abort":
+                require(len(self.turns) + len(self.aborted_unknown) < 256)
+                existing = self.aborted_unknown.get(key[2])
+                require(existing is None or existing == key)
+                # Abort can precede a delayed first start from a crashed API
+                # pump. Preserve a tombstone so that start cannot execute later.
+                self.aborted_unknown[key[2]] = key
+            return {"ok": True, "epoch": self.epoch, "known": False, "stopped": True, "events": []}
+        require(turn.key == key)
+        if value["op"] == "abort":
+            turn.abort_requested.set()
+            require(turn.stopped.wait(4))
+            return {"ok": True, "epoch": self.epoch, "stopped": True}
+        if value["op"] == "poll":
+            with turn.lock:
+                page = turn.events[value["after"]:value["after"] + 16]
+                if not turn.stopped.is_set():
+                    page = [item for item in page if item["event"]["type"] not in
+                            ("completed", "failed", "cancelled")]
+            return {"ok": True, "epoch": self.epoch, "known": True, "events": page}
+        require(not turn.stopped.is_set() and not turn.abort_requested.is_set())
+        from app.chat_protocol import answer
+        with turn.lock:
+            pending = [item["event"] for item in turn.events
+                       if item["event"]["type"] in ("question", "permission")
+                       and item["event"]["data"]["id"] == value["interaction_id"]]
+            require(len(pending) == 1 and len(turn.controls) < 16)
+            interaction = pending[0]
+            answer(interaction["type"], interaction["data"], value["answer"])
+            # Tombstone separately; do not mutate an event already durably replayed.
+            used = getattr(turn, "replied", set())
+            require(value["interaction_id"] not in used)
+            used.add(value["interaction_id"])
+            turn.replied = used
+            turn.controls.append({"op": "reply", "interaction_id": value["interaction_id"],
+                                  "answer": value["answer"]})
+        return {"ok": True, "epoch": self.epoch}
+
+    def run(self):
+        try:
+            while not self.stop.is_set():
+                try:
+                    connection, _ = self.listener.accept()
+                except socket.timeout:
+                    continue
+                with connection:
+                    connection.settimeout(3)
+                    def close_request(peer=connection):
+                        try:
+                            peer.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+                    guard = threading.Timer(8, close_request)
+                    guard.start()
+                    try:
+                        _, uid, _ = struct.unpack("3i", connection.getsockopt(
+                            socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                        require(uid == 10001)
+                        value = receive(connection)
+                        connection.sendall(encode(self.handle(value)))
+                    except Exception:
+                        try:
+                            connection.sendall(encode({"ok": False}))
+                        except OSError:
+                            pass
+                    finally:
+                        guard.cancel()
+        finally:
+            for turn in self.turns.values():
+                turn.abort_requested.set()
+            for turn in self.turns.values():
+                turn.thread.join(8)
+            self.listener.close()
+            self.path.unlink()
+            if not self.persistent_directory:
+                self.directory.rmdir()
+
+
+def validate_persistent_directory(directory):
+    info = directory.lstat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == info.st_gid == 1000
+            and stat.S_IMODE(info.st_mode) == 0o711 and not any(directory.iterdir()))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=("synthetic",))
+    parser.add_argument("--directory", type=Path, required=True)
+    parser.add_argument("--persistent-directory", action="store_true",
+                        help="Retain the empty owned fixture mount directory on clean stop")
+    args = parser.parse_args()
+    broker = Broker(args.directory, persistent_directory=args.persistent_directory)
+    for name in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(name, lambda *_: broker.stop.set())
+    broker.run()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

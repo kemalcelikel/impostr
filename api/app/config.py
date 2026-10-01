@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 class AppSettings:
     public_origin: str
     rate_limit_key: bytes
+    chat_enabled: bool = False
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.public_origin)
@@ -62,4 +63,8 @@ class AppSettings:
         if not rate_limit_key:
             raise RuntimeError("IMPOSTR_RATE_LIMIT_KEY must be configured")
 
-        return cls(public_origin=public_origin, rate_limit_key=rate_limit_key.encode("utf-8"))
+        return cls(
+            public_origin=public_origin,
+            rate_limit_key=rate_limit_key.encode("utf-8"),
+            chat_enabled=os.environ.get("IMPOSTR_CHAT_ENABLED") == "1",
+        )

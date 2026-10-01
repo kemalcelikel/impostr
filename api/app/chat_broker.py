@@ -1,0 +1,53 @@
+"""API-side fixed Unix client. Never receives provider/worker authentication."""
+
+from __future__ import annotations
+
+import os
+import socket
+import stat
+import struct
+import threading
+from typing import Any, Protocol
+
+from app.chat_protocol import ChannelError, encode, receive, request, require
+
+SOCKET_PATH = "/run/impostr-broker/channel.sock"
+
+
+class Broker(Protocol):
+    def call(self, value: dict[str, Any]) -> dict[str, Any]: ...
+
+
+class UnixBroker:
+    def call(self, value: dict[str, Any]) -> dict[str, Any]:
+        try:
+            require(os.geteuid() == 10001)
+            request(value)
+            info = os.lstat(SOCKET_PATH)
+            require(stat.S_ISSOCK(info.st_mode) and info.st_uid == 1000)
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(3)
+                connection.connect(SOCKET_PATH)
+                _, uid, _ = struct.unpack(
+                    "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+                )
+                require(uid == 1000)
+
+                # Total framing deadline as well as idle I/O bound.
+                def close_request() -> None:
+                    try:
+                        connection.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+
+                guard = threading.Timer(4, close_request)
+                guard.start()
+                try:
+                    connection.sendall(encode(value))
+                    result = receive(connection)
+                    require(isinstance(result, dict) and result.get("ok") is True)
+                    return dict(result)
+                finally:
+                    guard.cancel()
+        except Exception as exc:
+            raise ChannelError() from exc

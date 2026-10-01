@@ -12,6 +12,378 @@ delivered release. Consult `BACKLOG.md` for task outcomes.
 
 ## Operator-only chat-safety prototype (IMP-002)
 
+### IMP-024 phase two — verified synthetic backend acceptance
+
+**Latest coordinator-verified outcome (2026-10-01):** From checkout root,
+`/usr/bin/python3 -I -B scripts/imp024_verify.py` returned PASS on the preserved
+candidate at base HEAD `0e94e09`, disposable project `imp024-verify-4af45777168e`.
+Build/database setup, migration `20261001_0007`, focused pytest, Ruff lint/format
+and mypy passed, followed by all **seven joined checks**, **three lifecycle checks**
+and **every owned cleanup stage**. This proves the authenticated Member/API/DB/broker/
+confined-worker path through real post-restart poll ACK, native question reply and
+permission, concurrent human save/import and provenance/approval invalidation,
+active revocation, uncertain start/reply crashes without duplicates, and actual
+broker/worker restart plus channel/DB outage recovery without false imports.
+These are coordinator execution results, not developer Docker runs. Substantive
+repair and orchestration review passed. Additional repair budget used **1/3**;
+mechanical harness/environment/lint corrections do not add substantive attempts.
+Historical phase-two **5/5** and delivered phase-one **3/5** remain preserved.
+
+This outcome supersedes the exhausted stop/missing backend acceptance statements
+below; they are retained as historical evidence. The earlier permission timeout's
+causal root cause was **not isolated**: inspection established the incompatible
+8-second product SSE idle bound versus a retained 20-second pump lease and stale
+`running`/HTTP202 recovery assumptions, and the corrected combined flow now passes,
+but no controlled runtime experiment attributes the old failure to one cause.
+No further backend changes are needed for these proved gates. Coordinator owns
+phase-two commit/task bookkeeping. IMP-024 as a whole is **not complete**: phases
+three/four remain **0/5**, frontend/live acceptance is absent, and no operator/live
+mode or runner was started. Phase three must reconcile its actual candidate profile
+against the **new committed phase-two base**, then obtain fresh exact-input preflight
+and authenticated rendered evidence; older UI fingerprints are not reusable.
+
+**Reviewed coordinator-only orchestration support:** From the
+checkout root, `/usr/bin/python3 -I -B scripts/imp024_verify.py` prepares a random
+owned Compose project/channel and a mode0600 generated synthetic env file under
+the verified `/tmp/opencode` parent. It does not inspect checkout `.env` or host
+private inputs. This approved owner/group1000 synthetic scratch parent may be
+group-writable (observed mode0775); it is not a credential-reader ancestor. The
+helper never chmods it. Exclusively created children use mode0700 for generated
+inputs and mode0711 for the broker channel required by API UID10001 traversal.
+Nofollow directory descriptors retain each inode, generated env creation uses the
+private input descriptor, and pathname/inode checks before subprocesses and removal
+reject a replaced path. These checks are not complete protection against an active
+host process sharing the writable group racing Docker/broker pathname resolution;
+use remains confined to the accepted local synthetic scratch contract, never real
+provider credentials or a private-auth/config safety tree. It does not inspect host
+configuration; the Docker client receives a disposable HOME and fixed local Unix
+daemon, not ambient endpoint/proxy/auth settings. No secret values enter arguments
+or output. It builds the documented images, migrates an empty owned DB, runs focused
+API/static checks and joined `check`, then drives `lifecycle` with piped `-i` stdin
+(no TTY). Only the five exact existing prompts select fixed broker/db actions;
+database restoration waits for Compose health before sending Enter.
+
+Focused pytest, Ruff lint, Ruff format and mypy now run as individually labeled
+gates (same commands/scope, no weakened checks); failures expose fixed categories
+and, for Ruff only, assigned allowlisted relative filenames/rule codes/line numbers,
+never arbitrary paths, assertions, error messages, source snippets or fix contents.
+Lint runs once with `ruff check --output-format json`; its separately bounded stdout
+is strictly projected before the nonzero exit remains a failed gate. Format diagnostics
+can name only the same fixed assigned paths. Cleanup reports each fixed stage,
+activates both check profiles for image removal, and requires inventory **stdout**
+empty plus command exit0. Bounded stderr warnings are discarded separately; they
+are not evidence of leaked resources. Any failing cleanup stage still fails the
+whole helper and does not prevent later independent cleanup stages being attempted.
+
+The helper reports fixed check statuses, allowlisted failure categories and
+reconstructed safe diagnostic counts/states. Raw build/DB/CLI/assertion/JSON output
+is bounded in memory and discarded, never saved or forwarded. Its `finally` removes
+explicitly named check containers, stops its own broker, reaps detached owned
+descendants using Linux subreaper/pidfds (excluding the active lifecycle CLI), runs
+owned Compose `down -v --remove-orphans --rmi local`, verifies label-scoped resources
+and project images absent, and removes only its empty channel/generated input
+directory. Cleanup failure returns nonzero with the nonsecret resource label; it
+does not erase stale channel contents or claim acceptance. SIGTERM/ordinary failures
+enter cleanup; SIGKILL, daemon/host loss or denied cleanup cannot guarantee it.
+Generated disposable DB passwords exist in the private fixture env and Docker
+container configuration until cleanup, never product workers. Do not run this
+helper as a developer, operator/live connector or automatic runner launcher.
+
+**Verified focused interactive repair, attempt one of three additional attempts:** The
+preserved joined failure is not yet explained by runtime evidence. Code inspection
+does establish that SIGKILL leaves the committed 20-second pump lease, while the
+product worker inherited an 8-second native SSE idle timeout. Product SSE reads now
+use the **remaining original driver lifetime**, not a fresh/replenished timeout;
+the existing main-loop deadline, abort/cleanup and broker lifetime remain unchanged.
+Phase-one SSE defaults remain eight seconds. No lease is stolen or shortened.
+
+The joined restart check now requires a real post-restart native poll ACK instead
+of accepting the retained `running` DB row as recovery. It verifies question reply
+ACK/durable `replied` before proceeding to permission; HTTP202 alone is still queue
+acceptance. Failed workers can publish only fixed allowlisted reason categories,
+retained with the durable failure event. On assertion failure, the fixture prints
+a bounded turn summary before cleanup: states, dispatch flags, lease remaining,
+cursor, operation-stage counts/poll gap and fixed failure categories, never IDs,
+cookies, DB settings, text, raw channel data or exception details. Summary failure
+does not replace the original failed check. Joined acceptance passed as recorded
+above; the historical failure's actual cause remains unisolated.
+
+Coordinator setup/lifecycle/cleanup commands below remain the existing disposable
+fixture contract. For this candidate, replace the focused check-container command
+with (all other Compose arguments/setup steps unchanged):
+
+```sh
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml run --rm api-check sh -c 'python -m pytest -p no:cacheprovider tests/test_chat.py && ruff check app/chat_protocol.py app/chat_state.py app/chat_dispatch.py tests/imp024_joined.py tests/test_chat.py && ruff format --check app/chat_protocol.py app/chat_state.py app/chat_dispatch.py tests/imp024_joined.py tests/test_chat.py && mypy app'
+```
+
+**Historical exhausted phase-two checkpoint (2026-10-01, candidate HEAD `1bf79bd`; superseded above):** Phase two
+used all **5/5** authorized attempts; preserve its uncommitted candidate, but it was
+not delivered. Phase one remains delivered at **3/5** attempts and is not reopened;
+phases three and four remain **0/5**. The coordinator's final fresh joined run
+passed fresh Docker builds, migration `20261001_0007`, 15 focused `test_chat`
+tests, and Ruff check/format for the two harness files. The joined run progressed
+through normal Member authentication, conversation creation, native question/reply,
+and API-process restart, then failed with `Timed out: native pending permission`
+in `normal_restart_and_concurrency`. The cause is not established; do not claim
+joined acceptance or infer why it timed out. Lifecycle/revocation/save-import
+concurrency gates were not reached and remain unproved. The coordinator reported
+owned API/account/project cleanup through `finally` without secondary errors, then
+broker SIGTERM/exit, Compose volume/network/image removal, and fixture-directory/
+environment removal completed without error. Both final repairs (persistent broker
+directory handling and standard-library HTTP client) received selective reviewer
+PASS; these and the component checks do not change the failed joined result.
+
+No phase-two task delivery or new operator run was authorized by that checkpoint.
+The reproduction/setup instructions below are retained as maintainer context only,
+not a request to run commands. Any continuation requires renewed owner scope and
+budget. No live activation is established.
+
+**Attempt-four continuation (not acceptance):** Preserves the candidate and all
+prior component evidence. `api/tests/imp024_joined.py` now supplies coordinator-only
+`check` and interactive `lifecycle` modes. They run a real loopback HTTP API child
+inside the UID10001 check container, normal Member login, PostgreSQL transactions,
+the real Unix broker and confined workers. Test-only file gates pause outside DB
+transactions around real channel ACKs; no test auth route or fabricated response.
+The checks cover known API restart, uncertain start/reply crashes, real save/import
+content retention/provenance, matching-head import and approval invalidation,
+active HTTP stream/queued-reply revocation and revocation before completed import.
+Lifecycle mode asks the coordinator to stop/restart only its owned broker and DB.
+It checks safe interruption after broker/worker replacement and channel/DB outages;
+it does not promise native-session restoration after losing the broker epoch.
+
+Concrete fixture repair: Docker binds a directory inode. Previously a clean broker
+restart deleted/recreated that directory, leaving existing API mounts disconnected.
+The explicit synthetic `--persistent-directory` option retains the empty owned
+mount directory. Reuse requires exact UID/GID1000, mode0711, no symlink or contents;
+stale sockets fail closed. Default broker cleanup is unchanged. This is not live
+activation or authorization to remove arbitrary stale paths. This records the
+attempt-four checkpoint; the final review and joined-run outcome are stated above.
+Developer pure checks passed 43 IMP-024, 21 IMP-023 and 51 IMP-002 tests; the harness
+passes the available Black parser/format check. Host FastAPI/SQLAlchemy/Ruff are
+unavailable; no Docker, joined harness, operator or live mode was executed here.
+
+**Attempt-five dependency repair:** Coordinator reported fresh builds/migration0007,
+15 focused chat tests, Ruff lint/format and affected review passing, but the joined
+entrypoint failed at `import httpx`. The lock provisions `httpx2`, not that module.
+`api/tests/imp024_http.py` replaces the undeclared import with standard-library
+HTTPConnection/CookieJar: persistent normal login, synchronized cookie updates,
+independent concurrent connections, incremental UTF-8/chunked SSE, bounded reads/
+timeouts, no environment proxy, redirects or mutation retries. In-memory HTTP wire
+regressions run without listeners, API/DB dependencies or worker execution. No
+dependency installation/lock edits. Phase two is now **5/5 used, zero remaining**;
+the four-attempt paragraph above is the preserved prior checkpoint. Affected review
+of the new client/harness import change must precede coordinator rerun. No joined
+acceptance is claimed by this repair alone. The subsequent joined-run outcome is
+stated above. API request/reply, document-write and pair/final-approval fields were checked
+against the existing schemas and required no contract changes.
+Developer check: `/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp024_*.py'`
+passed **47 tests**, including four standard-library HTTP/cookie/concurrency/stream
+regressions. The new client passes available Black100 formatting; the harness keeps
+the already coordinator-verified Ruff-specific assertion formatting. Ruff and the
+actual joined modes remain coordinator checks, not developer execution results.
+
+Historical reproduction instructions: after independent review, use a **fresh empty owned DB** and a new broker directory,
+with existing coordinator-generated disposable env settings (never checkout `.env`),
+`IMPOSTR_SYNTHETIC_BROKER_DIR=/tmp/opencode/imp024-phase2-joined`, `APP_PORT=8080` and
+`IMPOSTR_PUBLIC_ORIGIN=http://127.0.0.1:8080`. Verify `/tmp/opencode` first. Broker
+foreground terminal command, also used at each lifecycle restart:
+
+```sh
+/usr/bin/python3 -I -B scripts/imp024_broker.py synthetic --directory /tmp/opencode/imp024-phase2-joined --persistent-directory
+```
+
+Coordinator-only setup/check commands (`<synthetic-env>` is the existing generated
+fixture path; every Compose invocation must retain it). No frontdoor/API service
+is needed: the joined harness owns the API process inside the check container.
+
+```sh
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml build db api api-check api-integration-check
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml up -d db
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml run --rm api alembic upgrade head
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml run --rm api-check sh -c 'python -m pytest -p no:cacheprovider tests/test_chat.py && ruff check tests/imp024_joined.py tests/imp024_http.py && ruff format --check tests/imp024_joined.py tests/imp024_http.py'
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml run --rm api-integration-check python -B tests/imp024_joined.py check
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml run --rm -it api-integration-check python -B tests/imp024_joined.py lifecycle
+```
+
+Lifecycle broker actions: Ctrl-C/SIGTERM the owned foreground broker, wait for exit,
+then use the same foreground command. Keep its mount directory/inode. At the DB
+prompts, in another coordinator terminal use these exact owned-stack actions:
+
+```sh
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml stop db
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml start db
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml ps
+```
+
+Each mode refuses a nonempty users table, stops its API child, aborts scoped workers
+before deleting its own projects/account, and removes temporary gates/operation-only
+journal on success. Failure returns nonzero, never prints raw DB exceptions. If DB/
+broker is left unavailable at failure, cleanup cannot be certified: restore only the
+owned capability and tear down the disposable stack/broker; do not use a live DB.
+Final cleanup (also after failed gates): stop the foreground broker, confirm its exit
+and worker descendants/listeners gone; then:
+
+```sh
+docker compose --env-file <synthetic-env> -p imp024-phase2-joined -f compose.yaml -f compose.chat-synthetic.yaml down -v --remove-orphans --rmi local
+rmdir /tmp/opencode/imp024-phase2-joined
+```
+
+`rmdir` intentionally refuses nonempty/stale paths. Verify no owned containers,
+volume/network, API child, worker descendants or channel listener remains; remove
+only the coordinator-generated fixture env inputs. Successful component commands
+below remain useful history, not a substitute for these still-unrun joined gates.
+
+The phase-two candidate adds authenticated chat persistence and a **synthetic-only**
+host broker. Default Compose has no channel mount and chat stays disabled. Only the
+explicit `compose.chat-synthetic.yaml` disposable coordinator overlay enables it;
+this is not a live-provider setup or a public auth bypass. Review the new broker,
+product worker adapter, API transactions and migration before any new boundary run.
+Phase-one code/pins/tools are reused; there is no provider credential in the API,
+worker, database or browser and no general HTTP/OpenCode proxy.
+
+Protocol: fixed length-prefixed JSON `hello/start/poll/reply/abort` over one Unix
+socket. Host peer UID1000 is checked by the API; only API peer UID10001 is accepted
+by the host. The exact owned directory is mounted read-only into API/check only.
+The socket is mode 0666 because the container does not share the host group;
+`SO_PEERCRED`, not mode bits or an opaque project ID, authenticates callers.
+This authenticates an OS identity, not every process of that UID: do not reuse
+UID10001 for untrusted host processes. The broker never enters a worker mount.
+
+PostgreSQL records conversations, per-user last tab, idempotent turns, ordered
+events, pending/replied interactions, project reservations and agent provenance.
+A short committed pump lease is intended to coordinate API processes; inference/channel
+calls are placed outside DB transactions. The implementation replays committed events,
+interrupts unknown dispatch/reply rather than retrying, and attempts same-epoch known
+running-turn recovery. Actual combined API/broker/worker restart acceptance remains
+pending; the passing mock recovery checks are not full-process proof. A new
+turn explicitly reconstructs bounded durable text/interaction/tool-state context
+in a new native session, not assumed native SSE replay. It does not restore an
+unvalidated OpenCode database or silently truncate history. Concurrent document
+head changes retain generated text as conflict proposals. Matching heads get
+immutable `agent` revisions, invalidating prior approval tuples; humans alone may
+approve them or change task readiness. New tasks must remain draft.
+
+Practical ceilings: 32 tabs/project, at most 12 prior turns (24 reconstructed
+history entries), 64 KiB per document and per raw/JSON-escaped user message or
+assistant turn text (both byte limits apply),
+384 KiB reconstructed context including native JSON escaping, 512 KiB aggregate
+dispatch frame/event buffer, 256 ordered events,
+eight inference calls, eight concurrent host turns with one writer/project,
+60-second worker lifetime and bounded channel I/O. The aggregate byte limit may
+reject a large history before 12 prior turns: the turn-count limit is not a promise
+that 12 maximum-sized turns fit. A 64 KiB first ASCII message can continue with its
+full 64 KiB assistant text and framing; over-limit escaped context or a complete
+start envelope is rejected **before durable queued acceptance**, never clipped.
+Only product reconstructed input uses the larger cap; tool arguments/results and
+phase-one/prototype input/output defaults stay bounded as before. Native inference
+requests retain the independent 512 KiB cap and may fail closed if later tool
+results exceed it. Existing API documents can reach 128 KiB; those above
+the worker's measured 64 KiB ceiling cannot be dispatched in this candidate.
+Broker tombstones are capped at 256 turns; a full broker restart changes epoch
+and interrupts unknown work. These are explicit candidate limits, not aggregate
+resource containment. Migration downgrade refuses to erase agent-origin history.
+
+**Final reported coordinator evidence (2026-10-01):** Focused API/migration/pair/final
+manifest checks passed **327 tests**; Ruff passed, format checked **36 files**, and
+mypy checked **32 source files**. Fresh owned PostgreSQL upgrade/current reached
+`20261001_0007`; both chat PostgreSQL tests passed. Those two tests prove preservation
+of preexisting identity/document bytes through migration and concurrent submission
+idempotency/project reservations/pump-claim exclusion. They do **not** exercise a
+human-save versus agent-import race. The five actual Unix-channel tests passed:
+normal, CRLF-only, large LF-context, combined CRLF/large-context native planning,
+and unknown-abort tombstone denial of delayed dispatch. Each planning case exercised
+native read/question/reply/edit permission, ordered events and unapproved proposal
+capture, including duplicate-start and forged epoch/project denial. The separate
+host UID1000 peer probe confirmed host caller denial; the API client checks the host
+UID1000 peer and actual calls run as API UID10001. Earlier pure regression checks
+passed 41 IMP-024, 21 IMP-023 and 51 affected IMP-002 tests. These are coordinator
+reported execution results plus preserved developer pure checks, not new executions
+performed by this documentation assessment.
+
+**Historical missing acceptance (now proved by the latest joined/lifecycle outcome above):** BACKLOG.md phase two explicitly requires durable
+full restart/outage recovery and fresh PostgreSQL concurrency, not only passing
+component checks. The joined attempt failed before these gates:
+
+- Exercise the actual authenticated API -> PostgreSQL dispatcher -> Unix broker ->
+  confined worker -> durable event/interaction/proposal path. The channel test calls
+  `UnixBroker` directly with generated IDs; it bypasses API turns, reservations,
+  initiating-session authorization and database delivery/import. Demonstrate a
+  committed turn dispatch once, incremental events persisted before API replay,
+  normal native reply and revision-bound import/approval invalidation on that path.
+- Race a real PostgreSQL human document save against completion/import. Show both
+  texts retained, correct imported-head versus conflict outcome, captured/observed
+  provenance and approval invalidation; show the human save is not blocked behind
+  inference. The existing sequential fake-broker conflict test and submission race
+  do not prove the changed import transaction under concurrent head updates.
+- Restart actual API, broker and worker state during an active/pending turn using
+  the same durable DB. Verify known same-epoch replay versus unknown interruption,
+  no second start/reply, preserved history/last tab and bounded reservation recovery.
+  Include a representative unavailable broker/channel and DB outage/recovery with
+  no false completion/import and no duplicate dispatch after restoration. Existing
+  tests replace the dispatcher or fake epoch/unknown response; they do not kill or
+  restart these product processes.
+- Verify revocation while the actual product stream/interaction is active: no later
+  reply dispatch or proposal import from a revoked session, stream stops and stale
+  reply is denied. Current API checks validate these controls against a fake broker
+  and invoke the stream generator directly; retain that useful evidence, but join
+  it to the actual product path rather than treating standalone UID proof as session
+  authorization proof. Front-door streaming/rendered UI is phase three, not this gate.
+- Record owned broker/worker/listener/stack cleanup. Individual channel tests confirm
+  turn stop. The final coordinator cleanup reported above completed; this does not
+  prove lifecycle acceptance.
+
+At that historical checkpoint phase two remained blocked, with all **5/5** attempts consumed. Preserve this candidate
+as an acceptance checkpoint, not a delivered phase or new implementation
+authorization. Any further work requires renewed bounded authorization. No generic
+full suite, coverage target, UI/operator work, live activation or aggregate quota
+prerequisite is added by this checkpoint.
+
+**Reproduction commands for the reported component checks:** Use a new owned
+Compose project/volume and existing synthetic fixture provisioning only. Do not use
+this checkout's `.env`, owner accounts, live DB or reusable secrets. Supply
+`--env-file` pointing to coordinator-generated disposable settings on **every**
+Compose call (no raw config/log rendering). After independent review, create the
+broker with this foreground command in an owned plain process; the directory must
+not already exist:
+
+```sh
+/usr/bin/python3 -I -B scripts/imp024_broker.py synthetic --directory /tmp/opencode/imp024-phase2-channel
+```
+
+The actual UID-channel test includes separate CRLF-only and large LF-context cases,
+plus their combined case. The initial combined run failed; a pure regression found
+the inherited SSE reader rejected the native 131 KiB reconstructed-prompt echo at
+its 8 KiB line ceiling, before non-tool projection could discard it. Product-only
+framing now permits up to the unchanged 512 KiB stream ceiling; phase-one parser
+defaults and projected delta/tool limits remain unchanged. Following affected review,
+the coordinator's final actual channel rerun passed all five tests, including the
+combined case. That corrects the component failure, not the missing combined
+API/PostgreSQL recovery/concurrency evidence above.
+The disposable env file must set `IMPOSTR_SYNTHETIC_BROKER_DIR` to that exact
+directory in addition to ordinary generated fixture DB settings. With
+`<synthetic-env>` replaced by its coordinator-owned path:
+
+```sh
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml build db api api-check api-integration-check
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml up -d db
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml run --rm api alembic upgrade head
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml run --rm api alembic current
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml run --rm api-check sh -c 'python -m pytest -p no:cacheprovider tests/test_chat.py tests/test_migrations.py tests/test_document_pair_approvals.py tests/test_project_approval_manifests.py && ruff check app tests/test_chat*.py migrations/versions/20261001_0007_durable_chat.py && ruff format --check app tests/test_chat*.py migrations/versions/20261001_0007_durable_chat.py && mypy app'
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml run --rm api-integration-check python -m pytest -p no:cacheprovider tests/test_chat_postgres.py
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml run --rm api-integration-check python -m pytest -p no:cacheprovider tests/test_chat_channel.py
+/usr/bin/python3 -I -B scripts/imp024_peer_probe.py --directory /tmp/opencode/imp024-phase2-channel
+docker compose --env-file <synthetic-env> -p imp024-phase2 -f compose.yaml -f compose.chat-synthetic.yaml down -v --remove-orphans
+```
+
+Stop the owned broker with SIGTERM/foreground Ctrl-C, then verify its owned directory
+and descendants/listeners are gone and remove only generated fixture inputs. Component
+UID and migration/submission tests are now verified; the commands above alone do not
+cover the remaining integrated acceptance scenarios listed in this checkpoint.
+UI/front-door and private operator activation remain phases three/four, not delivered
+by these commands. No agent runs operator/live modes.
+
+### Existing IMP-002 prototype instructions
+
 The default prototype modes are synthetic; a continuation now prepares an
 operator-only live transport, **independently reviewed, not live-verified**.
 There is no app gateway. Do not put real credentials/project data into it. It requires

@@ -159,7 +159,9 @@ class ProjectDocumentRevision(Base):
     __tablename__ = "project_document_revisions"
     __table_args__ = (
         CheckConstraint("revision_number >= 1", name="ck_document_revisions_number_positive"),
-        CheckConstraint("origin IN ('template', 'human')", name="ck_document_revisions_origin"),
+        CheckConstraint(
+            "origin IN ('template', 'human', 'agent')", name="ck_document_revisions_origin"
+        ),
         CheckConstraint("length(content_sha256) = 64", name="ck_document_revisions_hash_length"),
         CheckConstraint(
             "(template_source IS NULL AND template_sha256 IS NULL) OR "
@@ -325,3 +327,181 @@ class BootstrapState(Base):
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (UniqueConstraint("id", "project_id", name="uq_conversation_project"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    creator_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConversationPreference(Base):
+    __tablename__ = "conversation_preferences"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "project_id"],
+            ["conversations.id", "conversations.project_id"],
+            ondelete="CASCADE",
+            name="fk_preference_conversation_project",
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+
+class ChatTurn(Base):
+    __tablename__ = "chat_turns"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "project_id"],
+            ["conversations.id", "conversations.project_id"],
+            ondelete="CASCADE",
+            name="fk_turn_conversation_project",
+        ),
+        UniqueConstraint("id", "project_id", name="uq_turn_project"),
+        UniqueConstraint("id", "conversation_id", name="uq_turn_conversation"),
+        UniqueConstraint("conversation_id", "request_id", name="uq_turn_request"),
+        CheckConstraint(
+            "state IN ('queued','dispatching','running','cancelling','completed','failed',"
+            "'cancelled','interrupted')",
+            name="ck_turn_state",
+        ),
+        CheckConstraint("event_count BETWEEN 0 AND 256", name="ck_turn_event_count"),
+        Index("ix_turn_state_created", "state", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    request_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    web_session_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    broker_epoch: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    native_session_id: Mapped[str | None] = mapped_column(String(140))
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    broker_cursor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    dispatch_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pump_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProjectTurnReservation(Base):
+    __tablename__ = "project_turn_reservations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["turn_id", "project_id"],
+            ["chat_turns.id", "chat_turns.project_id"],
+            ondelete="CASCADE",
+            name="fk_reservation_turn_project",
+        ),
+        UniqueConstraint("turn_id", name="uq_reservation_turn"),
+    )
+
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    turn_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+
+class ChatEvent(Base):
+    __tablename__ = "chat_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["turn_id", "conversation_id"],
+            ["chat_turns.id", "chat_turns.conversation_id"],
+            ondelete="CASCADE",
+            name="fk_event_turn_conversation",
+        ),
+        UniqueConstraint("turn_id", "sequence", name="uq_event_turn_sequence"),
+        CheckConstraint("sequence BETWEEN 1 AND 256", name="ck_event_sequence"),
+        Index("ix_event_conversation_id", "conversation_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    turn_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChatInteraction(Base):
+    __tablename__ = "chat_interactions"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "native_id", name="uq_interaction_native"),
+        CheckConstraint("kind IN ('question','permission')", name="ck_interaction_kind"),
+        CheckConstraint(
+            "state IN ('pending','replying','replied','interrupted')", name="ck_interaction_state"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("chat_turns.id", ondelete="CASCADE"), nullable=False
+    )
+    native_id: Mapped[str] = mapped_column(String(140), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    reply: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    reply_request_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    reply_dispatched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reply_actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    reply_session_hash: Mapped[bytes | None] = mapped_column(LargeBinary(32))
+
+
+class AgentDocumentProposal(Base):
+    __tablename__ = "agent_document_proposals"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "document_id", name="uq_agent_proposal_document"),
+        CheckConstraint("state IN ('imported','conflict')", name="ck_agent_proposal_state"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("chat_turns.id", ondelete="CASCADE"), nullable=False
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("project_documents.id", ondelete="CASCADE"), nullable=False
+    )
+    base_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("project_document_revisions.id", ondelete="CASCADE"), nullable=False
+    )
+    observed_revision_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("project_document_revisions.id", ondelete="CASCADE"), nullable=False
+    )
+    imported_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("project_document_revisions.id", ondelete="CASCADE")
+    )
+    conflict_proposal_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("document_conflict_proposals.id", ondelete="CASCADE")
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    agent_version: Mapped[str] = mapped_column(String(16), nullable=False, default="1.18.34")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

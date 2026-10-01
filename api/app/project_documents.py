@@ -71,7 +71,7 @@ class ProjectDocumentView(BaseModel):
     revision_number: int
     content: str
     content_sha256: str
-    origin: Literal["template", "human"]
+    origin: Literal["template", "human", "agent"]
     author_user_id: uuid.UUID | None
     created_at: datetime
     template_source: str | None
@@ -81,7 +81,7 @@ class ProjectDocumentView(BaseModel):
 class RevisionSummary(BaseModel):
     revision_number: int
     content_sha256: str
-    origin: Literal["template", "human"]
+    origin: Literal["template", "human", "agent"]
     author_user_id: uuid.UUID | None
     created_at: datetime
     template_source: str | None
@@ -133,7 +133,7 @@ def _revision_summary(revision: ProjectDocumentRevision) -> RevisionSummary:
     return RevisionSummary(
         revision_number=revision.revision_number,
         content_sha256=revision.content_sha256,
-        origin=cast(Literal["template", "human"], revision.origin),
+        origin=cast(Literal["template", "human", "agent"], revision.origin),
         author_user_id=revision.author_user_id,
         created_at=_utc(revision.created_at),
         template_source=revision.template_source,
@@ -164,7 +164,7 @@ def _document_view(
         revision_number=revision.revision_number,
         content=revision.content,
         content_sha256=revision.content_sha256,
-        origin=cast(Literal["template", "human"], revision.origin),
+        origin=cast(Literal["template", "human", "agent"], revision.origin),
         author_user_id=revision.author_user_id,
         created_at=_utc(revision.created_at),
         template_source=revision.template_source,

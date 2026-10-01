@@ -108,6 +108,7 @@ class Driver(previous.Driver):
     route = staticmethod(route)
     max_request = MAX_REQUEST
     max_body = MAX_RESPONSE
+    max_prompt = MAX_DOCUMENT
 
     def __init__(self, port, password):
         super().__init__(port, password)
@@ -147,7 +148,7 @@ class Driver(previous.Driver):
                     and isinstance(body["parts"][0], dict) and set(body["parts"][0]) == {"type", "text"}
                     and body["parts"][0]["type"] == "text" and self.active_session == session
                     and session not in self.cancelled_sessions)
-            bounded_text(body["parts"][0]["text"], empty=False)
+            bounded_text(body["parts"][0]["text"], self.max_prompt, empty=False)
         elif operation == "create":
             require(isinstance(body, dict) and set(body) == {"title"})
             bounded_text(body["title"], 256, empty=False)
@@ -199,7 +200,7 @@ class Driver(previous.Driver):
 
     def prompt(self, session, text):
         require(session in self.sessions and self.active_session is None and self.idle(session))
-        bounded_text(text, MAX_DOCUMENT, empty=False)
+        bounded_text(text, self.max_prompt, empty=False)
         self.prior_users = {message["info"]["id"] for message in self.history(session)
                             if message["info"].get("role") == "user"}
         self.captured = read_surface()
@@ -419,19 +420,23 @@ class Events(previous.Events):
         self.driver = driver
         super().__init__(driver)
 
+    @staticmethod
+    def stream_failure(error):
+        return {"type": "driver.stream.failed"}
+
     def read(self):
         try:
             while not self.stopped.is_set():
-                event, size = previous.parse_event(self.response)
+                event, size = self.parse_event(self.response)
                 self.bytes += size
                 require(self.bytes <= MAX_RESPONSE)
                 projected = event_projection(event, self.driver.sessions)
                 if projected is not None:
                     self.queue.put_nowait(projected)
-        except Exception:
+        except Exception as error:
             if not self.stopped.is_set():
                 try:
-                    self.queue.put_nowait({"type": "driver.stream.failed"})
+                    self.queue.put_nowait(self.stream_failure(error))
                 except queue.Full:
                     pass
 
