@@ -82,6 +82,25 @@ No supported configuration/auth expansion, credential access by agents, live run
 runner restart or further implementation is authorized by the failed inspection.
 Keep IMP-002 blocked; any next repair needs actual reason and renewed bounded scope.
 
+**Environment-check repair authorization:** Operator reported offline
+`reason_code: environment_override` from an SSH terminal. This proves a rejected
+environment category, not which variable or an SSH fault. Owner approved “go ahead”
+after the proposed guard refinement: new three-focused-attempt budget, preserving
+both previous 3/3 histories. Delegate the smallest guard correction, allowing ordinary
+session metadata while rejecting actual config/auth/endpoint overrides based on pinned
+runtime behavior. No agent inspection of private env values/config, resolver/live runs,
+config edits or supported auth expansion. Synthetic regression checks and affected
+independent review precede human operator rerun. Keep blocked and runner stopped;
+no pushes/PRs or automatic restart.
+
+**Environment guard outcome:** Attempt 1/3 allows seven exact XDG session metadata
+names, retaining denial of actual directory overrides, unknown XDG names and every
+OpenCode/Azure override. Affected independent review approved human inspection;
+coordinator verified 29 focused tests. No private env values/config were inspected,
+resolver/live run or configuration/auth support expanded. Human reruns the same
+`operator-inspect` command and shares sanitized JSON; actual triggering variable
+and live compatibility remain unknown. Runner stays stopped; 2/3 attempts retained.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement

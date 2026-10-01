@@ -207,6 +207,29 @@ share sanitized JSON only. No resolver run by agents, live model operation, sett
 changes, push/PR or runner launch; IMP-002 remains blocked/eligibility zero. Further
 implementation requires reason-specific renewed bounded authorization.
 
+**Environment guard continuation:** Human rerun reports `environment_override` and
+`network_used:false`, from an SSH terminal. Actual triggering variable is unknown;
+SSH itself is not established as the cause. Prefix-wide XDG denial can reject ordinary
+session metadata. Owner approved “go ahead” for the proposed guard repair with up to
+three focused attempts (0/3 used), preserving both previous 3/3 budgets. Narrow scope:
+distinguish benign session metadata from actual configuration/auth/endpoint changes
+using pinned runtime facts, synthetic negative/positive checks and affected independent
+review. No environment/config value disclosure or agent resolver execution, auth/config
+support expansion, installations, network changes, push/PR or runner launch. After
+review the human reruns the same offline inspection; live/account and full session
+acceptance remain unproved, IMP-002 blocked and eligible count zero.
+
+**Guard repair outcome (local commit `596b96c`):** Attempt **1/3** reproduced benign session rejection and
+added an exact seven-name XDG session allowlist; actual XDG directory overrides,
+unknown XDG names and all `OPENCODE_*`/`AZURE_*` names remain denied. Public pinned
+OpenCode/xdg-basedir source establishes allowed names do not select config/auth
+directories. Independent affected review APPROVED human offline inspection;
+coordinator 29 focused tests passed, including benign SSH metadata and negative
+directory/config/auth override regressions. No agent environment values/private
+configuration inspected, resolver/live run or supported auth/config expansion.
+Next human reruns `operator-inspect` unchanged; original triggering name and actual
+account remain unknown. Keep blocked/eligible zero; **2/3** guard attempts remain.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001
