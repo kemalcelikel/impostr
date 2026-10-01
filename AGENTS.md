@@ -1,5 +1,44 @@
 # Repository agent rules: Impostr
 
+## Current complete-chat runner handoff (IMP-024)
+
+Owner approved complete local text-chat preparation, synthetic first, followed by
+one prepared private model-connection step. Resource-limit item 4 is cancelled for
+personal-PC text chat, including local serving; history is archived in
+`docs/local-resource-policy-history.md`. No quota inspection/provisioning is a gate.
+Attachment/shared-server requirements and practical bounds remain unchanged.
+
+IMP-023 is delivered at `1792898`/`d747bbe`; do not rerun its implementation. The next
+owner-started root batch assigns IMP-024 as the only independent eligible outcome.
+`overnight` owns coordination, delegates implementation to senior-developer and
+preserves checkpoints across sessions. Read its four phases and finite budget in
+BACKLOG.md. Review substantive worker/relay/channel/data changes before executing new
+boundary scenarios; rendered UI review uses a freshly reviewed exact-input profile.
+
+Authorized: application/Compose/fixture changes, bounded synthetic host broker and
+confined workers, owned disposable Docker/PostgreSQL/browser checks under existing
+local operator/fixture limits. Docker is coordinator-only, never exposed to product
+workers or web agents; no live app data or owner's reusable accounts. Effective tool
+permission remains essential: stop on denial, never bypass it. No installation,
+network provisioning, host fallback, private env/config/auth reads by agents, permission
+changes to the rejected config tree, deployment, automatic runner start, push/PR/merge.
+
+Prepare an explicit operator-owned relay contract instead of extending the parked
+host config resolver. Endpoint/deployment/auth facts are not known. Only independently
+reviewed human-run code may obtain actual credentials, from a separately safe source
+or no-echo terminal input into trusted relay memory. Fail if no-echo input is unavailable;
+no secret arguments/env exports/copies/DB/browser/worker/logs. Memory-only is not a
+guarantee against host swap/dumps. Do not execute operator/live modes as an agent.
+
+Live chat stays disabled by default; synthetic fixtures cannot enable real account
+access. Deliver one verified operator setup/acceptance command after complete synthetic
+proof, then stop for the human result. IMP-024 does not mark IMP-002/005/006/008 done
+or waive their live acceptance. After delivery/blocker stop with local task/bookkeeping
+commits; no final batch push/PR. Use root helper on `feature/impostr-v1` from checkout
+root with `RUNNER_USE_SBX=0`; optional sbx credential-copy/provisioning is unauthorized.
+This handoff supersedes earlier IMP-023-only/non-serving scope for IMP-024, preserving
+all old outcomes, budgets and other product/release requirements.
+
 ## Latest owner-started runner handoff (IMP-023)
 
 Owner rejected further private-resolver diagnostic loops and authorized independent

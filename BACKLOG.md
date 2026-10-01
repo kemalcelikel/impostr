@@ -28,6 +28,109 @@ new push or merge is authorized by this document edit.
 
 ## Current position
 
+**Latest complete-chat preparation:** IMP-023 succeeded, but the runner stopped
+normally because remaining ready tasks depend on blocked IMP-002. Owner now approved
+the complete independent IMP-024 job, including a separate operator-owned relay
+connection, rather than further host-config diagnostics. Personal-PC quota item 4 is
+cancelled/archived in `docs/local-resource-policy-history.md`; no new quota work.
+IMP-024 is the next owner-started root assignment. Older “stop after IMP-023” entries
+below are historical. Keep existing completed work, live dependencies and attempt
+histories; no automatic launch/push/PR or new scope after this job.
+
+## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+
+**Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
+
+Owner approved complete durable text chat, planning interactions/proposals and UI,
+synthetic-first, plus an explicit private operator relay setup. This independent
+implementation outcome does not require blocked IMP-002 live-account acceptance.
+Reuse delivered code; do not rebuild human editors or synthetic session proof.
+
+Planning assumption: four phased checkpoints, at most three substantive implementation/
+repair attempts per phase (12 total), counted across sessions; no automatic renewal or
+borrowing between exhausted phases. Initial counts 0/3 each. Mechanical formatting,
+capability inspection and check reruns do not consume attempts. Preserve all prior
+IMP-002/023 budgets. One phase's checkpoint is not this item's completion.
+
+### Implement in order
+
+1. **Complete worker and inference boundary.** Extend pinned bwrap/session driver into
+   fixed bounded operations for sessions, events, questions, replies, abort and planning
+   proposals. Reviewed project-constrained tech-lead permits only canonical planning
+   file reads/edits and questions; deny shell, delegation, MCP, installation, remote
+   fetch, configuration changes and unknown tools. Permission replies cannot enlarge
+   policy or grant unrestricted “always” access. Relay validates measured native
+   function definitions/calls/results as inference data; it never executes tools or
+   accepts arbitrary upstreams/headers/provider-hosted tools. Carry terminal-error
+   framing proof into actual relay. Review before new tool/worker scenarios; prove
+   real confined questions, permitted edits, denials, cancellation/errors and cleanup.
+2. **Private broker, durable API and proposal import.** Implement authenticated narrow
+   host-broker Unix channel mounted only into API, not general HTTP/OpenCode proxy.
+   Prove real API UID10001/host UID1000 channel access and peer/auth controls; no Docker
+   socket/HOME/relay credentials in API/worker. Alembic persistence for conversations,
+   last-used tabs, turns/idempotency, ordered events, interactions, durable project turn
+   reservations and agent provenance/proposals. PostgreSQL owns authorization and
+   document heads; `/workspaces` stays a disposable API mirror, not worker state.
+   Dispatch only committed turns, store events before delivery, no long inference DB
+   locks. Recover full worker/broker/API restart without duplicate dispatch; unknown
+   state is interrupted, not false resume. Agent imports compare captured head IDs,
+   preserve concurrent human edits as proposals, invalidate approvals correctly and
+   keep newly proposed tasks draft/readiness human-controlled. Focus fresh owned DB
+   migration/preservation/concurrency, forged/revoked project/session/reply/stream
+   denial, duplicate requests, outages and recovery checks.
+3. **Integrate complete chat UI and exact candidate fixture.** Shared chat tabs/composer,
+   incremental replies/history, question/permission state, proposal/conflict indicators
+   in existing project review and backlog layouts. Preserve unsaved composer/editor/task
+   text, focus and last-used tab across updates/navigation/relogin. Extend Nginx only
+   for authorized streaming; verify incremental delivery through front door. Build a
+   separately reviewed candidate profile pinned to actual committed base and exact
+   API/web/migration/Compose/host helper inputs; older fingerprints cannot certify it.
+   Fixture's new Unix bind exception is exact and owned, never general host access.
+   Generated Member sign-in and authenticated rendered review cover tabs, interactions,
+   updates/conflicts and narrow layouts with owned broker/worker/stack cleanup.
+4. **Complete integrated synthetic proof and operator handoff.** Same product path
+   through deterministic synthetic inference: normal Member conversations, tools,
+   reconnect/full restart, manual-save conflicts, pair/final approval invalidation and
+   exact downloads. Review substantive boundary/data changes and affected repairs;
+   use focused app/static/toolkit checks appropriate to changed seams, not generic
+   full reruns. Prepare ONE reviewed human-only setup/acceptance entrypoint establishing
+   actual endpoint/route/version/deployment/auth privately, checking the completed
+   live flow with synthetic project data and leaving only verified connection available.
+   Agents never run it. Command/settings must be implemented/proved, not guessed here.
+
+### Limits and completion
+
+- Live chat is disabled by default and missing broker/relay capability fails closed.
+  Synthetic fixture mode is disposable/operator-only, not a public auth bypass or
+  fake-live product mode. No synthetic success certifies real account compatibility.
+- Explicit operator-owned relay contract does not inspect/modify the rejected host
+  configuration tree. Human-only reviewed code can privately use a safe existing
+  credential source or no-echo secret input into relay memory (no persistent copies,
+  args/env/browser/DB/worker/logs); unsupported auth or endpoint drift stops. No model
+  credentials supplied to agents, no blanket file-check removal. Safe setup is not
+  a guarantee against host swap/dumps. Independent review/synthetic checks precede live.
+- Personal text-chat aggregate quota work is cancelled. Retain practical bounded
+  per-turn output/time/request/concurrency policies; adjust measured prototype ceilings
+  proportionately for document/history turns, never silently remove bounds or truncate
+  required context. Attachment/shared-server requirements remain unchanged.
+- Authorized scope: affected scripts/host broker and worker modules, API/settings/models/
+  routes/migrations/tests, frontend/components/tests/nginx, Compose packaging, exact
+  candidate fixture/tests and useful local docs. No installations/network provisioning,
+  private agent inspection, owner's live data/accounts, host fallback, auto-start,
+  pushes/PRs/merges or external deployment. Owned local synthetic Docker/DB/browser
+  checks use existing coordinator/fixture limits; stop on essential denied capability.
+- `[x]` requires whole synthetic product path, durable failure/recovery and authorization/
+  proposal invariants, actual rendered exact-input review, owned cleanup, independently
+  reviewed operator entrypoint and verified local commits. Stop there for sanitized
+  HUMAN operator outcome, not another diagnostic loop. Missing capability/exhausted
+  phase means `[!]` with preserved partial work; concrete available in-budget next
+  step may continue `[~]` across sessions. Record phase/attempt/checkpoint succinctly.
+- IMP-002/005/006/008 stay unchanged: after operator proof they verify their actual live
+  acceptance against prepared code, not reimplement it. HTTPS/media/release work remains
+  separate. IMP-024 completion alone does not deliver chat activation or first release.
+
+### Preserved earlier position and IMP-023 handoff
+
 - Delivered locally: app/database, login, private projects/drafts, pair approval,
   backlog task API and disposable authenticated browser fixture.
 - Approval/download API is locally verified through IMP-020/021 after the preserved

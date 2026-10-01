@@ -2,6 +2,33 @@
 
 ## Purpose and release boundary
 
+**Latest approved preparation:** Build the complete local text-chat path through
+synthetic end-to-end verification (IMP-024), reusing delivered IMP-023. Live access
+remains disabled until a reviewed human-operated fixed model connection and existing
+live acceptance pass. Use a restricted host broker/private authenticated Unix channel
+to the API; namespace-local OpenCode server/driver and shim; trusted model-only relay.
+Neither API nor worker receives host/provider credentials or a general OpenCode proxy.
+An explicit operator-owned endpoint/deployment/auth contract replaces reliance on the
+parked host-configuration resolver. A human may provide a secret through reviewed
+no-echo input into relay memory, never command arguments/environment/DB/browser/worker.
+Exact setup and supported account facts remain execution work, not invented settings.
+
+The owner cancelled aggregate resource-quota prerequisites for personal-PC local
+text chat, accepting possible host disruption/exhaustion. This replaces older
+prototype-only deferral wording, not attachment/shared-server requirements or
+filesystem/credential/network isolation and practical time/output/concurrency bounds.
+History: `docs/local-resource-policy-history.md`. No quota provisioning is implied.
+
+PostgreSQL remains authoritative for authorized conversations, ordered durable events,
+pending interactions, turn dispatch reservations and revision-safe proposals. Commit
+events before browser delivery; reconnect replays DB events, not assumed OpenCode SSE
+replay. Persist only validated generated per-project runtime state; unknown dispatch or
+corrupt recovery is visibly interrupted, never blindly resubmitted or silently replaced.
+Snapshot document head IDs before inference; import proposals with short revision-checked
+transactions. Concurrent human saves retain conflict proposals instead of overwrites;
+agent edits cannot approve documents or activate draft tasks. Live activation is separate
+from synthetic preparation and does not deliver private HTTPS/media or the first release.
+
 Impostr's first usable release is a **one-owner, private-access planning app**
 hosted on this PC. The owner may use it from another device on the LAN through
 a tested private HTTPS route; the app's trusted backend remains unexposed. A
