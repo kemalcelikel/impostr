@@ -103,12 +103,16 @@ See BACKLOG.md for the prior three-attempt checkpoint and current continuation s
 
 Following private resolver compatibility failures, the owner selected independent
 synthetic session-protocol work instead of further operator troubleshooting. IMP-023
-will prove actual confined server start/text streaming/history/reconnect and in-worker
-server restart with a fake inference upstream. This is not implemented yet. Its
-generated authenticated server/driver are namespace-local, never a product gateway
-or host service. Private live access is parked; questions/permissions/proposals and
-product integration remain IMP-002 acceptance. Synthetic protocol delivery alone
-does not unblock chat or certify the host account/model connection.
+has now proved confined synthetic server startup, text streaming/history/reconnect,
+interrupt handling and in-worker server restart with a fake inference upstream.
+Generated authentication is namespace-local, mDNS is disabled, and no host ingress
+is exposed; the host relay remains inference-only and unchanged. This proof does not
+include SSE replay or full worker-restart durability, and aggregate resource quotas
+remain deferred. No private inputs, operator modes or live model operation were used.
+This is not a product gateway or host service: questions/permissions/proposals,
+product integration, actual-model behavior and product chat acceptance remain
+unproved IMP-002 work. Synthetic protocol proof does not unblock chat or certify the
+host account/model connection.
 
 ### Current implementation versus planned application
 
@@ -130,10 +134,12 @@ does not unblock chat or certify the host account/model connection.
   files describe Impostr itself and are not the templates for user projects.
 - OpenCode agents are installed for the current CLI environment (including
   `tech-lead`, `architect`, `ui-designer`, `developer`, and `overnight`), but a
-  working web-session API and brokered, secret-safe isolated runtime have **not**
-  been demonstrated. The bare `bwrap` 0.6.1 namespace smoke test is not proof of such an
-  integration; session events/questions, permission handling, and denials remain
-  unverified. This repository uses GitHub and an existing `v1` planning baseline.
+  product-integrated web-session API and brokered, secret-safe runtime have **not**
+  been demonstrated. IMP-023's synthetic session protocol proof is confined to its
+  non-serving harness; it does not establish product authorization or actual model
+  integration. The bare `bwrap` 0.6.1 namespace smoke test alone remains insufficient;
+  questions, permission handling and proposals remain unverified. This repository
+  uses GitHub and an existing `v1` planning baseline.
   The owner chose one work branch based on `v1`, ending in a single PR to
   `development`; this replaces the former per-task sprint-PR proposal. See
   `AGENTS.md` for the execution contract, effective after its publication.

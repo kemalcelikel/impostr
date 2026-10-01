@@ -46,6 +46,7 @@ PINS.update({
 })
 LIBRARIES = ("libc.so.6", "libpthread.so.0", "libdl.so.2", "libm.so.6",
              "libexpat.so.1", "libz.so.1", "libssl.so.3", "libcrypto.so.3")
+SESSION_MODES = ("imp023-startup", "imp023-history", "imp023-reconnect", "imp023-interrupt")
 
 
 class CapabilityError(RuntimeError):
@@ -109,7 +110,8 @@ def command(root, mode, port):
     if mode != "outage":
         args += ["--ro-bind", str(root / "relay.sock"), "/relay/inference.sock"]
     # Bootstrap path is explicitly supplied under -I; no project Python modules.
-    bootstrap = "import sys; sys.path.insert(0, '/prototype'); import imp002_worker; raise SystemExit(imp002_worker.main())"
+    worker = "imp023_worker" if mode in SESSION_MODES else "imp002_worker"
+    bootstrap = f"import sys; sys.path.insert(0, '/prototype'); import {worker}; raise SystemExit({worker}.main())"
     return args + ["--", "/bin/python3", "-I", "-B", "-c", bootstrap, str(port), mode,
                    str(root / "synthetic-host")]
 
@@ -162,6 +164,8 @@ def bounded_run(args, timeout=20, max_output=65536):
 
 
 def run(mode, transport=None):
+    if mode in SESSION_MODES and transport is not None:
+        raise CapabilityError("session scenarios require the unchanged synthetic relay")
     pins = check_runtime()
     parent = Path("/tmp/opencode")
     if not parent.is_dir():
@@ -175,7 +179,10 @@ def run(mode, transport=None):
         (root / "config").mkdir(mode=0o700)
         (root / "config" / "opencode").mkdir(mode=0o700)
         (root / "config" / "opencode" / ".gitignore").write_text("node_modules\n")
-        for filename in ("imp002_worker.py", "imp002_relay.py"):
+        filenames = ("imp002_worker.py", "imp002_relay.py")
+        if mode in SESSION_MODES:
+            filenames += ("imp023_worker.py",)
+        for filename in filenames:
             (root / "code" / filename).write_bytes(Path(__file__).with_name(filename).read_bytes())
         # Synthetic canaries are outside the mounted project. Never actual host data.
         (root / "synthetic-host").mkdir()
@@ -213,7 +220,8 @@ def run(mode, transport=None):
             listener.listen(1)
             port = listener.getsockname()[1]
             with SyntheticRelay(root / "relay.sock", transport=transport) as relay:
-                code, reason, output = bounded_run(command(root, mode, port), timeout=2 if mode == "timeout" else 20)
+                code, reason, output = bounded_run(command(root, mode, port),
+                                                 timeout=2 if mode == "timeout" else 45 if mode in SESSION_MODES else 20)
                 results = []
                 response_text = False
                 runtime_error = False
@@ -232,6 +240,25 @@ def run(mode, transport=None):
                                 for result in results if "containment" in result)
                 injection_denied = not (root / "project" / "injection-executed").exists()
                 success = (code == 0 and reason == "exited" and contained and injection_denied)
+                if mode in SESSION_MODES:
+                    session_results = []
+                    for line in output.splitlines():
+                        try:
+                            value = json.loads(line)
+                            # Only exact fixed boolean assertions leave the worker.
+                            if isinstance(value, dict) and set(value) == {"session_checks"}:
+                                checks = value["session_checks"]
+                                from imp023_worker import CHECKS
+                                if (isinstance(checks, dict) and set(checks) == set(CHECKS[mode])
+                                        and all(type(item) is bool for item in checks.values())):
+                                    session_results.append(checks)
+                        except (ValueError, UnicodeError):
+                            pass
+                    expected_calls = {"imp023-startup": 0, "imp023-history": 3,
+                                      "imp023-reconnect": 2, "imp023-interrupt": 2}[mode]
+                    success = (success and len(session_results) == 1 and all(session_results[0].values())
+                               and relay.calls == expected_calls and relay.denied == 0)
+                    results += [{"session_checks": checks} for checks in session_results]
                 if mode in ("synthetic", "synthetic-stream", "operator-live"):
                     success = success and relay.calls > 0 and relay.denied == 0 and response_text and not runtime_error
                 if mode == "outage":

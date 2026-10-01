@@ -44,6 +44,46 @@ review approved the operator steps after rejecting provider-level endpoint overr
 Full session/proposal
 behavior remains unproved. These commands do not make the runner or product chat ready.
 
+### Confined synthetic session proof (IMP-023)
+
+The non-serving synthetic session harness has now passed actual scenarios against the
+pinned OpenCode server inside the bwrap worker. From the repository root, the focused
+commands verified were:
+
+```sh
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp023_*.py'
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp002_*.py'
+/usr/bin/python3 -I -B scripts/imp023_session.py startup
+/usr/bin/python3 -I -B scripts/imp023_session.py history
+/usr/bin/python3 -I -B scripts/imp023_session.py reconnect
+/usr/bin/python3 -I -B scripts/imp023_session.py interrupt
+/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic
+/usr/bin/python3 -I -B scripts/imp002_prototype.py probes
+/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic-stream
+/usr/bin/python3 -I -B scripts/imp002_prototype.py outage
+/usr/bin/python3 -I -B scripts/imp002_prototype.py timeout
+```
+
+The IMP-023 tests passed 21 tests; the affected IMP-002 tests passed 51. All four
+session scenarios and all five existing prototype modes completed successfully.
+Startup verified authenticated health/version 1.18.34, unauthenticated 401 denial,
+`server.connected`, and session creation/read. History verified a text delta before
+completion, distinct sessions, prior-turn context, and no history in a fresh session.
+Reconnect recovered history/status without resubmitting; restarting the server inside
+the same worker retained history and allowed continuation. Interrupt verified abort
+cancellation; a bounded inference failure remained a terminal failure, not successful
+completion. Synthetic containment and owned cleanup checks passed for file, socket,
+network and configuration injection, child/listener/fixture/state cleanup. The host
+relay remains inference-only, with observed call counts 0/3/2/2 for startup/history/
+reconnect/interrupt and the existing four-call ceiling unchanged.
+
+This proves only generated namespace-local authentication, disabled mDNS and no host
+ingress for this synthetic harness. It does not prove SSE replay or durability after a
+full worker restart. Aggregate resource quotas remain deferred. No private inputs,
+operator modes or live model operation were used; this is not actual-model, product
+chat, tool/question/proposal, or release acceptance. IMP-002 remains blocked; this
+result does not authorize an operator rerun, runner launch, or new scope.
+
 ### Reviewed continuation operator step
 
 Do **not** run these operator modes from an agent or before independent review and
