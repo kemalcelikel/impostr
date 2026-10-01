@@ -37,7 +37,37 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [x] IMP-024 — Complete local text-chat preparation and one operator handoff
+
+**Delivered preparation:** Verified local implementation/docs commit `c518baf` on
+`feature/impostr-v1`, baseline `23e39ae`. Phase four **3/5 used and delivered**;
+phase one **3/5**, phase three **5/5**, and phase two historical **5/5** plus focused
+additional **1/3** remain delivered without resets. Independent workflow/operator/
+exact-profile reviews PASS. Coordinator build/migration/Ruff and all four integrated
+workflow/reconnect/full-restart/reapproval/exact-download gates passed; normal and
+injected-failure operator-helper frontdoor verifiers passed with owned cleanup.
+Coordinator reran **93 focused unit tests**, all passed. Unchanged web92 and responsive
+designer evidence reused. Broader legacy fixture suite's two stale base/migration
+assertions are noted, not new acceptance failures.
+
+Fresh exact candidate `252bfcb41a5759e18f761b74d3c1abe4424e95a1df14e493bb0fa6acb4f6dd7e`
+passed preflight and normal generated Member rendered specification/backlog imports,
+human task readiness/pair/final approvals and all three actual digest-matched downloads.
+Agent revision invalidated both approvals/downloads; explicit human reapproval restored
+exact downloads. Stop exited0; accounts/login/stack/images/private/broker state removed.
+
+**Stop for HUMAN outcome:** From repository root, in a plain terminal, run only
+`/usr/bin/python3 -I -B scripts/imp024_operator.py setup-accept` and share sanitized
+result. Agents never execute it. Supported input is explicit public HTTPS:443 Responses
+and API-key only; endpoint/route/version/deployment are not guessed. Non-TTY/no-echo
+failure stops. Credentials stay trusted-memory-only, not swap/dump protected; bounded
+responses are buffered until validation, with no live early-text guarantee. Actual
+provider compatibility remains unknown. No ordinary app activation, IMP-002/005/006/008
+completion or first-release acceptance follows from this preparation. No push/PR,
+permission change, private/operator/live operation or runner launch occurred.
+
+The continuation entries below preserve earlier checkpoints; this verified preparation
+supersedes their outstanding phase-four work, not their history or live/release gates.
 
 **Latest phase-three delivery:** Committed `b72e98c`; phase three **5/5 used and
 delivered**, phase four **0/5**. Exact approved synthetic handoff correction and base
