@@ -41,7 +41,7 @@ new push or merge is authorized by this document edit.
 
 **Continuation after stopped-runner repair:** IMP-020/021 are verified local work;
 IMP-014 was subsequently verified on actual base `3b5d603` and delivered in `f67d33e`.
-IMP-010 is now dependency-eligible but is outside this one-item assignment; other
+IMP-010's subsequent runner assignment delivered final review/download UI; other
 blocked prerequisites remain owner decisions. No earlier fingerprints or API-only
 harness templates certify future previews.
 Other blockers retain their recorded unmet prerequisites. No automatic restart,
@@ -377,7 +377,7 @@ API/Compose/DB byte verification passed with source-map SHA-256
 Historical templates stayed harness-only: ordinary worktree build/template adoption
 remain unresolved. No chat, UI/rendered acceptance, release, push or runner restart.
 
-## [ ] IMP-010 — Three-file final review experience
+## [x] IMP-010 — Three-file final review experience
 
 **Depends on:** IMP-014, IMP-021
 **Scope:** Stage 3 version/status overview: three simultaneous desktop panes and
@@ -394,6 +394,25 @@ accessible narrow-screen review/download flow.
 
 Authenticated approve → edit-invalidates → reapprove → download browser flow;
 rendered desktop/narrow, keyboard, contrast and reduced-motion review. Update user guide.
+
+**Local outcome (2026-10-01):** Verified task/user-guide commit `0c004d3` on
+`feature/impostr-v1`, base `daf078c`. Stage 3 has three desktop panes, narrow keyboard
+tabs preserving per-file reading position/focus, separate readiness/pair/final status,
+and server-authorized individual downloads with saved-edit invalidation/review paths.
+Independent UI/profile review and focused supervisor/focus repair review PASS.
+Two substantive repairs addressed supervisor stop identity/focus continuity and seeded
+task preservation in the synthetic preflight; final test portability fixes were mechanical.
+Final exact candidate `15361842…f1742d4` passed fresh migration `0006`, approval/save/
+reapproval/download preflight and cross-Member denials. Normal generated Member browser
+flow independently verified all three downloads match displayed bytes/canonical names,
+saved edit disables all downloads, and explicit reapproval enables them. Designer PASS
+at 1440/1024/768/375, with refreshed final-input desktop/narrow keyboard/scroll/focus
+and reduced-motion confirmation. Web 77 tests plus lint/format/typecheck/build passed;
+coordinator toolkit 144 run, 142 passed, two expected skips (live recovery and host
+Python <3.12 API validator); that validator separately passed in pinned Python 3.12.
+Both browser runs stopped exit 0 with sanitized owned account/login/resource/image/
+private-state cleanup verified. Stage navigation resets file selection/scroll (documented
+optional polish); switching files retains position. No push/PR, chat or release claim.
 
 ## [-] IMP-011 — One-owner private-access release and recovery acceptance
 
