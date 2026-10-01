@@ -33,18 +33,16 @@ new push or merge is authorized by this document edit.
 - Approval/download API is locally verified through IMP-020/021 after the preserved
   ten failed attempts. #11 persistence and #12 enforcement passed; #13 was not needed.
   Local commits are not merged release or ordinary-worktree build readiness.
-- IMP-014 has partial UI/tests and is now eligible after verified approval; it needs its own
-  exact-candidate authenticated rendered review. Existing pass counts are not acceptance.
+- IMP-014's human-only rail/editor is locally verified and committed, including its
+  exact-candidate authenticated rendered review. Live-agent integration remains IMP-008.
 - Chat is blocked by IMP-002 isolation/relay proof. Media/private HTTPS work retains
   its documented blockers. IMP-022 now repairs ordinary worktree template builds;
   no chat or release-readiness claim follows from this compatibility repair.
 
 **Continuation after stopped-runner repair:** IMP-020/021 are verified local work;
-IMP-014 is the sole eligible task. At the next owner-started runner, `overnight`
-resumes sole coordination; interactive tech-lead will not implement concurrently.
-Use committed approval base `72e37e9` (or verify any later changed head). Build/review
-the exact IMP-014 candidate profile first; no earlier fingerprints, API-only harness
-templates or committed-but-unaccepted UI alone establish its preview/rendered safety.
+IMP-014 was subsequently verified on actual base `3b5d603` and delivered in `f67d33e`.
+There is no remaining dependency-eligible ready item; blocked prerequisites remain
+owner decisions. No earlier fingerprints or API-only harness templates certify future previews.
 Other blockers retain their recorded unmet prerequisites. No automatic restart,
 new template integration, network provisioning or attachment limits are implied.
 
@@ -449,7 +447,7 @@ skipped, web 60, toolkit 116/1 skipped plus checks, synthetic Member viewport/tw
 conflict review and owned cleanup passed. Failed recoveries and settled evidence-rule
 decisions remain in history. Human-only intermediate slice, not IMP-006 chat or release.
 
-## [ ] IMP-014 — Human-only collapsible backlog planning layout
+## [x] IMP-014 — Human-only collapsible backlog planning layout
 
 **Depends on:** IMP-007, IMP-013, IMP-021
 **Scope:** Direct task rail, title/body/dependency edits, draft/ready toggles and
@@ -507,6 +505,22 @@ including new profile/task-section modules and nested template/build inputs, bef
 preflight. Do not reuse old fingerprints or claim prior partial UI accepted. `overnight`
 resumes sole coordination at the next owner-started run; no interactive implementation
 will run concurrently. No automatic restart.
+
+**Local outcome (2026-10-01):** Verified task/docs commit `f67d33e` on
+`feature/impostr-v1`. Exact profile over committed `3b5d603` includes integrated
+IMP-021/022, nested templates and only the repaired BacklogPlanning UI/test overlay
+plus fingerprinted host fixture scripts. Independent profile/UI review and focused
+repair review PASS. Fresh candidate `14074823…758f13` passed migration `0006`,
+template/task checks, Member/admin/session and cross-Member read/write denials.
+Normal generated Member sign-in and designer PASS at 1440/1024/768/375 verified
+body/title/dependency/readiness edits, Markdown agreement, saving/invalid states,
+collapse/navigation/focus and actual stale 409 retention/explicit reapply.
+First rendering found a missing-terminal-newline body-save 422; one of three
+additional substantive repairs used, fixed and rendered successfully. Web 73 tests
+plus lint/format/typecheck/build passed; coordinator toolkit 138 run, 137 passed,
+1 gated skip. Empty-backlog rendering remains unit-covered, not live-proved because
+the API preserves seeded tasks. Final stop exit 0 and sanitized owned cleanup all
+verified. Affected docs updated; no push/PR, runner restart, chat or release claim.
 
 ## [x] IMP-022 — Integrate the simplified nested project templates
 
