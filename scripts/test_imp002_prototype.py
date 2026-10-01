@@ -5,11 +5,14 @@ Namespace integration is an explicit operator command, not an automatic test gat
 """
 
 import copy
+import errno
 import http.client
 import io
 import json
+import os
 from pathlib import Path
 import socket
+import stat
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -166,10 +169,14 @@ class InspectionTests(unittest.TestCase):
             resolver.assert_called_once_with()
         return code, json.loads(output.getvalue())
 
-    def assert_failure(self, reason, **kwargs):
+    def assert_failure(self, reason, *, detail=None, source=None, **kwargs):
+        extra = {"detail_code": detail} if detail else {}
+        if source:
+            extra["source_category"] = source
         self.assertEqual(self.inspect(**kwargs), (1, {
             "success": False, "operator_capability_unavailable": True,
             "reason_code": reason, "network_used": False,
+            **extra,
         }))
 
     def test_model_and_configuration_shape_categories_without_resolver(self):
@@ -239,11 +246,120 @@ class InspectionTests(unittest.TestCase):
                 with self.subTest(reason=reason):
                     self.assert_failure(reason, effect=lambda: transport.private_json(path))
             path.chmod(0o666)
-            self.assert_failure("file_permissions", effect=lambda: transport.private_json(path))
+            self.assert_failure("file_permissions", detail="file_write_mode", effect=lambda: transport.private_json(path))
             for error, reason in [(PermissionError("synthetic-secret-value"), "file_permissions"),
                                   (FileNotFoundError("synthetic-private-name"), "file_unavailable")]:
                 with patch.object(transport.os, "open", side_effect=error):
-                    self.assert_failure(reason, effect=lambda: transport.private_json(path))
+                    self.assert_failure(reason, detail="access_denied" if reason == "file_permissions" else None,
+                                        effect=lambda: transport.private_json(path))
+
+    def test_reader_metadata_details_and_fixed_source_categories_without_disclosure(self):
+        from test_imp002_transport import KEY, settings
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-detail-test-") as name, synthetic_ancestor():
+            root = Path(name)
+            config_dir, data_dir = root / "synthetic-config", root / "synthetic-auth"
+            for directory in (config_dir / "opencode", data_dir / "opencode"):
+                directory.mkdir(parents=True, mode=0o700)
+                directory.parent.chmod(0o700)
+            config_path = config_dir / "opencode/opencode.json"
+            config_path.write_text(json.dumps(settings()))
+            config_path.chmod(0o600)
+            auth_path = data_dir / "opencode/auth.json"
+            auth_path.write_text(json.dumps({"azure": {"type": "api", "key": KEY}}))
+            auth_path.chmod(0o600)
+            env = {"XDG_CONFIG_HOME": str(config_dir), "XDG_DATA_HOME": str(data_dir)}
+            effect = lambda: transport.contract_from_inputs(env, transport.private_json)
+            # Ownership is injected for only an owned fixture inode; never chown
+            # host paths or change the launcher identity. Other metadata is real.
+            original = os.fstat
+            for path, detail, source, foreign_owner in (
+                    (config_dir, "directory_ownership", "config", True),
+                    (data_dir, "directory_write_mode", "auth", False),
+                    (config_path, "file_ownership", "config", True),
+                    (auth_path, "file_write_mode", "auth", False)):
+                info = path.stat()
+
+                def metadata(fd):
+                    value = original(fd)
+                    if foreign_owner and (value.st_dev, value.st_ino) == (info.st_dev, info.st_ino):
+                        fields = list(value)
+                        fields[4] = os.getuid() + 1
+                        return os.stat_result(fields)
+                    return value
+
+                with self.subTest(detail=detail):
+                    if not foreign_owner:
+                        path.chmod(info.st_mode | 0o020)
+                    try:
+                        with patch.object(transport.os, "fstat", side_effect=metadata):
+                            self.assert_failure("file_permissions", detail=detail, source=source, effect=effect)
+                    finally:
+                        if not foreign_owner:
+                            path.chmod(stat.S_IMODE(info.st_mode))
+            hardlink = root / "synthetic-hardlink"
+            os.link(auth_path, hardlink)
+            with patch.object(transport.os, "fdopen", wraps=os.fdopen) as read:
+                self.assert_failure("file_permissions", detail="file_hardlinks", source="auth", effect=effect)
+                # Only valid config is parsed; rejected auth is never read.
+                self.assertEqual(read.call_count, 1)
+            hardlink.unlink()
+            auth_path.unlink()
+            os.mkfifo(auth_path, 0o600)
+            self.assert_failure("file_permissions", detail="file_type", source="auth", effect=effect)
+            auth_path.unlink()
+            auth_path.mkdir(mode=0o700)
+            self.assert_failure("file_permissions", detail="file_type", source="auth", effect=effect)
+
+    def test_nofollow_details_never_inspect_link_target_or_retry(self):
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-link-detail-") as name, synthetic_ancestor():
+            root = Path(name)
+            target = root / "synthetic-private-target"
+            target.mkdir(mode=0o700)
+            (target / "file.json").write_text('{"synthetic-secret-value":true}')
+            final_link = root / "synthetic-final-link"
+            final_link.symlink_to(target / "file.json")
+            ancestor_link = root / "synthetic-ancestor-link"
+            ancestor_link.symlink_to(target, target_is_directory=True)
+            non_directory = root / "synthetic-not-directory"
+            non_directory.write_text("synthetic-secret-value")
+            for path, rejected in ((final_link, final_link.name),
+                                   (ancestor_link / "file.json", ancestor_link.name),
+                                   (non_directory / "file.json", non_directory.name)):
+                with self.subTest(kind=rejected), \
+                        patch.object(transport.os, "open", wraps=os.open) as opened, \
+                        patch.object(transport.os, "stat", side_effect=AssertionError("no extra lookup")), \
+                        patch.object(transport.os, "readlink", side_effect=AssertionError("no link lookup")), \
+                        patch.object(transport.os, "fdopen") as read:
+                    with self.assertRaises(transport.Unavailable) as caught:
+                        transport.private_json(path, missing_ok=True)
+                    self.assertEqual(opened.call_args.args[0], rejected)
+                    self.assertEqual(sum(call.args[0] == rejected for call in opened.call_args_list), 1)
+                    self.assertTrue(all(call.args[1] & os.O_NOFOLLOW for call in opened.call_args_list))
+                    read.assert_not_called()
+                self.assert_failure("file_permissions", detail="symlink_or_not_directory", failure=caught.exception)
+
+    def test_access_denied_detail_at_open_and_read_missing_ok_does_not_skip(self):
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-access-detail-") as name, synthetic_ancestor():
+            path = Path(name) / "synthetic-private-file.json"
+            path.write_text('{"synthetic-secret-value":true}')
+            path.chmod(0o600)
+            original = os.open
+            for error, stage in ((PermissionError(errno.EACCES, "synthetic-secret-value"), "directory"),
+                                 (PermissionError(errno.EPERM, "synthetic-secret-value"), "file")):
+                def denied(name, flags, **kwargs):
+                    if name == ("/" if stage == "directory" else path.name):
+                        raise error
+                    return original(name, flags, **kwargs)
+
+                with self.subTest(stage=stage), patch.object(transport.os, "open", side_effect=denied):
+                    self.assert_failure("file_permissions", detail="access_denied",
+                                        effect=lambda: transport.private_json(path, missing_ok=True))
+            with patch.object(transport.os, "fdopen") as stream:
+                stream.return_value.__enter__.return_value.read.side_effect = PermissionError(
+                    errno.EACCES, "synthetic-secret-value")
+                self.assert_failure("file_permissions", detail="access_denied", effect=lambda: transport.private_json(path))
+            with patch.object(transport.os, "open", side_effect=OSError(errno.EIO, "synthetic-secret-value")):
+                self.assert_failure("file_unavailable", effect=lambda: transport.private_json(path, missing_ok=True))
 
     def test_runtime_mismatch_and_unavailable_stop_before_resolver(self):
         # Keep the real runtime check but inject every identity/digest operation.
@@ -270,6 +386,28 @@ class InspectionTests(unittest.TestCase):
             self.assert_failure("unknown", failure=error)
         self.assert_failure("unknown", runtime=ValueError(secret))
 
+    def test_file_detail_projection_rechecks_mutations_and_stays_reason_specific(self):
+        secret = "synthetic-secret-value /synthetic/private-name https://secret.invalid"
+        valid = transport.Unavailable(secret, reason="file_permissions", detail="file_ownership")
+        valid.source = "auth"
+        valid.__cause__ = PermissionError(secret)
+        self.assert_failure("file_permissions", detail="file_ownership", source="auth", failure=valid)
+        valid.source = secret
+        self.assert_failure("file_permissions", detail="file_ownership", failure=valid)
+        for unsupported in (secret, None, [], True):
+            valid.detail = unsupported
+            self.assert_failure("file_permissions", failure=valid)
+        valid.detail, valid.source = "file_ownership", "auth"
+        for reason in (secret, [], "file_parse", "unknown"):
+            valid.reason = reason
+            self.assert_failure(reason if reason in ("file_parse", "unknown") else "unknown", failure=valid)
+        self.assert_failure("file_permissions", failure=transport.Unavailable(
+            secret, reason="file_permissions", detail=secret))
+        # Arbitrary exception attributes never turn it into a categorized failure.
+        other = ValueError(secret)
+        other.reason, other.detail, other.source = "file_permissions", "file_type", "auth"
+        self.assert_failure("unknown", failure=other)
+
     def test_inspection_success_and_live_failure_contracts_unchanged(self):
         contract = transport.Contract("https://unit.example.invalid/openai/v1/responses",
                                       "synthetic-deployment", "synthetic-not-a-secret")
@@ -277,7 +415,9 @@ class InspectionTests(unittest.TestCase):
             "operator_contract_resolved": True, "contract_sha256": contract.fingerprint,
             "network_used": False, "credentials_disclosed": False,
         }))
-        for failure in (transport.Unavailable("synthetic-secret", reason="file_parse"), None):
+        detailed = transport.Unavailable("synthetic-secret", reason="file_permissions", detail="file_ownership")
+        detailed.source = "auth"
+        for failure in (transport.Unavailable("synthetic-secret", reason="file_parse"), detailed, None):
             output = io.StringIO()
             with patch.object(prototype.sys, "argv", ["imp002_prototype.py", "operator-live"]), \
                     patch.object(prototype, "check_runtime"), \

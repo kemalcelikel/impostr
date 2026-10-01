@@ -44,7 +44,7 @@ review approved the operator steps after rejecting provider-level endpoint overr
 Full session/proposal
 behavior remains unproved. These commands do not make the runner or product chat ready.
 
-### Continuation operator step (compatibility repair awaiting affected review)
+### Continuation operator step (file-failure details awaiting affected review)
 
 Do **not** run these operator modes from an agent or before independent review and
 passing synthetic checks. Only the human operator may resolve existing private
@@ -90,11 +90,44 @@ variable was present in the human's terminal.
 
 #### Prepared measured compatibility repair
 
-**Affected independent review approved the human rerun; coordinator verified 47
-focused synthetic tests. No private resolver or live mode was run by agents.**
+**Prior compatibility attempt 1/3 passed affected independent review and 47
+coordinator synthetic tests. No private resolver or live mode was run by agents.**
 Agents never run the resolver, diagnostic or operator modes. After approval, the
 next human-only command is the same `operator-inspect` command above. Share only
 its sanitized JSON and stop for the coordinator; success does not authorize live use.
+
+The human's latest offline result was `reason_code:file_permissions` with
+`network_used:false`. **The actual cause and path are unknown**; this does not identify
+a bad directory, file, ownership, permission mode or symlink. Compatibility attempt
+2/3 prepares fixed reader-failure details; 51 focused synthetic tests passed,
+with affected independent review still required before the human rerun of the
+**same** command above. No new diagnostic
+command, input support, permission/setup change or live authorization is added.
+
+Only `operator-inspect` failures with coarse `reason_code:file_permissions` may add
+an allowlisted `detail_code`:
+
+| Detail code | Observed rejection (no private metadata values returned) |
+| --- | --- |
+| `directory_ownership` | An opened ancestor is owned by neither root nor the operator. |
+| `directory_write_mode` | An opened ancestor fails the existing group/world-write policy, including its root-owned sticky exception. |
+| `file_ownership` | The opened final regular file is not operator-owned. |
+| `file_write_mode` | The opened final regular file is group/world-writable. |
+| `file_type` | The opened final entry is not a regular file. |
+| `file_hardlinks` | The opened final regular file's link count is not one. |
+| `access_denied` | The existing open/metadata/read operation returned an access denial. |
+| `symlink_or_not_directory` | A nofollow/directory operation rejected a link or non-directory; these are deliberately not distinguished by another lookup. |
+
+For these detailed reader failures, `source_category:config` or `source_category:auth`
+identifies only the fixed reader call site, **not** a filename, path, credential or
+authentication mechanism. The first failing check is reported, not all possible
+problems; config is checked before auth, so a config failure leaves auth unestablished.
+Unknown/unsupported details are omitted; an unsupported mutated reason remains
+`unknown` with no detail/source. Other coarse reasons, successful inspection and all
+live generic failure reports are unchanged. No retry, link following, path discovery,
+extra metadata lookup or private exception/name/value output is used. Do not change
+permissions or clear inputs to bypass a refusal. After review, share only the human
+rerun's sanitized JSON and stop; IMP-002 stays blocked and the runner stays stopped.
 
 The resolver's name guard now admits the seven exact XDG directory names and the
 session names above, plus **only `AZURE_RESOURCE_NAME`**. Every `OPENCODE_*`, other

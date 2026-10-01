@@ -257,7 +257,7 @@ def run(mode, transport=None):
 
 def operator_inspect():
     """Human-only offline inspection; fixed diagnostics, never exception details."""
-    from imp002_transport import Unavailable, inspection_reason, resolve_operator_contract
+    from imp002_transport import Unavailable, inspection_file_details, inspection_reason, resolve_operator_contract
     try:
         try:
             check_runtime()
@@ -272,9 +272,10 @@ def operator_inspect():
         return 0
     except Exception as exc:
         # The offline call graph has no network transport or worker launch. Render
-        # only an allowlisted category, never messages, types or chained errors.
+        # only allowlisted categories, never messages, types or chained errors.
         print(json.dumps({"success": False, "operator_capability_unavailable": True,
-                          "reason_code": inspection_reason(exc), "network_used": False}))
+                          "reason_code": inspection_reason(exc), "network_used": False,
+                          **inspection_file_details(exc)}))
         return 1
 
 

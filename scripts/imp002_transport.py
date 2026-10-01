@@ -36,6 +36,12 @@ INSPECTION_REASONS = frozenset({
     "file_unavailable", "file_permissions", "file_parse",
     "runtime_mismatch", "runtime_unavailable", "unknown",
 })
+INSPECTION_FILE_DETAILS = frozenset({
+    "directory_ownership", "directory_write_mode", "file_ownership",
+    "file_write_mode", "file_type", "file_hardlinks", "access_denied",
+    "symlink_or_not_directory",
+})
+INSPECTION_FILE_SOURCES = frozenset({"config", "auth"})
 # OpenCode v1.18.34 core/src/global.ts consumes xdg-basedir 5.1.0 paths;
 # that dependency's index.js reads these directory variables, not session metadata.
 # Only config/data select inputs for this host-only resolver. Global's cache/state
@@ -56,15 +62,35 @@ GLOBAL_FILES = ("config.json", "opencode.json", "opencode.jsonc")
 class Unavailable(RuntimeError):
     """Never render chained exceptions: they may contain endpoint/auth/body data."""
 
-    def __init__(self, message, *, reason="unknown"):
+    def __init__(self, message, *, reason="unknown", detail=None):
         super().__init__(message)
         self.reason = reason if type(reason) is str and reason in INSPECTION_REASONS else "unknown"
+        self.detail = detail if type(detail) is str and detail in INSPECTION_FILE_DETAILS else None
+        self.source = None
 
 
 def inspection_reason(exc):
     """Operator-inspect ONLY: no message, exception class, or private detail output."""
     reason = exc.reason if isinstance(exc, Unavailable) else None
     return reason if type(reason) is str and reason in INSPECTION_REASONS else "unknown"
+
+
+def inspection_file_details(exc):
+    """Operator-inspect ONLY: recheck fixed enums, including after mutation.
+
+    Details apply solely to the existing reader's file_permissions failures. No
+    paths, exception messages/classes/errno, metadata values or chained errors.
+    """
+    if inspection_reason(exc) != "file_permissions":
+        return {}
+    detail = getattr(exc, "detail", None)
+    if type(detail) is not str or detail not in INSPECTION_FILE_DETAILS:
+        return {}
+    result = {"detail_code": detail}
+    source = getattr(exc, "source", None)
+    if type(source) is str and source in INSPECTION_FILE_SOURCES:
+        result["source_category"] = source
+    return result
 
 
 class Contract:
@@ -122,19 +148,22 @@ def private_json(path, *, missing_ok=False, literal=True):
         uid = os.getuid()
         flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
         directory = os.open("/", flags | os.O_DIRECTORY)
-        if not safe_directory(os.fstat(directory), uid):
-            raise Unavailable("unsafe private directory", reason="file_permissions")
+        check_private_directory(os.fstat(directory), uid)
         for component in path.parts[1:-1]:
             child = os.open(component, flags | os.O_DIRECTORY, dir_fd=directory)
             os.close(directory)
             directory = child
-            if not safe_directory(os.fstat(directory), uid):
-                raise Unavailable("unsafe private directory", reason="file_permissions")
+            check_private_directory(os.fstat(directory), uid)
         fd = os.open(path.name, flags, dir_fd=directory)
         info = os.fstat(fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid
-                or info.st_mode & 0o022 or info.st_nlink != 1):
-            raise Unavailable("unsafe private file", reason="file_permissions")
+        if not stat.S_ISREG(info.st_mode):
+            raise Unavailable("unsafe private file", reason="file_permissions", detail="file_type")
+        if info.st_uid != uid:
+            raise Unavailable("unsafe private file", reason="file_permissions", detail="file_ownership")
+        if info.st_mode & 0o022:
+            raise Unavailable("unsafe private file", reason="file_permissions", detail="file_write_mode")
+        if info.st_nlink != 1:
+            raise Unavailable("unsafe private file", reason="file_permissions", detail="file_hardlinks")
         if info.st_size > MAX_PRIVATE_FILE:
             raise Unavailable("unsupported private file", reason="file_unavailable")
         if not literal:
@@ -158,14 +187,27 @@ def private_json(path, *, missing_ok=False, literal=True):
     except OSError as exc:
         if missing_ok and exc.errno == errno.ENOENT:
             return None
-        reason = ("file_permissions" if isinstance(exc, PermissionError)
-                  or exc.errno in (errno.ELOOP, errno.ENOTDIR) else "file_unavailable")
-        raise Unavailable("private file unavailable", reason=reason) from exc
+        # ELOOP/ENOTDIR do not establish which component is a link. Do not stat,
+        # readlink or retry without NOFOLLOW to refine this fixed category.
+        detail = ("access_denied" if isinstance(exc, PermissionError)
+                  or exc.errno in (errno.EACCES, errno.EPERM) else
+                  "symlink_or_not_directory" if exc.errno in (errno.ELOOP, errno.ENOTDIR) else None)
+        reason = "file_permissions" if detail else "file_unavailable"
+        raise Unavailable("private file unavailable", reason=reason, detail=detail) from exc
     finally:
         if fd is not None:
             os.close(fd)
         if directory is not None:
             os.close(directory)
+
+
+def check_private_directory(info, uid):
+    """Keep the reviewed directory policy; classify only already-observed metadata."""
+    if safe_directory(info, uid):
+        return
+    detail = ("symlink_or_not_directory" if not stat.S_ISDIR(info.st_mode) else
+              "directory_ownership" if info.st_uid not in (0, uid) else "directory_write_mode")
+    raise Unavailable("unsafe private directory", reason="file_permissions", detail=detail)
 
 
 def provider_settings(config):
@@ -229,12 +271,23 @@ def contract_from_inputs(environment, read_source):
     """
     check_environment_names(environment)
     config_dir, data_dir = selected_private_paths(environment)
+
+    def read(path, source, **kwargs):
+        try:
+            return read_source(path, **kwargs)
+        except Unavailable as exc:
+            if inspection_reason(exc) == "file_permissions":
+                # Category comes from the fixed call site, never a private path,
+                # filename, JSON key or credential/auth mechanism.
+                exc.source = source
+            raise
+
     # Legacy TOML migration/import is unsupported, even alongside valid JSON.
-    if read_source(config_dir / "config", missing_ok=True, literal=False) is not None:
+    if read(config_dir / "config", "config", missing_ok=True, literal=False) is not None:
         raise Unavailable("legacy config unsupported", reason="configuration_unsupported")
     config = {}
     for name in GLOBAL_FILES:
-        value = read_source(config_dir / name, missing_ok=True)
+        value = read(config_dir / name, "config", missing_ok=True)
         if value is None:
             continue
         if has_expansion(value) or value.get("plugin"):
@@ -250,7 +303,7 @@ def contract_from_inputs(environment, read_source):
     # Azure custom loader consults stored auth metadata EVEN with a literal
     # options.apiKey. Read it to reject unsupported mechanisms/metadata, never
     # skip it and accidentally bind that key to the wrong resource.
-    auth = read_source(data_dir / "auth.json", missing_ok=True) or {}
+    auth = read(data_dir / "auth.json", "auth", missing_ok=True) or {}
     if any(type(entry) is dict and entry.get("type") == "wellknown" for entry in auth.values()):
         raise Unavailable("remote auth config unsupported", reason="configuration_unsupported")
     return contract_from_settings(config, auth.get("azure"),
