@@ -35,6 +35,17 @@ INSPECTION_REASONS = frozenset({
     "file_unavailable", "file_permissions", "file_parse",
     "runtime_mismatch", "runtime_unavailable", "unknown",
 })
+# OpenCode v1.18.34 core/src/global.ts consumes xdg-basedir 5.1.0 paths;
+# that dependency's index.js reads these directory variables, not session metadata.
+# Runtime/search directories remain unsupported even when not used by Global.
+XDG_DIRECTORY_OVERRIDES = frozenset({
+    "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
+    "XDG_RUNTIME_DIR", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
+})
+XDG_SESSION_METADATA = frozenset({
+    "XDG_SESSION_ID", "XDG_SESSION_TYPE", "XDG_SESSION_CLASS", "XDG_SESSION_DESKTOP",
+    "XDG_CURRENT_DESKTOP", "XDG_SEAT", "XDG_VTNR",
+})
 
 
 class Unavailable(RuntimeError):
@@ -125,10 +136,13 @@ def provider_settings(config):
 
 
 def check_operator_context():
-    """Offline prerequisite guard, testable without discovering private files."""
+    """Offline name-only guard; never read values, clear env or discover files."""
     if os.getuid() != 1000 or os.getgid() != 1000:
         raise Unavailable("unreviewed identity", reason="runtime_mismatch")
-    if any(name.startswith(("OPENCODE_", "AZURE_", "XDG_")) for name in os.environ):
+    if any(name.startswith(("OPENCODE_", "AZURE_"))
+           or name in XDG_DIRECTORY_OVERRIDES
+           or name.startswith("XDG_") and name not in XDG_SESSION_METADATA
+           for name in os.environ):
         raise Unavailable("ambient provider/config override", reason="environment_override")
 
 

@@ -188,13 +188,46 @@ class InspectionTests(unittest.TestCase):
                 self.assert_failure(reason, effect=lambda: transport.contract_from_settings(
                     config, {"type": "api", "key": KEY}))
 
+    def test_ssh_session_metadata_passes_guard_without_private_discovery(self):
+        environment = {"SSH_CONNECTION": "192.0.2.1 1234 192.0.2.2 22",
+                       "SSH_CLIENT": "192.0.2.1 1234 22", "SSH_TTY": "/dev/pts/1",
+                       "TERM": "xterm-256color", "XDG_SESSION_ID": "synthetic-session",
+                       "XDG_SESSION_TYPE": "tty", "XDG_SESSION_CLASS": "user",
+                       "XDG_SESSION_DESKTOP": "synthetic-desktop", "XDG_CURRENT_DESKTOP": "synthetic-desktop",
+                       "XDG_SEAT": "seat0", "XDG_VTNR": "1"}
+        original = environment.copy()
+        with patch.object(transport.os, "environ", environment), \
+                patch.object(transport.os, "getuid", return_value=1000), \
+                patch.object(transport.os, "getgid", return_value=1000), \
+                patch.object(transport, "private_json") as private, \
+                patch.object(transport.Path, "exists") as discovery, \
+                patch.object(transport, "HTTPSInference") as inference:
+            transport.check_operator_context()
+        self.assertEqual(environment, original)
+        private.assert_not_called()
+        discovery.assert_not_called()
+        inference.assert_not_called()
+
     def test_environment_override_offline_guard_without_private_discovery(self):
-        for prefix in ("OPENCODE_", "AZURE_", "XDG_"):
-            with self.subTest(prefix=prefix), \
-                    patch.dict(transport.os.environ, {prefix + "SYNTHETIC_SECRET_NAME": "synthetic-secret-value"}, clear=True), \
+        overrides = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
+                     "XDG_RUNTIME_DIR", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
+                     "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT",
+                     "OPENCODE_AUTH_CONTENT", "OPENCODE_TEST_HOME", "OPENCODE_TEST_MANAGED_CONFIG_DIR",
+                     "AZURE_RESOURCE_NAME", "AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+                     "OPENCODE_SYNTHETIC_SECRET_NAME", "AZURE_SYNTHETIC_SECRET_NAME", "XDG_SYNTHETIC_SECRET_NAME",
+                     "XDG_SESSION_CONFIG_HOME")
+        for name in overrides:
+            environment = {"SSH_TTY": "/dev/pts/1", "XDG_SESSION_ID": "synthetic-session",
+                           name: "synthetic-secret-value"}
+            with self.subTest(name=name), \
+                    patch.object(transport.os, "environ", environment), \
                     patch.object(transport.os, "getuid", return_value=1000), \
-                    patch.object(transport.os, "getgid", return_value=1000):
+                    patch.object(transport.os, "getgid", return_value=1000), \
+                    patch.object(transport, "private_json") as private, \
+                    patch.object(transport.Path, "exists") as discovery:
                 self.assert_failure("environment_override", effect=transport.check_operator_context)
+                private.assert_not_called()
+                discovery.assert_not_called()
 
     def test_synthetic_file_parse_permissions_and_unavailable_categories(self):
         with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-inspect-test-") as name:

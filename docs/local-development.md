@@ -61,12 +61,35 @@ JSON Azure Responses/API-key subset without running OpenCode, plugins or config
 expansion. It returns only a nonsecret contract fingerprint or a generic capability
 failure.
 Offline failure now also includes an allowlisted coarse `reason_code` and
-`network_used:false`. The operator reported a generic failure before this diagnostic
-was added; its actual cause is not yet known. The diagnostic change passed independent
-review and 28 focused tests with synthetic errors. Rerun the same inspection command
-and share only its JSON, never private files or exception/configuration details.
+`network_used:false`. The diagnostic change passed independent review and 28 focused
+tests with synthetic errors. The human's subsequent SSH-terminal rerun reported
+`environment_override`; the triggering variable is unknown, not an established SSH
+fault. Affected independent review approved the guard, and coordinator passed 29
+focused tests. Rerun the
+same inspection command and share only its JSON, never environment dumps, private files
+or exception/configuration details. Do not clear the environment to bypass a refusal.
 
-It refuses environment-based provider/XDG/OpenCode overrides, ambiguous
+The name-only guard allows ordinary SSH metadata and exactly these XDG session names:
+`XDG_SESSION_ID`, `XDG_SESSION_TYPE`, `XDG_SESSION_CLASS`, `XDG_SESSION_DESKTOP`,
+`XDG_CURRENT_DESKTOP`, `XDG_SEAT`, `XDG_VTNR`. It still refuses every `OPENCODE_*` and
+`AZURE_*` name, unknown `XDG_*` names, and directory settings `XDG_CONFIG_HOME`,
+`XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_DIRS`,
+`XDG_DATA_DIRS`, without reading or printing their values. This does not expand the
+supported config/auth subset or silently ignore effective directory/provider overrides.
+Public source basis: pinned OpenCode
+[`global.ts`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/core/src/global.ts)
+uses the data/config/cache/state paths from
+[`xdg-basedir` 5.1.0](https://github.com/sindresorhus/xdg-basedir/blob/v5.1.0/index.js),
+whose directory inputs exclude the allowed session names. OpenCode's
+[`flag.ts`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/core/src/flag/flag.ts)
+and [`auth/index.ts`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/auth/index.ts)
+consume config/auth overrides; its
+[`provider.ts`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/provider/provider.ts)
+and bundled [`@ai-sdk/azure` 3.0.93](https://unpkg.com/@ai-sdk/azure@3.0.93/dist/index.js)
+consume Azure resource/key environment inputs. None of that source establishes which
+variable was present in the human's terminal.
+
+The resolver also refuses ambiguous
 global files, unsupported auth/metadata/model/provider options, non-inference routes
 and nonliteral settings; it does not pretend to implement full host config precedence.
 If unavailable, stop. The next useful operator action is privately reconciling the
