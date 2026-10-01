@@ -141,6 +141,15 @@ product integration, actual-model behavior and product chat acceptance remain
 unproved IMP-002 work. Synthetic protocol proof does not unblock chat or certify the
 host account/model connection.
 
+IMP-024 phase one now separately proves native canonical planning reads, questions
+and replies, once-only edit permissions, unapproved proposal capture, forbidden-tool
+denial, cancellation cleanup/stale-reply denial and terminal inference errors through
+the synthetic host relay. Independent boundary and affected repair reviews passed;
+the four confined scenarios and owned cleanup passed. This remains a non-serving
+preparation checkpoint: the private product broker, durable API/proposal import,
+chat UI and human-only connection entrypoint are not yet delivered. Earlier IMP-002
+and IMP-023 acceptance boundaries remain unchanged.
+
 ### Current implementation versus planned application
 
 - This checkout contains root `scripts/backlog.py` and `run-tonight.sh`, plus an
@@ -383,7 +392,7 @@ successful mock integration test with an isolated, working OpenCode deployment.
 | Release boundary, private projects, admin UI, selected templates | Owner revised / personal first release | One owner on this PC; retain roles/authorization and plan-and-export workflow. Simplified nested templates are selected but await compatible application integration (IMP-022). A verified private HTTPS LAN route and full chat/media/approval/download flow are first-release gates. Public and multi-user server operation are later, not silently approved. No web runner. |
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
 | UI/backend/deployment stack | Implemented local baseline | Vite/React/TypeScript/Tailwind, Python/FastAPI/SQLAlchemy/PostgreSQL/Alembic/Nginx; manifests/locks pin actual dependencies and container runtimes. |
-| Safe live OpenCode integration | Owner chose `bwrap`-first / open capability gate | On this PC, prove fail-closed per-project host containment and trusted model relay, plus live session resume, stream, questions, permissions and proposals. Bounded synthetic live model/image tests are approved; do not copy host auth into a worker. No verified broker or negative containment command exists yet. |
+| Safe OpenCode integration | Owner chose `bwrap`-first / open capability gate | The non-serving IMP-024 phase-one synthetic harness now verifies native planning read/question/reply/edit-once permission and unapproved proposal capture, plus denied shell, abort cleanup and terminal-error handling inside the confined worker. It is not a product broker/API/UI or live model integration, and does not establish worker-restart durability or aggregate resource containment (personal text-chat quota work is cancelled). Next is broker Unix UID/authentication, durable DB state and proposals; IMP-002/005/006/008 acceptance remains open. Do not copy host auth into a worker. |
 | Deployment environment, exact app commands and secrets provision | Local-only setup verified / release gate open | Docker/Compose setup, migrations, local account bootstrap/recovery, API health and database recovery commands are documented in `docs/local-development.md`. No separate host PostgreSQL install is required. Web-agent isolation, TLS/reverse-proxy handling, backup/restore, and release checks remain unverified. |
 | Automated local browser-review credentials | Verified local fixture / residual host risk accepted | IMP-015 and exact-input IMP-004/013/007 reviews passed locally; IMP-014 still needs its own profile and rendering. The shared Playwright tool server is **not OS-confined** and may access host files, provider credentials or Docker. Use a fresh synthetic stack and generated short-lived Member login/session, revoke it after review, and never intentionally use owner's accounts or real project data. This is not host-secret/Docker denial, product isolation, shared-server readiness or an auth bypass. IMP-002 remains blocked. |
 | First-release attachments | Owner decided / model fidelity and limits unverified | PNG/JPEG actual image input; text/Markdown and bounded selectable-text PDF/DOCX extraction. No scanned/visual PDF or embedded DOCX images in v1. Retain privately per project/conversation until explicit deletion; only explicitly attached validated derivatives reach the model. Provider/media support and numeric limits require measured proof before the media items become ready. |

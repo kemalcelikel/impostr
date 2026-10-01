@@ -2,7 +2,8 @@
 
 The worker may reach this one per-run filesystem Unix socket, not a host HTTP
 server. The separately reviewed operator transport owns upstream/auth; workers
-never supply upstream URLs/headers. Only bounded text Responses calls pass.
+never supply upstream URLs/headers. Bounded text is the default; explicit planning
+mode adds source-constrained native function DATA, not host tool execution.
 """
 
 import json
@@ -44,8 +45,10 @@ def decode(body):
         raise Denied("invalid JSON") from exc
 
 
-def validate(method, route, body):
-    if method != "POST" or route != ROUTE or len(body) > MAX_REQUEST:
+def validate(method, route, body, *, planning=False):
+    from imp024_protocol import (MAX_REQUEST as PLANNING_REQUEST, MAX_ITEMS, MAX_TOKENS,
+                                Invalid, arguments, bounded_text, definitions, identifier)
+    if method != "POST" or route != ROUTE or len(body) > (PLANNING_REQUEST if planning else MAX_REQUEST):
         raise Denied("not inference")
     data = decode(body)
     allowed = {"model", "input", "stream", "store", "max_output_tokens", "tools",
@@ -62,14 +65,18 @@ def validate(method, route, body):
         # Native SDK emits a session-affinity hint. Never let it select shared
         # provider state: omit it from any future operator-owned transport.
         del data["prompt_cache_key"]
-    if data.get("tools", []) != [] or data.get("include", []) != []:
+    if (not planning and data.get("tools", []) != []) or data.get("include", []) != []:
         raise Denied("external or stateful capability")
+    try:
+        names = definitions(data.get("tools", [])) if planning else set()
+    except Invalid as exc:
+        raise Denied("function definition") from exc
     if data.get("tool_choice", "none") not in ("none", "auto"):
         raise Denied("tool choice")
     if "parallel_tool_calls" in data and type(data["parallel_tool_calls"]) is not bool:
         raise Denied("parallel calls")
     maximum = data.get("max_output_tokens", 256)
-    if type(maximum) is not int or not 1 <= maximum <= 1024:
+    if type(maximum) is not int or not 1 <= maximum <= (MAX_TOKENS if planning else 1024):
         raise Denied("output bound")
     reasoning = data.get("reasoning", {})
     if not isinstance(reasoning, dict) or set(reasoning) - {"effort", "summary"}:
@@ -86,9 +93,41 @@ def validate(method, route, body):
     if text.get("format", {"type": "text"}) != {"type": "text"}:
         raise Denied("format")
     messages = data.get("input")
-    if not isinstance(messages, list) or not 1 <= len(messages) <= 32:
+    if not isinstance(messages, list) or not 1 <= len(messages) <= (MAX_ITEMS if planning else 32):
         raise Denied("input")
-    for message in messages:
+    pending, seen = {}, set()
+    for message_index, message in enumerate(messages):
+        if planning and isinstance(message, dict) and message.get("type") in ("function_call", "function_call_output"):
+            try:
+                call = identifier(message.get("call_id"))
+                if message["type"] == "function_call":
+                    if set(message) != {"type", "call_id", "name", "arguments"} or message.get("name") not in names or call in seen:
+                        raise Denied("function call")
+                    arguments(message["name"], decode(bounded_text(message["arguments"]).encode()))
+                    pending[call] = message["name"]
+                    seen.add(call)
+                else:
+                    if set(message) != {"type", "call_id", "output"} or call not in pending:
+                        raise Denied("function result pairing")
+                    bounded_text(message["output"])
+                    del pending[call]
+            except Invalid as exc:
+                raise Denied("function data") from exc
+            continue
+        if pending and isinstance(message, dict) and message.get("role") == "user":
+            raise Denied("unpaired function result")
+        if planning and isinstance(message, dict) and "id" in message:
+            # SDK replays assistant text with item IDs when store=false. Keep
+            # text but strip the inert provider identity, never item references.
+            try:
+                identifier(message["id"])
+                if message.get("role") != "assistant":
+                    raise Denied("message id")
+                message = dict(message)
+                del message["id"]
+                messages[message_index] = message
+            except Invalid as exc:
+                raise Denied("message id") from exc
         if not isinstance(message, dict) or set(message) - {"role", "content", "type"}:
             raise Denied("message")
         if message.get("type", "message") != "message":
@@ -110,6 +149,8 @@ def validate(method, route, body):
                 raise Denied("media forbidden")
             if not isinstance(part["text"], str) or len(part["text"].encode()) > 64000:
                 raise Denied("text bound")
+    if pending:
+        raise Denied("unpaired function result")
     return data
 
 
@@ -139,7 +180,7 @@ def stub_response():
                    for i, (name, fields) in enumerate(events)).encode()
 
 
-def read_request(stream):
+def read_request(stream, max_request=MAX_REQUEST):
     # Deliberately no chunked encoding, redirects, CONNECT, upgrades or general
     # proxy semantics. The shim constructs a new request; worker auth is discarded.
     line = stream.readline(4097)
@@ -176,7 +217,7 @@ def read_request(stream):
     if not length.isascii() or not length.isdecimal() or len(length) > 7:
         raise Denied("length")
     length = int(length)
-    if not 1 <= length <= MAX_REQUEST:
+    if not 1 <= length <= max_request:
         raise Denied("length bound")
     body = stream.read(length)
     if len(body) != length:
@@ -199,7 +240,7 @@ class SyntheticRelay:
     is copied into the worker; this relay's default is still entirely synthetic.
     """
 
-    def __init__(self, path: Path, lifetime=30, transport=None):
+    def __init__(self, path: Path, lifetime=30, transport=None, *, planning=False):
         if not 1 <= lifetime <= 60:
             raise ValueError("lifetime")
         self.path = path
@@ -210,6 +251,12 @@ class SyntheticRelay:
         self.denied = 0
         self.observed = []  # Only protocol shape/errors; never prompt/body/header values.
         self.transport = transport
+        self.planning = planning
+        if planning:
+            from imp024_protocol import MAX_REQUEST as request_bound, MAX_RESPONSE as response_bound, MAX_CALLS as call_bound
+            self.max_request, self.max_response, self.max_calls = request_bound, response_bound, call_bound
+        else:
+            self.max_request, self.max_response, self.max_calls = MAX_REQUEST, MAX_RESPONSE, MAX_CALLS
         self.active = None
         self.listener = socket.socket(socket.AF_UNIX)
         self.listener.bind(str(path))
@@ -264,23 +311,25 @@ class SyntheticRelay:
                 watcher.start()
                 try:
                     self.connections += 1
-                    if self.connections > MAX_CALLS:
+                    if self.connections > self.max_calls:
                         raise Denied("connection bound")
                     uid = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))[1]
                     if uid != os.geteuid():
                         raise Denied("peer")
                     with connection.makefile("rb") as stream:
-                        method, route, body = read_request(stream)
+                        method, route, body = read_request(stream, self.max_request)
                     self.calls += 1
-                    if self.calls > MAX_CALLS:
+                    if self.calls > self.max_calls:
                         raise Denied("call bound")
                     # Never retain attacker-controlled route or JSON key values.
                     self.observed.append({"inference_route": route == ROUTE})
                     try:
-                        data = validate(method, route, body)
+                        data = validate(method, route, body, planning=self.planning)
                     except Denied as exc:
                         self.observed[-1]["denial"] = str(exc)
                         raise
+                    if self.transport is None and self.planning:
+                        raise Denied("planning transport absent")
                     if self.transport is None:
                         respond(connection, "200 OK", stub_response(), "text/event-stream")
                     else:
@@ -315,13 +364,17 @@ class SyntheticRelay:
 
         watcher = threading.Thread(target=peer_guard, daemon=True)
         watcher.start()
-        events = self.transport.events(data, cancelled, deadline)
+        events = None
         started = False
         size = 0
         try:
+            events = self.transport.events(data, cancelled, deadline)
+            if self.planning:
+                from imp024_inference import normalized_events
+                events = normalized_events(events, data)
             for event in events:
                 size += len(event)
-                if size > MAX_RESPONSE or cancelled.is_set() or time.monotonic() >= deadline:
+                if size > self.max_response or cancelled.is_set() or time.monotonic() >= deadline:
                     raise Denied("stream bound")
                 if not started:
                     connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
@@ -336,7 +389,8 @@ class SyntheticRelay:
             if not cancelled.is_set():
                 try:
                     if started:
-                        error = b'event: error\ndata: {"type":"error","code":"server_error","message":"relay unavailable","param":null}\n\n'
+                        from imp024_protocol import terminal_error
+                        error = terminal_error(1000000)
                         connection.sendall(f"{len(error):x}\r\n".encode() + error + b"\r\n0\r\n\r\n")
                     else:
                         respond(connection, "503 Service Unavailable", b'{"error":"relay unavailable"}')
@@ -346,7 +400,8 @@ class SyntheticRelay:
             cancelled.set()
             finished.set()
             try:
-                events.close()
+                if events is not None:
+                    events.close()
             except Exception:
                 # Generator cleanup exceptions can contain private SDK/socket
                 # data. Never allow a credential-bearing thread traceback.

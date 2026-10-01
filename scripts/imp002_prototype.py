@@ -47,6 +47,7 @@ PINS.update({
 LIBRARIES = ("libc.so.6", "libpthread.so.0", "libdl.so.2", "libm.so.6",
              "libexpat.so.1", "libz.so.1", "libssl.so.3", "libcrypto.so.3")
 SESSION_MODES = ("imp023-startup", "imp023-history", "imp023-reconnect", "imp023-interrupt")
+PLANNING_MODES = ("imp024-planning", "imp024-denials", "imp024-cancel", "imp024-error")
 
 
 class CapabilityError(RuntimeError):
@@ -110,7 +111,7 @@ def command(root, mode, port):
     if mode != "outage":
         args += ["--ro-bind", str(root / "relay.sock"), "/relay/inference.sock"]
     # Bootstrap path is explicitly supplied under -I; no project Python modules.
-    worker = "imp023_worker" if mode in SESSION_MODES else "imp002_worker"
+    worker = "imp024_worker" if mode in PLANNING_MODES else "imp023_worker" if mode in SESSION_MODES else "imp002_worker"
     bootstrap = f"import sys; sys.path.insert(0, '/prototype'); import {worker}; raise SystemExit({worker}.main())"
     return args + ["--", "/bin/python3", "-I", "-B", "-c", bootstrap, str(port), mode,
                    str(root / "synthetic-host")]
@@ -164,7 +165,7 @@ def bounded_run(args, timeout=20, max_output=65536):
 
 
 def run(mode, transport=None):
-    if mode in SESSION_MODES and transport is not None:
+    if mode in SESSION_MODES + PLANNING_MODES and transport is not None:
         raise CapabilityError("session scenarios require the unchanged synthetic relay")
     pins = check_runtime()
     parent = Path("/tmp/opencode")
@@ -179,9 +180,11 @@ def run(mode, transport=None):
         (root / "config").mkdir(mode=0o700)
         (root / "config" / "opencode").mkdir(mode=0o700)
         (root / "config" / "opencode" / ".gitignore").write_text("node_modules\n")
-        filenames = ("imp002_worker.py", "imp002_relay.py")
-        if mode in SESSION_MODES:
+        filenames = ("imp002_worker.py", "imp002_relay.py", "imp024_protocol.py")
+        if mode in SESSION_MODES + PLANNING_MODES:
             filenames += ("imp023_worker.py",)
+        if mode in PLANNING_MODES:
+            filenames += ("imp024_worker.py",)
         for filename in filenames:
             (root / "code" / filename).write_bytes(Path(__file__).with_name(filename).read_bytes())
         # Synthetic canaries are outside the mounted project. Never actual host data.
@@ -192,6 +195,9 @@ def run(mode, transport=None):
         (root / "synthetic-host" / "sibling" / "PROJECT.md").write_text("synthetic sibling")
         (root / "project" / "escape").symlink_to(root / "synthetic-host" / "home" / "secret")
         (root / "project" / "PROJECT.md").write_text("# Synthetic IMP002 project\n")
+        if mode in PLANNING_MODES:
+            (root / "project" / "AGENTS.md").write_text("# Synthetic planning rules\nOnly plan; no execution.\n")
+            (root / "project" / "BACKLOG.md").write_text("# Synthetic backlog\n\n## [-] TASK-001 — Synthetic plan\n")
         # Invalid local config + executable plugin/skill canaries must never be
         # loaded. All content is generated; no installed host definitions enter.
         (root / "project" / "opencode.json").write_text("INVALID SYNTHETIC CONFIG")
@@ -219,9 +225,13 @@ def run(mode, transport=None):
             listener.bind(("127.0.0.1", 0))
             listener.listen(1)
             port = listener.getsockname()[1]
-            with SyntheticRelay(root / "relay.sock", transport=transport) as relay:
+            if mode in PLANNING_MODES:
+                from imp024_session import SyntheticPlanning
+                transport = SyntheticPlanning(mode.removeprefix("imp024-"))
+            with SyntheticRelay(root / "relay.sock", lifetime=45 if mode in PLANNING_MODES else 30,
+                                transport=transport, planning=mode in PLANNING_MODES) as relay:
                 code, reason, output = bounded_run(command(root, mode, port),
-                                                 timeout=2 if mode == "timeout" else 45 if mode in SESSION_MODES else 20)
+                                                 timeout=2 if mode == "timeout" else 45 if mode in SESSION_MODES + PLANNING_MODES else 20)
                 results = []
                 response_text = False
                 runtime_error = False
@@ -240,7 +250,7 @@ def run(mode, transport=None):
                                 for result in results if "containment" in result)
                 injection_denied = not (root / "project" / "injection-executed").exists()
                 success = (code == 0 and reason == "exited" and contained and injection_denied)
-                if mode in SESSION_MODES:
+                if mode in SESSION_MODES + PLANNING_MODES:
                     session_results = []
                     for line in output.splitlines():
                         try:
@@ -248,16 +258,24 @@ def run(mode, transport=None):
                             # Only exact fixed boolean assertions leave the worker.
                             if isinstance(value, dict) and set(value) == {"session_checks"}:
                                 checks = value["session_checks"]
-                                from imp023_worker import CHECKS
+                                if mode in PLANNING_MODES:
+                                    from imp024_worker import CHECKS
+                                else:
+                                    from imp023_worker import CHECKS
                                 if (isinstance(checks, dict) and set(checks) == set(CHECKS[mode])
                                         and all(type(item) is bool for item in checks.values())):
                                     session_results.append(checks)
                         except (ValueError, UnicodeError):
                             pass
                     expected_calls = {"imp023-startup": 0, "imp023-history": 3,
-                                      "imp023-reconnect": 2, "imp023-interrupt": 2}[mode]
+                                      "imp023-reconnect": 2, "imp023-interrupt": 2,
+                                      "imp024-planning": 4, "imp024-cancel": 2,
+                                      "imp024-denials": 1, "imp024-error": 1}[mode]
+                    expected_denials = 1 if mode in ("imp024-denials", "imp024-error") else 0
                     success = (success and len(session_results) == 1 and all(session_results[0].values())
-                               and relay.calls == expected_calls and relay.denied == 0)
+                               and relay.calls == expected_calls and relay.denied == expected_denials)
+                    if mode == "imp024-planning":
+                        success = success and transport.validated
                     results += [{"session_checks": checks} for checks in session_results]
                 if mode in ("synthetic", "synthetic-stream", "operator-live"):
                     success = success and relay.calls > 0 and relay.denied == 0 and response_text and not runtime_error

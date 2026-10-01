@@ -81,8 +81,53 @@ This proves only generated namespace-local authentication, disabled mDNS and no 
 ingress for this synthetic harness. It does not prove SSE replay or durability after a
 full worker restart. Aggregate resource quotas remain deferred. No private inputs,
 operator modes or live model operation were used; this is not actual-model, product
-chat, tool/question/proposal, or release acceptance. IMP-002 remains blocked; this
-result does not authorize an operator rerun, runner launch, or new scope.
+chat, tool/question/proposal, or release acceptance. The separate IMP-024 phase-one
+synthetic planning proof below adds native planning interactions, but does not change
+this IMP-023 or IMP-002 outcome.
+
+### Synthetic planning interactions (IMP-024 phase one)
+
+After independent initial boundary review and affected reviews of the native-permission
+and abort/pending-question repairs passed, the bounded phase-one harness passed its
+focused tests and actual synthetic scenarios. From the repository root, these commands
+were verified:
+
+```sh
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp024_*.py'
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp023_*.py'
+/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp002_*.py'
+/usr/bin/python3 -I -B scripts/imp024_session.py planning
+/usr/bin/python3 -I -B scripts/imp024_session.py denials
+/usr/bin/python3 -I -B scripts/imp024_session.py cancel
+/usr/bin/python3 -I -B scripts/imp024_session.py error
+/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic
+/usr/bin/python3 -I -B scripts/imp002_prototype.py probes
+/usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic-stream
+/usr/bin/python3 -I -B scripts/imp002_prototype.py outage
+/usr/bin/python3 -I -B scripts/imp002_prototype.py timeout
+```
+
+The focused suites passed 29 (IMP-024), 21 (IMP-023), and 51 (affected IMP-002)
+tests. Each of the four IMP-024 scenarios and five existing IMP-002 modes reported
+success with owned cleanup true. In the synthetic planning scenario, pinned OpenCode
+used native read/question/edit functions, a pending question was replied to, an edit
+permission was asked and granted once, always-denied tools stayed denied, and the
+resulting canonical-file change was captured as an unapproved proposal. A malicious
+shell function was rejected before worker execution. Abort cleared a pending question
+and a stale reply was denied; a partial delta followed by terminal error was not
+reported as success.
+
+This is generated-data proof only, not a product broker/API/UI, live model or operator
+entrypoint. It does not provide a worker-restart durability guarantee, authoritative
+database-backed proposals, or full product chat. Practical protocol limits include
+64 KiB per canonical document, 512 KiB request/response, eight relay calls and eight
+questions; the harness also bounds a run and its output. Aggregate memory/CPU/process
+quota work is owner-cancelled for personal text chat and containment is unproved
+(the reused harness labels this owner-deferred); these practical bounds do not establish
+aggregate containment. IMP-024 remains in progress: its next phase covers a broker,
+Unix UID/authentication, durable database state, and proposals. IMP-002/005/006/008
+acceptance is unchanged; no live/operator rerun or runner launch is authorized by this
+synthetic checkpoint.
 
 ### Reviewed continuation operator step
 

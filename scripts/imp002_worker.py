@@ -12,6 +12,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from imp002_relay import CALL_TIMEOUT, IO_TIMEOUT, MAX_REQUEST, MAX_RESPONSE, ROUTE, respond
+from imp024_protocol import terminal_error
 
 
 class Shim(BaseHTTPRequestHandler):
@@ -30,7 +31,7 @@ class Shim(BaseHTTPRequestHandler):
             if not lengths[0].isascii() or not lengths[0].isdecimal() or len(lengths[0]) > 7:
                 raise ValueError("length")
             length = int(lengths[0])
-            if not 1 <= length <= MAX_REQUEST:
+            if not 1 <= length <= getattr(self.server, "max_request", MAX_REQUEST):
                 raise ValueError("bound")
             body = self.rfile.read(length)
             if len(body) != length:
@@ -81,7 +82,7 @@ class Shim(BaseHTTPRequestHandler):
                             if not block:
                                 break
                             total += len(block)
-                            if total > MAX_RESPONSE or time.monotonic() >= deadline:
+                            if total > getattr(self.server, "max_response", MAX_RESPONSE) or time.monotonic() >= deadline:
                                 raise ValueError("stream bound")
                             self.connection.sendall(f"{len(block):x}\r\n".encode() + block + b"\r\n")
                         self.connection.sendall(b"0\r\n\r\n")
@@ -92,6 +93,9 @@ class Shim(BaseHTTPRequestHandler):
             try:
                 if not started:
                     respond(self.connection, "503 Service Unavailable", b'{"error":"relay unavailable"}')
+                else:
+                    error = terminal_error(1000001)
+                    self.connection.sendall(f"{len(error):x}\r\n".encode() + error + b"\r\n0\r\n\r\n")
             except OSError:
                 pass
         self.close_connection = True

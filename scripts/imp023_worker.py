@@ -228,6 +228,10 @@ def route(method, operation, session=None):
 
 
 class Driver:
+    route = staticmethod(route)
+    max_request = MAX_REQUEST
+    max_body = MAX_API_BODY
+
     def __init__(self, port, password):
         self.port = port
         self.auth = "Basic " + base64.b64encode(("synthetic:" + password).encode()).decode()
@@ -235,7 +239,7 @@ class Driver:
         self.prompts = 0
 
     def open(self, method, operation, session=None, body=None, authenticated=True):
-        path = route(method, operation, session)
+        path = self.route(method, operation, session)
         self.requests += 1
         require(self.requests <= 200)
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
@@ -243,7 +247,7 @@ class Driver:
         if authenticated:
             headers["Authorization"] = self.auth
         payload = None if body is None else json.dumps(body).encode()
-        require(payload is None or len(payload) <= MAX_REQUEST)
+        require(payload is None or len(payload) <= self.max_request)
         if payload is not None:
             headers["Content-Type"] = "application/json"
         try:
@@ -259,8 +263,8 @@ class Driver:
     def request(self, method, operation, session=None, body=None, authenticated=True):
         connection, response = self.open(method, operation, session, body, authenticated)
         try:
-            raw = response.read(MAX_API_BODY + 1)
-            require(len(raw) <= MAX_API_BODY)
+            raw = response.read(self.max_body + 1)
+            require(len(raw) <= self.max_body)
             if not authenticated:
                 return response.status
             require(response.status == (204 if operation == "prompt" else 200))
