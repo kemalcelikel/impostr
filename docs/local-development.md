@@ -59,7 +59,14 @@ This performs **no network/model operation**. It reads only the pinned host's
 default global config/API-auth locations privately, interpreting a narrow literal
 JSON Azure Responses/API-key subset without running OpenCode, plugins or config
 expansion. It returns only a nonsecret contract fingerprint or a generic capability
-failure. It refuses environment-based provider/XDG/OpenCode overrides, ambiguous
+failure.
+Offline failure now also includes an allowlisted coarse `reason_code` and
+`network_used:false`. The operator reported a generic failure before this diagnostic
+was added; its actual cause is not yet known. The diagnostic change passed independent
+review and 28 focused tests with synthetic errors. Rerun the same inspection command
+and share only its JSON, never private files or exception/configuration details.
+
+It refuses environment-based provider/XDG/OpenCode overrides, ambiguous
 global files, unsupported auth/metadata/model/provider options, non-inference routes
 and nonliteral settings; it does not pretend to implement full host config precedence.
 If unavailable, stop. The next useful operator action is privately reconciling the

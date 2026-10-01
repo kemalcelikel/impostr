@@ -255,12 +255,37 @@ def run(mode, transport=None):
     return 0 if summary["success"] and summary["owned_state_removed"] else 1
 
 
+def operator_inspect():
+    """Human-only offline inspection; fixed diagnostics, never exception details."""
+    from imp002_transport import Unavailable, inspection_reason, resolve_operator_contract
+    try:
+        try:
+            check_runtime()
+        except CapabilityError as exc:
+            raise Unavailable("runtime mismatch", reason="runtime_mismatch") from exc
+        except OSError as exc:
+            raise Unavailable("runtime unavailable", reason="runtime_unavailable") from exc
+        contract = resolve_operator_contract()
+        print(json.dumps({"operator_contract_resolved": True,
+                          "contract_sha256": contract.fingerprint,
+                          "network_used": False, "credentials_disclosed": False}))
+        return 0
+    except Exception as exc:
+        # The offline call graph has no network transport or worker launch. Render
+        # only an allowlisted category, never messages, types or chained errors.
+        print(json.dumps({"success": False, "operator_capability_unavailable": True,
+                          "reason_code": inspection_reason(exc), "network_used": False}))
+        return 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("synthetic", "synthetic-stream", "probes", "outage", "timeout", "operator-inspect", "operator-live"))
     parser.add_argument("--contract-sha256", help="nonsecret fingerprint from reviewed operator-inspect")
     args = parser.parse_args()
     try:
+        if args.mode == "operator-inspect":
+            return operator_inspect()
         if args.mode == "synthetic-stream":
             from imp002_transport import SyntheticStream
             return run(args.mode, SyntheticStream())
@@ -271,11 +296,6 @@ def main():
             from imp002_transport import HTTPSInference, Unavailable, resolve_operator_contract
             try:
                 contract = resolve_operator_contract()
-                if args.mode == "operator-inspect":
-                    print(json.dumps({"operator_contract_resolved": True,
-                                      "contract_sha256": contract.fingerprint,
-                                      "network_used": False, "credentials_disclosed": False}))
-                    return 0
                 if args.contract_sha256 != contract.fingerprint:
                     raise Unavailable("contract pin absent/changed")
                 return run(args.mode, HTTPSInference(contract))

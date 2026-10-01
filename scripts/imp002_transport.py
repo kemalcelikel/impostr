@@ -8,6 +8,7 @@ Public interface references: OpenCode v1.18.34 provider/provider.ts, auth/index.
 core/src/global.ts; bundled @ai-sdk/azure 3.0.93 dist/index.js.
 """
 
+import errno
 import hashlib
 import http.client
 import ipaddress
@@ -29,32 +30,47 @@ CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 TARGET = "gpt-6.1-sol"  # OpenCode model selector, NOT an assumed deployment ID.
 MAX_PRIVATE_FILE = 256 * 1024
 MAX_FRAME = 16384
+INSPECTION_REASONS = frozenset({
+    "configuration_unsupported", "model_unsupported", "environment_override",
+    "file_unavailable", "file_permissions", "file_parse",
+    "runtime_mismatch", "runtime_unavailable", "unknown",
+})
 
 
 class Unavailable(RuntimeError):
     """Never render chained exceptions: they may contain endpoint/auth/body data."""
 
+    def __init__(self, message, *, reason="unknown"):
+        super().__init__(message)
+        self.reason = reason if type(reason) is str and reason in INSPECTION_REASONS else "unknown"
+
+
+def inspection_reason(exc):
+    """Operator-inspect ONLY: no message, exception class, or private detail output."""
+    reason = exc.reason if isinstance(exc, Unavailable) else None
+    return reason if type(reason) is str and reason in INSPECTION_REASONS else "unknown"
+
 
 class Contract:
     def __init__(self, endpoint, deployment, key):
         if not isinstance(endpoint, str) or any(ord(c) < 33 or ord(c) > 126 for c in endpoint):
-            raise Unavailable("nonliteral HTTPS endpoint")
+            raise Unavailable("nonliteral HTTPS endpoint", reason="configuration_unsupported")
         parts = urlsplit(endpoint)
         if (parts.scheme != "https" or parts.port not in (None, 443) or parts.username
                 or parts.password or parts.fragment or not parts.hostname
                 or not re.fullmatch(r"[a-zA-Z0-9.-]+", parts.hostname)
                 or "." not in parts.hostname or len(parts.hostname) > 253 or parts.hostname.endswith(".")):
-            raise Unavailable("unsupported HTTPS endpoint")
+            raise Unavailable("unsupported HTTPS endpoint", reason="configuration_unsupported")
         # Routes are constructed ONLY by the resolver, never by a worker.
         if not re.fullmatch(r"/openai/(?:v1/|deployments/[A-Za-z0-9._-]+/)responses", parts.path):
-            raise Unavailable("unsupported inference route")
+            raise Unavailable("unsupported inference route", reason="configuration_unsupported")
         if parts.query and not re.fullmatch(r"api-version=[A-Za-z0-9.-]{1,64}", parts.query):
-            raise Unavailable("unsupported inference query")
+            raise Unavailable("unsupported inference query", reason="configuration_unsupported")
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", deployment):
-            raise Unavailable("unsupported deployment")
+            raise Unavailable("unsupported deployment", reason="model_unsupported")
         if (not isinstance(key, str) or not 8 <= len(key) <= 4096
                 or not key.isascii() or any(ord(c) < 33 or ord(c) > 126 for c in key)):
-            raise Unavailable("unsupported API credential")
+            raise Unavailable("unsupported API credential", reason="configuration_unsupported")
         self.host = parts.hostname
         self.route = parts.path + ("?" + parts.query if parts.query else "")
         self.deployment = deployment
@@ -70,24 +86,50 @@ class Contract:
 
 def private_json(path):
     """No links/special files, bounded read; never write or execute host config."""
-    if any(parent.is_symlink() for parent in Path(path).parents):
-        raise Unavailable("private directory link")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
     try:
-        info = os.fstat(fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_mode & 0o022 or info.st_size > MAX_PRIVATE_FILE):
-            raise Unavailable("unsupported private file")
-        with os.fdopen(fd, "rb", closefd=False) as stream:
-            body = stream.read(MAX_PRIVATE_FILE + 1)
-        if len(body) > MAX_PRIVATE_FILE:
-            raise Unavailable("private file bound")
-        value = decode(body)
-        if not isinstance(value, dict):
-            raise Unavailable("unsupported private JSON")
-        return value
-    finally:
-        os.close(fd)
+        if any(parent.is_symlink() for parent in Path(path).parents):
+            raise Unavailable("private directory link", reason="file_permissions")
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+        try:
+            info = os.fstat(fd)
+            if info.st_uid != os.getuid() or info.st_mode & 0o022:
+                raise Unavailable("unsafe private file", reason="file_permissions")
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_PRIVATE_FILE:
+                raise Unavailable("unsupported private file", reason="file_unavailable")
+            with os.fdopen(fd, "rb", closefd=False) as stream:
+                body = stream.read(MAX_PRIVATE_FILE + 1)
+            if len(body) > MAX_PRIVATE_FILE:
+                raise Unavailable("private file bound", reason="file_unavailable")
+            try:
+                value = decode(body)
+            except Denied as exc:
+                raise Unavailable("invalid private JSON", reason="file_parse") from exc
+            if not isinstance(value, dict):
+                raise Unavailable("unsupported private JSON", reason="configuration_unsupported")
+            return value
+        finally:
+            os.close(fd)
+    except OSError as exc:
+        reason = "file_permissions" if isinstance(exc, PermissionError) or exc.errno == errno.ELOOP else "file_unavailable"
+        raise Unavailable("private file unavailable", reason=reason) from exc
+
+
+def provider_settings(config):
+    """Validate nested object shapes before either credential selection or parsing."""
+    if not isinstance(config, dict) or not isinstance(config.get("provider", {}), dict):
+        raise Unavailable("unsupported config shape", reason="configuration_unsupported")
+    provider = config.get("provider", {}).get("azure", {})
+    if not isinstance(provider, dict) or not isinstance(provider.get("options", {}), dict):
+        raise Unavailable("unsupported provider shape", reason="configuration_unsupported")
+    return provider, provider.get("options", {})
+
+
+def check_operator_context():
+    """Offline prerequisite guard, testable without discovering private files."""
+    if os.getuid() != 1000 or os.getgid() != 1000:
+        raise Unavailable("unreviewed identity", reason="runtime_mismatch")
+    if any(name.startswith(("OPENCODE_", "AZURE_", "XDG_")) for name in os.environ):
+        raise Unavailable("ambient provider/config override", reason="environment_override")
 
 
 def resolve_operator_contract():
@@ -98,86 +140,93 @@ def resolve_operator_contract():
     OAuth/token refresh, managed config, plugins, remote config or SDK execution.
     Paths/contents/errors are never returned to an agent or printed.
     """
-    if os.getuid() != 1000 or os.getgid() != 1000:
-        raise Unavailable("unreviewed identity")
-    if any(name.startswith(("OPENCODE_", "AZURE_", "XDG_")) for name in os.environ):
-        raise Unavailable("ambient provider/config override")
+    check_operator_context()
     # HOME is not used to select a private file. These are this pinned host's
     # default locations from public runtime source, not inspected host facts.
     config_dir = Path("/home/kemal/.config/opencode")
     candidates = [config_dir / name for name in ("config.json", "opencode.json", "opencode.jsonc", "config")]
-    present = [path for path in candidates if path.exists() or path.is_symlink()]
+    try:
+        present = [path for path in candidates if path.exists() or path.is_symlink()]
+    except OSError as exc:
+        reason = "file_permissions" if isinstance(exc, PermissionError) else "file_unavailable"
+        raise Unavailable("private file discovery unavailable", reason=reason) from exc
     if len(present) != 1 or present[0].name == "config":
-        raise Unavailable("ambiguous or missing literal global config")
+        raise Unavailable("ambiguous or missing literal global config", reason="configuration_unsupported")
     config = private_json(present[0])
+    _, options = provider_settings(config)
     api_auth = None
-    if config.get("provider", {}).get("azure", {}).get("options", {}).get("apiKey") is None:
+    if options.get("apiKey") is None:
         api_auth = private_json(Path("/home/kemal/.local/share/opencode/auth.json")).get("azure")
     return contract_from_settings(config, api_auth)
 
 
 def contract_from_settings(config, api_auth=None):
     """Pure supported-subset interpretation; tests pass ONLY synthetic settings."""
+    provider, options = provider_settings(config)
+    if (not isinstance(config.get("disabled_providers", []), list)
+            or config.get("enabled_providers") is not None and not isinstance(config["enabled_providers"], list)):
+        raise Unavailable("unsupported provider list shape", reason="configuration_unsupported")
     if config.get("plugin") or config.get("disabled_providers", []).count("azure"):
-        raise Unavailable("provider modified/disabled")
+        raise Unavailable("provider modified/disabled", reason="configuration_unsupported")
     if config.get("enabled_providers") is not None and "azure" not in config["enabled_providers"]:
-        raise Unavailable("provider disabled")
-    provider = config.get("provider", {}).get("azure", {})
-    if not isinstance(provider, dict) or provider.get("npm", "@ai-sdk/azure") != "@ai-sdk/azure":
-        raise Unavailable("unsupported provider")
+        raise Unavailable("provider disabled", reason="configuration_unsupported")
+    if provider.get("npm", "@ai-sdk/azure") != "@ai-sdk/azure":
+        raise Unavailable("unsupported provider", reason="configuration_unsupported")
     # Pinned OpenCode can use provider.api as the SDK base URL. This narrow
     # resolver does not implement that precedence; never silently select the
     # resourceName endpoint and send credentials to a different upstream.
     if "api" in provider:
-        raise Unavailable("unsupported provider endpoint override")
-    options = provider.get("options", {})
+        raise Unavailable("unsupported provider endpoint override", reason="configuration_unsupported")
     allowed = {"baseURL", "resourceName", "apiKey", "apiVersion", "useDeploymentBasedUrls",
                "timeout", "headerTimeout", "chunkTimeout", "maxRetries"}
     if not isinstance(options, dict) or set(options) - allowed:
-        raise Unavailable("unsupported provider options/auth/headers")
-    model = provider.get("models", {}).get(TARGET)
+        raise Unavailable("unsupported provider options/auth/headers", reason="configuration_unsupported")
+    models = provider.get("models", {})
+    if not isinstance(models, dict):
+        raise Unavailable("unsupported model shape", reason="model_unsupported")
+    model = models.get(TARGET)
     if not isinstance(model, dict) or model.get("headers") or model.get("options") or model.get("provider"):
-        raise Unavailable("unsupported model overrides")
+        raise Unavailable("unsupported model overrides", reason="model_unsupported")
     # OpenCode's model.api.id mapping is explicit; otherwise the selector itself
     # is the SDK's model ID. Do not assert which one the existing account uses.
     deployment = model.get("id", TARGET)
     if not isinstance(deployment, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", deployment):
-        raise Unavailable("unsupported deployment")
+        raise Unavailable("unsupported deployment", reason="model_unsupported")
     base = options.get("baseURL")
     if base is None:
         resource = options.get("resourceName")
         if not isinstance(resource, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,100}", resource):
-            raise Unavailable("resource contract missing")
+            raise Unavailable("resource contract missing", reason="configuration_unsupported")
         # Source-defined SDK URL construction, not an invented host setting.
         base = f"https://{resource}.openai.azure.com/openai"
     if not isinstance(base, str) or "{" in base:
-        raise Unavailable("nonliteral endpoint")
+        raise Unavailable("nonliteral endpoint", reason="configuration_unsupported")
     parts = urlsplit(base)
     if parts.query or parts.fragment:
-        raise Unavailable("base URL query/fragment")
+        raise Unavailable("base URL query/fragment", reason="configuration_unsupported")
     based = options.get("useDeploymentBasedUrls", False)
     if type(based) is not bool:
-        raise Unavailable("deployment route setting")
+        raise Unavailable("deployment route setting", reason="configuration_unsupported")
     azure = bool(parts.hostname and parts.hostname.endswith(".openai.azure.com"))
     endpoint = base.rstrip("/") + (f"/deployments/{deployment}/responses" if based
                                   else "/v1/responses" if azure else "/responses")
     if azure or based:
         version = options.get("apiVersion", "v1")  # Pinned SDK default.
         if not isinstance(version, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,64}", version):
-            raise Unavailable("API version")
+            raise Unavailable("API version", reason="configuration_unsupported")
         endpoint += "?" + urlencode({"api-version": version})
     key = options.get("apiKey")
     if key is None:
         entry = api_auth
         if not isinstance(entry, dict) or entry.get("type") != "api":
-            raise Unavailable("existing API credential missing/unsupported")
+            raise Unavailable("existing API credential missing/unsupported", reason="configuration_unsupported")
         # Metadata can set resourceName in OpenCode. Ambiguous endpoint sources
         # require operator reconciliation instead of guessing config precedence.
         if entry.get("metadata"):
-            raise Unavailable("auth metadata requires operator reconciliation")
+            raise Unavailable("auth metadata requires operator reconciliation", reason="configuration_unsupported")
         key = entry.get("key")
     if not isinstance(key, str) or "{" in key:
-        raise Unavailable("nonliteral API credential")
+        raise Unavailable("nonliteral API credential", reason="configuration_unsupported")
     return Contract(endpoint, deployment, key)
 
 

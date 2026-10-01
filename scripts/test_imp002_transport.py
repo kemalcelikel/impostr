@@ -182,11 +182,13 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(transport.private_json(path), {"synthetic": True})
             link = Path(name) / "link.json"
             link.symlink_to(path)
-            with self.assertRaises(OSError):
+            with self.assertRaises(transport.Unavailable) as caught:
                 transport.private_json(link)
+            self.assertEqual(caught.exception.reason, "file_permissions")
             path.chmod(0o666)
-            with self.assertRaises(transport.Unavailable):
+            with self.assertRaises(transport.Unavailable) as caught:
                 transport.private_json(path)
+            self.assertEqual(caught.exception.reason, "file_permissions")
 
 
 class StreamingTests(unittest.TestCase):
