@@ -158,6 +158,41 @@ pre-live review and one isolated synthetic live turn. Settings/auth are unknown;
 do not invent them or request secrets in chat. Renewed scope/budget authorization
 is required before further implementation. No runner launch, push/PR or deployment.
 
+**Renewed continuation:** Owner then directed “get back to me when i can run the
+runner,” authorizing continued bounded coordination/repair from the saved prototype.
+New budget: three focused substantive attempts (0/3 used); retain previous 3/3 above.
+Scope is the smallest non-serving real model transport/session preparation necessary
+for an honest executable handoff, with unchanged isolation, quota deferral, synthetic
+data, pre-live independent review, private operator-only credential resolution and
+no push/PR/installation/network provisioning/automatic restart. Never inspect host
+auth/config through agent tools or infer live settings from the synthetic deployment.
+If existing access cannot be resolved safely, finish a reviewed operator step and
+stop for that essential capability; owner request is not permission to bypass it.
+Keep `[!]` until actual acceptance or an explicitly scoped approved handoff is proved.
+
+**Continuation checkpoint (local code/docs commit `4ef6a3c`):** Attempt 1 added `scripts/imp002_transport.py` and
+focused transport tests, fixed-upstream verified HTTPS/native text SSE, incremental
+relay/shim delivery, cancellation/deadlines, sanitized errors and a narrow private
+operator resolver. Independent review found a provider-level `api` override accepted
+but ignored, potentially binding credentials to a different endpoint. Attempt 2
+reproduced it, rejected that override and added a failing-before/passing-after
+regression. Affected review APPROVED the human operator steps. Coordinator verified
+22 unit tests and all five synthetic modes (`synthetic`, `synthetic-stream`, `probes`,
+`outage`, `timeout`) with owned cleanup. New budget used **2/3**; prior **3/3** remains.
+
+Essential next step is human-only, not agent private-file inspection: from repository
+root in a plain terminal run
+`/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect`.
+It performs no network operation and emits only a nonsecret contract fingerprint or
+generic capability failure. If successful, operator may use that fingerprint in
+`/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-live --contract-sha256 <returned-fingerprint>`.
+Only sanitized results may be shared. Unsupported settings or drift stop privately;
+no new config/credential copies, fallback or invented settings. Neither mode has run;
+actual existing account compatibility is unknown. Full isolated session event/restart/
+resume/question/permission and revision-safe proposal tests remain missing, so IMP-002
+stays blocked and runner eligibility zero. Remaining attempt retained pending operator
+outcome; no automatic runner restart.
+
 ## [x] IMP-003 — Admin-provisioned login and private project access
 
 **Depends on:** IMP-001

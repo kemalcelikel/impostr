@@ -48,6 +48,31 @@ next work requires renewed bounded authorization. Verified non-serving commands:
 OpenCode 1.18.34 and measured executable/library digests; mismatch fails closed.
 No live mode or credential input exists; do not replace synthetic settings with secrets.
 
+**Owner-requested continuation:** After that checkpoint, owner directed “get back to
+me when i can run the runner.” This authorizes continued bounded repair/preparation
+from `ae1fab8`/`2d31591`, not restarting the runner or claiming prototype acceptance
+as chat acceptance. New budget: three focused substantive attempts, keeping the
+previous 3/3 history. Delegate the smallest real transport/session continuation;
+preserve non-serving scope, synthetic-data limits, resource-quota deferral and all
+credential/denied-path/Git restrictions. Before any live model operation, independently
+review the new credential-bearing relay and pass synthetic checks. Agents still must
+not inspect private provider configuration/auth; only a reviewed operator-run resolver
+may use existing credentials privately. If essential endpoint/auth facts cannot be
+established safely, prepare the exact operator step and stop there. No tooling install,
+network provisioning, task push/PR, unsafe fallback or automatic runner launch.
+
+**Continuation operator checkpoint:** New transport/streaming changes passed
+22 coordinator unit tests and five synthetic launcher modes, with independent
+approval after an endpoint-binding repair. Continuation budget used: 2/3; previous
+3/3 preserved. No resolver or live model operation has run. Essential next step
+requires the human operator's plain terminal, not agent tools:
+`/usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect`.
+It returns only a nonsecret fingerprint or generic failure. On success the operator
+may run `operator-live --contract-sha256 <returned-fingerprint>` on the same script.
+Share sanitized outcomes only; failure/drift stops. Do not directly inspect private
+files or execute the operator-only resolver as coordinator/subagent. Full session
+resume/questions/permissions/proposals remain absent; no runner-ready handoff yet.
+
 ## Sources and current state
 
 **Latest template consumer repair:** Owner directed fixing consumers of the replacement

@@ -91,13 +91,15 @@ slice.
 An operator-only synthetic worker/relay prototype now exists under
 `scripts/imp002_*.py`. Pinned bwrap/OpenCode launch, synthetic file/socket/network
 denials, configuration-injection denial, stub inference, outage/timeout and owned
-cleanup passed focused checks and independent synthetic-only review. It has no live
-upstream or credential resolver and is not integrated with the app. Its bounded SSE
-response is buffered; real streaming, resume/questions/permissions and revision-safe
-proposal import remain unproved. The owner accepts aggregate resource-exhaustion
+cleanup passed focused checks and independent synthetic-only review. The continuation
+adds a reviewed operator-only fixed HTTPS model transport and private resolver, plus
+bounded incremental text SSE with synthetic cancellation/error proof. Neither operator
+inspection nor live inference has run; actual account compatibility remains unknown
+and the app is not integrated. Full session streaming, resume/questions/permissions
+and revision-safe proposal import remain unproved. The owner accepts aggregate resource-exhaustion
 risk and defers memory/CPU/process/scratch quotas for this non-serving prototype
 only. This does not waive credential/project isolation or release/attachment rules.
-See BACKLOG.md for the exhausted three-attempt checkpoint and continuation scope.
+See BACKLOG.md for the prior three-attempt checkpoint and current continuation scope.
 
 ### Current implementation versus planned application
 
