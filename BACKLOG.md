@@ -37,7 +37,7 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [~] IMP-024 — Complete local text-chat preparation and one operator handoff
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 
@@ -77,6 +77,28 @@ If a necessary compliant operation is denied, record its exact arguments and rul
 then stop. Preserve the prior blocked outcome, all phase counts **0/3**, live restrictions
 and file history. This is a corrected executable handoff, not proof of installed
 permissions or application delivery.
+
+**Phase-one checkpoint (2026-10-01):** Verified and committed in `ea449c5` on
+`feature/impostr-v1` from actual restart baseline `b527a47`. Compliant developer
+inspection succeeded; prior denial/history remains above. Phase one used **3/3**
+substantive attempts: initial boundary implementation, measured non-Git canonical
+permission-pattern repair, and native abort/pending-question cleanup repair.
+Independent boundary review and focused affected re-reviews passed before execution.
+Coordinator verified 29 IMP-024, 21 IMP-023 and 51 affected IMP-002 tests; actual
+`imp024_session.py planning`, `denials`, `cancel`, `error` and five existing prototype
+synthetic modes passed with owned cleanup. Proof includes native read/question/reply,
+edit permission once with always denied, unapproved canonical proposal capture,
+forbidden shell rejection before execution, abort clearing pending state/stale-reply
+denial, and incremental text followed by terminal error rather than success.
+Affected documentation is updated. No private/operator/live modes or Docker ran.
+This item remains **[~]**, not complete: phases two, three and four remain **0/3**
+each. Next session resumes phase two on this same branch/committed worker boundary:
+private broker Unix channel/UID-auth controls, committed-turn dispatch, durable API
+state/restart interruption and revision-safe proposal import, then independent review
+before new boundary execution and fresh owned PostgreSQL checks. No extra phase-one
+attempts are available; no borrowing or automatic renewal. Product integration,
+exact-input rendered proof and reviewed operator entrypoint are still outstanding;
+IMP-002/005/006/008 and all live acceptance remain unchanged.
 
 ### Implement in order
 
