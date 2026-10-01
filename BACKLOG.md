@@ -37,7 +37,40 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
+
+**Latest phase-three delivery:** Committed `b72e98c`; phase three **5/5 used and
+delivered**, phase four **0/5**. Exact approved synthetic handoff correction and base
+reconciliation used the fifth attempt; earlier 4/5 stop below is history. Affected
+boundary review passed. Coordinator 11 fixture tests and fresh preflight/launch passed
+fingerprint `0cd9062476ec6b654acd2931702beeec97766d3dae289beac3d4ea3d179910fe`
+on runtime-identical base `1121bb3`. Normal generated Member browser proved questions,
+allow-once, agent import, concurrent human-save conflict/text retention and comparison,
+composer/tab preservation and last tab after refresh/relogin. Actual DOM observed text
+delta while turn still running through Nginx. Designer PASS1440/1024/768/375; existing
+web92/static checks reused unchanged. Stop exited0; accounts/login/stack/images/private
+state verified removed. No chmod/provider/private operator/live operation occurred.
+
+**Next manual run:** phase four integrated synthetic workflow/recovery/approval/download
+proof and ONE reviewed human-only explicit model relay entrypoint. Preserve completed
+backend/UI; no resetting used attempts, host config diagnostic loops or more permission
+changes. Same scope/live-default-off and exact synthetic handoff exception apply.
+Candidate fingerprints need fresh exact input/base reconciliation for changed inputs;
+this historical fingerprint is not reusable for arbitrary code. Whole IMP-024 remains
+incomplete and IMP-002/005/006/008 live acceptance unchanged. Ready for owner-started
+root helper with `RUNNER_USE_SBX=0`; no automatic launch/push/PR.
+
+**Owner-approved development exception / continuation:** Owner accepted the risk of
+the too-open development handoff and directed continuing implementation without
+permission changes. Allow only existing approved owned UID/GID1000 directory
+`/tmp/opencode/impostr-review-handoff`, exact mode0775, for short-lived synthetic
+Member login/cleanup handoff. Group disclosure/tampering risk accepted; never expand
+to privileged/provider secrets, private fixture state or other paths/modes. Preserve
+normal browser sign-in, exact-input profile, ownership/nofollow/file checks and owned
+cleanup; do not bypass tool denials. Interactive coordinator delegates smallest fixture
+change and affected review, then actual preflight/rendered acceptance or honest
+checkpoint. Phase three remains 4/5 before this correction; phase four 0/5. No further
+quota/host-config work, chmod, private/live modes, pushes or automatic runner launch.
 
 **Phase-three runner checkpoint:** Candidate preserved uncommitted on
 `feature/impostr-v1`, baseline `4a4d820`, delivered backend `a39a2f4` unchanged.

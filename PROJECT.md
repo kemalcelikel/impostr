@@ -2,6 +2,14 @@
 
 ## Purpose and release boundary
 
+**Current verified chat UI:** Phase-three synthetic UI is delivered in `b72e98c`:
+conversation tabs, rendered questions/once-only permissions, proposal comparisons,
+human-save conflict preservation and actual front-door incremental output. Normal
+generated Member rendered review and narrow/desktop design checks passed. Full
+integrated workflow/operator relay handoff remains phase four; no live chat activation
+or real provider compatibility is claimed. Exact development handoff disclosure/tamper
+risk is owner-accepted only for temporary synthetic Member login/cleanup, not secrets.
+
 **Current verified chat backend:** IMP-024 phases one/two are delivered locally
 (backend `a39a2f4`): confined planning interactions/proposals plus authenticated durable
 API/DB/broker flow, actual restart/outage/no-duplicate recovery, concurrent human-save

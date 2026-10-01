@@ -2,6 +2,41 @@
 
 ## Current complete-chat runner handoff (IMP-024)
 
+**Latest verified phase-three delivery:** UI/fixture/Nginx code is committed in
+`b72e98c`, including the exact synthetic handoff exception below. Phase three 5/5
+used, delivered; phase four 0/5. Coordinator 11 fixture tests and fresh exact-input
+preflight/launch passed fingerprint `0cd90624…9910fe` on base `1121bb3`. Normal
+generated Member rendered questions/allow-once/import, concurrent-human-save conflict,
+tab/composer retention, refresh/relogin selection and front-door delta while running
+passed. Designer PASS at 1440/1024/768/375; stop exited0 and sanitized cleanup verified
+accounts/login/stack/images/private state removed. Prior web92/checks and affected
+boundary review remain valid. No real provider credentials, operator/live run or chmod.
+
+Next owner-started root runner continues **phase four only**: complete integrated
+synthetic review/backlog/approval/download and recovery proof, then independently reviewed
+human-only explicit relay setup/acceptance entrypoint. No rebuilding delivered phases,
+reopening phase-three budget or old private-resolver diagnostics. New runtime inputs
+need fresh exact-base/profile reconciliation; prior fingerprint is historical proof,
+not a universal preview. Interactive implementation stops at handoff; runner owns
+coordination at owner launch. Same local-only/no-push/no-auto-start/live-default-off
+limits and exact handoff exception remain. Whole IMP-024 is not yet delivered.
+
+**Latest development handoff exception:** After phase-three stop at `1121bb3`, owner
+explicitly accepted the open development handoff directory and authorized continuing
+implementation without chmod. Interactive tech-lead coordinates a narrow fixture
+repair, delegating code to senior-developer; runner remains stopped. Existing approved
+`/tmp/opencode/impostr-review-handoff` is owned UID/GID1000 and mode0775. Permit that
+exact directory/mode only for disposable synthetic Member handoff, preserving file
+checks, path/owner/no-symlink checks, normal sign-in, credential scope and cleanup.
+Owner accepts other group members observing/tampering with this local handoff; do not
+claim confidentiality or extend this exception to provider/admin/DB credentials,
+private fixture state, arbitrary directories, world-write, real accounts or deployment.
+Never transport denied contents or widen effective tool permissions. Preserve phase
+three 4/5 used and phase four 0/5; the focused correction uses the remaining phase-three
+attempt if substantive. Review the affected boundary, refresh exact-input preflight
+and continue real rendered acceptance; old requirement to chmod is superseded only
+for this exact synthetic handoff. No automatic launch/push/PR or live/operator modes.
+
 **Verified backend delivery and next manual run:** Phase two is delivered in
 `a39a2f4`, following the owner-approved interactive repair. Prior 5/5 retained;
 additional repair 1/3 used, two unused (not a renewed general phase budget).
