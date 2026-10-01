@@ -2,6 +2,25 @@
 
 ## Current complete-chat runner handoff (IMP-024)
 
+**Latest owner-authorized continuation:** Owner increased IMP-024 to **five attempts
+per phase** and requested preparation for another owner-started run. Preserve used
+attempts: phase one is delivered (3/5 used, do not reopen it); phase two is 3/5 used
+with two remaining; phases three/four are 0/5 each. Earlier three-attempt limits and
+stop checkpoints are history, not active gates. Total ceiling is 20, no automatic
+renewal or borrowing. Do not reset any attempt count.
+
+Resume the preserved uncommitted phase-two candidate from `7f1e7d9`, with checkpoint
+HEAD `dfeafa9` on `feature/impostr-v1`. Inspect the full candidate diff and prior
+review/check evidence; do not discard it or rebuild delivered phase one. First finish
+the joined authenticated API/DB/broker/worker flow, save/import concurrency, actual
+restart/outage recovery without duplicate dispatch/replies and active revocation.
+Reuse valid component evidence; fix concrete failures within the two remaining
+phase-two attempts and selectively review affected substantive repairs. Commit phase
+two only after its real acceptance passes. Then continue phases three/four within
+this same owner-started batch and existing scope; preparation checkpoints alone are
+not completion. `overnight` takes sole coordination at owner launch, with no concurrent
+interactive implementation. Existing synthetic/private/Git/cleanup limits remain.
+
 **Latest restart correction:** The first IMP-024 run stopped before implementation
 at `eb1f10d`; blocker bookkeeping is `2dc810f`. The preserved denial summary reports
 flags before the Git subcommand and a branch inspection, not proof that compliant
@@ -14,7 +33,7 @@ facts and documented forms: `git log --no-ext-diff --no-textconv --oneline -8`,
 compliant operations only during authorized execution; if denied, preserve exact
 arguments/displayed rules and stop without wrappers, alternate transports or retries.
 Installed permissions remain unverified; no claim of permission repair is made.
-All phase counts remain 0/3; task scope/budgets unchanged. This command-contract
+At that earlier checkpoint all phase counts remained 0/3. This command-contract
 correction supersedes the checkpoint's demand for automatic permission broadening.
 
 Owner approved complete local text-chat preparation, synthetic first, followed by

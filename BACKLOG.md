@@ -37,7 +37,7 @@ IMP-024 is the next owner-started root assignment. Older “stop after IMP-023�
 below are historical. Keep existing completed work, live dependencies and attempt
 histories; no automatic launch/push/PR or new scope after this job.
 
-## [!] IMP-024 — Complete local text-chat preparation and one operator handoff
+## [ ] IMP-024 — Complete local text-chat preparation and one operator handoff
 
 **Depends on:** IMP-023, IMP-004, IMP-013, IMP-014, IMP-021
 
@@ -46,9 +46,11 @@ synthetic-first, plus an explicit private operator relay setup. This independent
 implementation outcome does not require blocked IMP-002 live-account acceptance.
 Reuse delivered code; do not rebuild human editors or synthetic session proof.
 
-Planning assumption: four phased checkpoints, at most three substantive implementation/
-repair attempts per phase (12 total), counted across sessions; no automatic renewal or
-borrowing between exhausted phases. Initial counts 0/3 each. Mechanical formatting,
+Owner revised the limit to four phased checkpoints, at most **five** substantive
+implementation/repair attempts per phase (**20 total**), counted across sessions; no
+automatic renewal or borrowing between exhausted phases. Current used counts:
+phase one **3/5 delivered**, phase two **3/5**, phases three/four **0/5 each**.
+Mechanical formatting,
 capability inspection and check reruns do not consume attempts. Preserve all prior
 IMP-002/023 budgets. One phase's checkpoint is not this item's completion.
 
@@ -123,6 +125,28 @@ delivery. Next requires owner decision on bounded completion of those focused ga
 and any resulting repair, not another private diagnostic. Phase one remains **3/3**
 delivered; phases three/four remain **0/3**, not activated. IMP-002/005/006/008 and live
 acceptance remain unchanged. Local checkpoint/bookkeeping only; no push/PR/restart.
+
+**Owner-approved five-attempt continuation:** Owner requested five attempts per phase
+and preparation for the next manual run. Requeue this same outcome without resetting
+history or accepting incomplete phase two. Phase two now has **two attempts remaining**;
+phases three/four each have five, while delivered phase one is not reimplemented.
+Checkpoint HEAD `dfeafa9`, preserved phase-two candidate based on `7f1e7d9` includes
+dirty API/settings/models/document services, chat modules/migration/tests, broker/product
+worker/channel probes, synthetic Compose overlay and local docs. Preserve all those
+files plus unrelated logs/browser artifacts; stage only verified assigned material.
+
+Next owner-started root assignment: review candidate and reuse unchanged valid review/
+component results; finish the four joined checks listed in the phase-two blocker above.
+Ordinary in-scope testing and concrete repairs are authorized, including owned synthetic
+DB/broker/worker lifecycle checks under existing limits. Selective independent review
+covers substantive changes, not a restarted audit on unchanged code. Commit accepted
+phase two before moving to UI/candidate work, then continue phases three/four within
+the same scope. If a specific available in-budget next step remains, preserve `[~]`
+checkpoint for the existing bounded continuation policy; genuine missing capability or
+the revised exhausted phase ceiling still stops `[!]`. No borrowing, installations,
+private inputs/live modes, push/PR or automatic runner start. One reviewed human-only
+model-connection step remains the final operator handoff; no new owner decision is
+needed for ordinary synthetic phase-two completion or the already approved UI work.
 
 ### Implement in order
 
