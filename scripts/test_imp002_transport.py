@@ -6,6 +6,7 @@ The fixed TLS dialer is tested with mocks; no real services are exposed.
 
 import http.client
 import json
+import os
 from pathlib import Path
 import socket
 import tempfile
@@ -19,6 +20,7 @@ from imp002_relay import MAX_RESPONSE, ROUTE, SyntheticRelay, stub_response, val
 from imp002_worker import Shim
 from http.server import HTTPServer
 from test_imp002_prototype import request
+from test_imp002_diagnostic import synthetic_ancestor
 
 
 KEY = "synthetic-credential-not-real"
@@ -175,7 +177,7 @@ class ContractTests(unittest.TestCase):
                 connection.abort()
 
     def test_private_file_reader_only_synthetic_regular_bounded_nonsymlink(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-auth-test-") as name:
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-auth-test-") as name, synthetic_ancestor():
             path = Path(name) / "fake.json"
             path.write_text(json.dumps({"synthetic": True}))
             path.chmod(0o600)
@@ -189,6 +191,178 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(transport.Unavailable) as caught:
                 transport.private_json(path)
             self.assertEqual(caught.exception.reason, "file_permissions")
+
+
+class InputCompatibilityTests(unittest.TestCase):
+    """Pure injected inputs and owned synthetic trees, never operator resolver."""
+    def inputs(self, config=None, auth=None, environment=None, files=None):
+        environment = {"XDG_CONFIG_HOME": "/synthetic/config", "XDG_DATA_HOME": "/synthetic/data",
+                       "AZURE_RESOURCE_NAME": "synthetic-env"} if environment is None else environment
+        config = settings() if config is None else config
+        files = {"opencode.json": config, "auth.json": {"azure": auth or {"type": "api", "key": KEY}}} if files is None else files
+        calls = []
+
+        def reader(path, **kwargs):
+            calls.append((path, kwargs))
+            return files.get(path.name)
+
+        return transport.contract_from_inputs(environment, reader), calls
+
+    def test_selected_xdg_config_auth_and_azure_resource_success_no_default_reads(self):
+        config = settings()
+        config["provider"]["azure"]["options"] = {}
+        contract, calls = self.inputs(config)
+        self.assertEqual(contract.host, "synthetic-env.openai.azure.com")
+        self.assertEqual(contract.route, "/openai/v1/responses?api-version=v1")
+        self.assertEqual(contract.key, KEY)
+        self.assertEqual([str(path) for path, _ in calls], [
+            "/synthetic/config/opencode/config", "/synthetic/config/opencode/config.json",
+            "/synthetic/config/opencode/opencode.json", "/synthetic/config/opencode/opencode.jsonc",
+            "/synthetic/data/opencode/auth.json"])
+        self.assertNotIn(KEY, repr(contract))
+
+    def test_name_guard_accepts_supported_inputs_without_reading_values(self):
+        class NamesOnly(dict):
+            def __getitem__(self, _):
+                raise AssertionError("name-only guard read value")
+        env = NamesOnly.fromkeys(transport.XDG_DIRECTORY_OVERRIDES | transport.XDG_SESSION_METADATA |
+                                 transport.AZURE_RESOURCE_INPUTS)
+        transport.check_environment_names(env)
+        # Other XDG exports are not config/auth search directories; no retrieval.
+        class SelectedOnly(dict):
+            def get(self, name, *args):
+                if name in ("XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS"):
+                    raise AssertionError("unused XDG value retrieved")
+                return super().get(name, *args)
+        _, calls = self.inputs(environment=SelectedOnly({"HOME": transport.DEFAULT_HOME,
+            "XDG_RUNTIME_DIR": "not-a-path", "XDG_CACHE_HOME": "not-a-path", "XDG_CONFIG_DIRS": "not-a-path"}))
+        self.assertTrue(all(str(path).startswith(transport.DEFAULT_HOME + "/") for path, _ in calls))
+
+    def test_resource_config_and_baseurl_precedence_bind_same_credential(self):
+        config = settings()
+        options = config["provider"]["azure"]["options"]
+        options.clear()
+        options["resourceName"] = "synthetic-config"
+        contract, _ = self.inputs(config)
+        self.assertEqual(contract.host, "synthetic-config.openai.azure.com")
+        options["baseURL"] = "https://synthetic-base.example.invalid/openai/v1"
+        contract, _ = self.inputs(config)
+        self.assertEqual(contract.host, "synthetic-base.example.invalid")
+        self.assertEqual(contract.route, "/openai/v1/responses")
+        self.assertEqual(contract.key, KEY)
+        options["apiKey"] = "synthetic-config-key"
+        contract, _ = self.inputs(config)
+        self.assertEqual(contract.key, "synthetic-config-key")
+        # Auth metadata affects the loader even when config supplies the API key.
+        with self.assertRaises(transport.Unavailable):
+            self.inputs(config, auth={"type": "api", "key": KEY, "metadata": {"resourceName": "wrong"}})
+
+    def test_global_literal_json_precedence_endpoint_consistency_and_override_denial(self):
+        initial = settings()
+        initial["provider"]["azure"]["options"] = {"resourceName": "synthetic-first"}
+        later = {"provider": {"azure": {"options": {
+            "baseURL": "https://synthetic-final.example.invalid/openai/v1", "apiKey": "synthetic-final-key"}}}}
+        files = {"config.json": initial, "opencode.json": {"provider": {"azure": {"options": {
+            "resourceName": "synthetic-second"}}}}, "opencode.jsonc": later}
+        contract, _ = self.inputs(files=files)
+        self.assertEqual((contract.host, contract.key), ("synthetic-final.example.invalid", "synthetic-final-key"))
+        self.assertEqual(transport.merge_literal({"a": [1], "b": {"x": 1}}, {"a": [2], "b": {"y": 2}}),
+                         {"a": [2], "b": {"x": 1, "y": 2}})
+        # Do not ignore an endpoint/auth override retained from an earlier file.
+        initial["provider"]["azure"]["api"] = "https://wrong.example.invalid/openai/v1"
+        with self.assertRaises(transport.Unavailable):
+            self.inputs(files=files)
+        initial["provider"]["azure"].pop("api")
+        initial["provider"]["azure"]["options"] = []
+        with self.assertRaises(transport.Unavailable):
+            self.inputs(files=files)
+
+    def test_unsupported_overrides_paths_auth_and_references_stop_without_disclosure(self):
+        for name in ("AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME", "AZURE_OTHER",
+                     "OPENCODE_CONFIG", "OPENCODE_CONFIG_CONTENT", "OPENCODE_AUTH_CONTENT", "XDG_UNKNOWN"):
+            with self.subTest(name=name), self.assertRaises(transport.Unavailable) as caught:
+                self.inputs(environment={name: KEY})
+            self.assertEqual(caught.exception.reason, "environment_override")
+            self.assertNotIn(KEY, str(caught.exception))
+        for value in ("relative", "/synthetic/../private", "/synthetic/./private", "//private",
+                      "/synthetic\x00private", "/" + "x" * 4096):
+            with self.subTest(kind="selected path"), self.assertRaises(transport.Unavailable):
+                self.inputs(environment={"XDG_CONFIG_HOME": value, "XDG_DATA_HOME": "/synthetic/data"})
+        self.assertEqual(transport.selected_private_paths({"HOME": transport.DEFAULT_HOME,
+            "XDG_CONFIG_HOME": "", "XDG_DATA_HOME": ""}),
+            (Path(transport.DEFAULT_HOME + "/.config/opencode"), Path(transport.DEFAULT_HOME + "/.local/share/opencode")))
+        with self.assertRaises(transport.Unavailable):
+            self.inputs(environment={"HOME": "/unreviewed-home"})
+        for auth in ({"type": "oauth", "access": KEY}, {"type": "wellknown", "key": KEY, "token": KEY},
+                     {"type": "api", "key": KEY, "metadata": []}, {"type": "api", "key": None}):
+            with self.subTest(kind="auth"), self.assertRaises(transport.Unavailable):
+                self.inputs(auth=auth)
+        for extra in ({"plugin": [KEY]}, {"instructions": ["{file:/never/read}"]}, {"other": "{env:SECRET}"}):
+            config = dict(settings(), **extra)
+            with self.subTest(kind="source"), self.assertRaises(transport.Unavailable):
+                self.inputs(files={"config.json": config, "opencode.json": {"plugin": []}})
+        for options in ({"resourceName": "bad/resource"}, {"resourceName": ""}, {"baseURL": None},
+                        {"apiKey": None}, {"headers": {"Authorization": KEY}}, {"tokenProvider": KEY}):
+            config = settings()
+            config["provider"]["azure"]["options"] = options
+            with self.subTest(kind="options"), self.assertRaises(transport.Unavailable):
+                self.inputs(config)
+
+    def test_real_synthetic_selected_trees_literal_formats_nofollow_and_permissions(self):
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-xdg-test-") as name, synthetic_ancestor():
+            root = Path(name)
+            config_dir, data_dir = root / "config", root / "data"
+            for directory in (config_dir / "opencode", data_dir / "opencode"):
+                directory.mkdir(parents=True, mode=0o700)
+                directory.parent.chmod(0o700)
+            config = settings()
+            config["provider"]["azure"]["options"] = {}
+            path = config_dir / "opencode/opencode.jsonc"
+            path.write_text(json.dumps(config))
+            path.chmod(0o600)
+            auth_path = data_dir / "opencode/auth.json"
+            auth_path.write_text(json.dumps({"azure": {"type": "api", "key": KEY}}))
+            auth_path.chmod(0o600)
+            env = {"XDG_CONFIG_HOME": str(config_dir), "XDG_DATA_HOME": str(data_dir),
+                   "AZURE_RESOURCE_NAME": "synthetic"}
+            contract = transport.contract_from_inputs(env, transport.private_json)
+            self.assertEqual(contract.host, "synthetic.openai.azure.com")
+            path.write_text("// unsupported comment\n" + json.dumps(config))
+            with self.assertRaises(transport.Unavailable) as caught:
+                transport.contract_from_inputs(env, transport.private_json)
+            self.assertEqual(caught.exception.reason, "file_parse")
+            path.write_text(json.dumps(config))
+            legacy = config_dir / "opencode/config"
+            legacy.write_text("synthetic unsupported legacy")
+            with self.assertRaises(transport.Unavailable):
+                transport.contract_from_inputs(env, transport.private_json)
+            legacy.unlink()
+            link = root / "config-link"
+            link.symlink_to(config_dir, target_is_directory=True)
+            with self.assertRaises(transport.Unavailable):
+                transport.contract_from_inputs(dict(env, XDG_CONFIG_HOME=str(link)), transport.private_json)
+            hardlink = data_dir / "opencode/auth-hardlink.json"
+            os.link(auth_path, hardlink)
+            with self.assertRaises(transport.Unavailable):
+                transport.contract_from_inputs(env, transport.private_json)
+            hardlink.unlink()
+            auth_path.unlink()
+            os.mkfifo(auth_path, 0o600)
+            with self.assertRaises(transport.Unavailable):
+                transport.contract_from_inputs(env, transport.private_json)
+            auth_path.unlink()
+            auth_path.write_bytes(b"x" * (transport.MAX_PRIVATE_FILE + 1))
+            auth_path.chmod(0o600)
+            with self.assertRaises(transport.Unavailable) as caught:
+                transport.contract_from_inputs(env, transport.private_json)
+            self.assertEqual(caught.exception.reason, "file_unavailable")
+            auth_path.write_text(json.dumps({"azure": {"type": "api", "key": KEY}}))
+            config_dir.chmod(0o777)
+            with self.assertRaises(transport.Unavailable):
+                transport.contract_from_inputs(env, transport.private_json)
+            config_dir.chmod(0o700)
+            with patch.object(transport.os, "getuid", return_value=98765), self.assertRaises(transport.Unavailable):
+                transport.private_json(auth_path)
 
 
 class StreamingTests(unittest.TestCase):

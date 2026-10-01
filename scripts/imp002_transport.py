@@ -25,6 +25,7 @@ import time
 from urllib.parse import urlencode, urlsplit
 
 from imp002_relay import Denied, IO_TIMEOUT, MAX_REQUEST, MAX_RESPONSE, MODEL, decode
+from imp002_diagnostic import has_expansion, safe_directory
 
 CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 TARGET = "gpt-6.1-sol"  # OpenCode model selector, NOT an assumed deployment ID.
@@ -37,7 +38,8 @@ INSPECTION_REASONS = frozenset({
 })
 # OpenCode v1.18.34 core/src/global.ts consumes xdg-basedir 5.1.0 paths;
 # that dependency's index.js reads these directory variables, not session metadata.
-# Runtime/search directories remain unsupported even when not used by Global.
+# Only config/data select inputs for this host-only resolver. Global's cache/state
+# and xdg-basedir's runtime/search exports are NOT config/auth search paths.
 XDG_DIRECTORY_OVERRIDES = frozenset({
     "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
     "XDG_RUNTIME_DIR", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
@@ -46,6 +48,9 @@ XDG_SESSION_METADATA = frozenset({
     "XDG_SESSION_ID", "XDG_SESSION_TYPE", "XDG_SESSION_CLASS", "XDG_SESSION_DESKTOP",
     "XDG_CURRENT_DESKTOP", "XDG_SEAT", "XDG_VTNR",
 })
+AZURE_RESOURCE_INPUTS = frozenset({"AZURE_RESOURCE_NAME"})
+DEFAULT_HOME = "/home/kemal"
+GLOBAL_FILES = ("config.json", "opencode.json", "opencode.jsonc")
 
 
 class Unavailable(RuntimeError):
@@ -95,34 +100,72 @@ class Contract:
         return "<private inference contract>"
 
 
-def private_json(path):
-    """No links/special files, bounded read; never write or execute host config."""
+def selected_path(value):
+    """Pure validation of a selected directory, not reference/path expansion."""
+    if (type(value) is not str or not value.startswith("/") or value.startswith("//")
+            or len(value.encode("utf-8")) > 4096 or len(value.split("/")) > 64
+            or any(ord(c) < 32 or ord(c) == 127 for c in value)
+            or any(part in (".", "..") for part in value.split("/"))):
+        raise Unavailable("unsupported selected directory", reason="configuration_unsupported")
+    return Path(value)
+
+
+def private_json(path, *, missing_ok=False, literal=True):
+    """Reviewed selected paths or synthetic fixtures ONLY; no referenced paths.
+
+    NOFOLLOW/dirfd pin every ancestor before opening the bounded regular file.
+    Never discover via exists(), follow links, write, or execute host config.
+    """
+    directory = fd = None
     try:
-        if any(parent.is_symlink() for parent in Path(path).parents):
-            raise Unavailable("private directory link", reason="file_permissions")
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+        path = selected_path(str(path))
+        uid = os.getuid()
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+        directory = os.open("/", flags | os.O_DIRECTORY)
+        if not safe_directory(os.fstat(directory), uid):
+            raise Unavailable("unsafe private directory", reason="file_permissions")
+        for component in path.parts[1:-1]:
+            child = os.open(component, flags | os.O_DIRECTORY, dir_fd=directory)
+            os.close(directory)
+            directory = child
+            if not safe_directory(os.fstat(directory), uid):
+                raise Unavailable("unsafe private directory", reason="file_permissions")
+        fd = os.open(path.name, flags, dir_fd=directory)
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != uid
+                or info.st_mode & 0o022 or info.st_nlink != 1):
+            raise Unavailable("unsafe private file", reason="file_permissions")
+        if info.st_size > MAX_PRIVATE_FILE:
+            raise Unavailable("unsupported private file", reason="file_unavailable")
+        if not literal:
+            raise Unavailable("legacy config unsupported", reason="configuration_unsupported")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            body = stream.read(MAX_PRIVATE_FILE + 1)
+        if len(body) > MAX_PRIVATE_FILE:
+            raise Unavailable("private file bound", reason="file_unavailable")
         try:
-            info = os.fstat(fd)
-            if info.st_uid != os.getuid() or info.st_mode & 0o022:
-                raise Unavailable("unsafe private file", reason="file_permissions")
-            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_PRIVATE_FILE:
-                raise Unavailable("unsupported private file", reason="file_unavailable")
-            with os.fdopen(fd, "rb", closefd=False) as stream:
-                body = stream.read(MAX_PRIVATE_FILE + 1)
-            if len(body) > MAX_PRIVATE_FILE:
-                raise Unavailable("private file bound", reason="file_unavailable")
-            try:
-                value = decode(body)
-            except Denied as exc:
-                raise Unavailable("invalid private JSON", reason="file_parse") from exc
-            if not isinstance(value, dict):
-                raise Unavailable("unsupported private JSON", reason="configuration_unsupported")
-            return value
-        finally:
-            os.close(fd)
+            value = decode(body)
+        except Denied as exc:
+            raise Unavailable("invalid private JSON", reason="file_parse") from exc
+        if not isinstance(value, dict):
+            raise Unavailable("unsupported private JSON", reason="configuration_unsupported")
+        try:
+            if has_expansion(value):
+                raise Unavailable("nonliteral private JSON", reason="configuration_unsupported")
+        except ValueError as exc:
+            raise Unavailable("private JSON bound", reason="file_parse") from exc
+        return value
     except OSError as exc:
-        reason = "file_permissions" if isinstance(exc, PermissionError) or exc.errno == errno.ELOOP else "file_unavailable"
+        if missing_ok and exc.errno == errno.ENOENT:
+            return None
+        reason = ("file_permissions" if isinstance(exc, PermissionError)
+                  or exc.errno in (errno.ELOOP, errno.ENOTDIR) else "file_unavailable")
         raise Unavailable("private file unavailable", reason=reason) from exc
+    finally:
+        if fd is not None:
+            os.close(fd)
+        if directory is not None:
+            os.close(directory)
 
 
 def provider_settings(config):
@@ -135,48 +178,109 @@ def provider_settings(config):
     return provider, provider.get("options", {})
 
 
+def check_environment_names(environment):
+    """Injected name-only policy; no values read (including unused XDG exports)."""
+    for index, name in enumerate(environment):
+        if index >= 4096 or type(name) is not str or len(name) > 256:
+            raise Unavailable("environment bound", reason="environment_override")
+        if (name.startswith("OPENCODE_")
+                or name.startswith("AZURE_") and name not in AZURE_RESOURCE_INPUTS
+                or name.startswith("XDG_") and name not in XDG_DIRECTORY_OVERRIDES | XDG_SESSION_METADATA):
+            raise Unavailable("ambient provider/config override", reason="environment_override")
+
+
 def check_operator_context():
     """Offline name-only guard; never read values, clear env or discover files."""
     if os.getuid() != 1000 or os.getgid() != 1000:
         raise Unavailable("unreviewed identity", reason="runtime_mismatch")
-    if any(name.startswith(("OPENCODE_", "AZURE_"))
-           or name in XDG_DIRECTORY_OVERRIDES
-           or name.startswith("XDG_") and name not in XDG_SESSION_METADATA
-           for name in os.environ):
-        raise Unavailable("ambient provider/config override", reason="environment_override")
+    check_environment_names(os.environ)
+
+
+def selected_private_paths(environment):
+    """xdg-basedir 5.1.0: nonempty XDG home exports win, empty ones use os.homedir().
+
+    This pinned Linux host's default home is supported, not alternate HOME trees.
+    Refuse drift when a fallback is needed instead of silently reading defaults.
+    """
+    config = environment.get("XDG_CONFIG_HOME")
+    data = environment.get("XDG_DATA_HOME")
+    if not config or not data:
+        home = environment.get("HOME", DEFAULT_HOME)
+        if home != DEFAULT_HOME:
+            raise Unavailable("unreviewed home fallback", reason="environment_override")
+    return (selected_path(config or DEFAULT_HOME + "/.config") / "opencode",
+            selected_path(data or DEFAULT_HOME + "/.local/share") / "opencode")
+
+
+def merge_literal(target, source):
+    """Remeda 2.26.0 mergeDeep subset: recurse objects, replace arrays/scalars."""
+    result = dict(target)
+    for key, value in source.items():
+        previous = result.get(key)
+        result[key] = merge_literal(previous, value) if type(previous) is dict and type(value) is dict else value
+    return result
+
+
+def contract_from_inputs(environment, read_source):
+    """Injected supported-source interpretation; tests use fake env/reader ONLY.
+
+    Not OpenCode's effective account/project/plugin/managed configuration loader.
+    The human resolver alone supplies ambient inputs and the reviewed reader.
+    """
+    check_environment_names(environment)
+    config_dir, data_dir = selected_private_paths(environment)
+    # Legacy TOML migration/import is unsupported, even alongside valid JSON.
+    if read_source(config_dir / "config", missing_ok=True, literal=False) is not None:
+        raise Unavailable("legacy config unsupported", reason="configuration_unsupported")
+    config = {}
+    for name in GLOBAL_FILES:
+        value = read_source(config_dir / name, missing_ok=True)
+        if value is None:
+            continue
+        if has_expansion(value) or value.get("plugin"):
+            raise Unavailable("unsupported global source", reason="configuration_unsupported")
+        # Upstream parses each file BEFORE merging. Do not let a later valid
+        # object conceal malformed earlier provider/list shapes in our subset.
+        provider, _ = provider_settings(value)
+        if (type(provider.get("models", {})) is not dict
+                or type(value.get("disabled_providers", [])) is not list
+                or "enabled_providers" in value and type(value["enabled_providers"]) is not list):
+            raise Unavailable("unsupported global shape", reason="configuration_unsupported")
+        config = merge_literal(config, value)
+    # Azure custom loader consults stored auth metadata EVEN with a literal
+    # options.apiKey. Read it to reject unsupported mechanisms/metadata, never
+    # skip it and accidentally bind that key to the wrong resource.
+    auth = read_source(data_dir / "auth.json", missing_ok=True) or {}
+    if any(type(entry) is dict and entry.get("type") == "wellknown" for entry in auth.values()):
+        raise Unavailable("remote auth config unsupported", reason="configuration_unsupported")
+    return contract_from_settings(config, auth.get("azure"),
+                                  resource_name=environment.get("AZURE_RESOURCE_NAME"))
 
 
 def resolve_operator_contract():
     """OPERATOR ONLY, AFTER independent review + synthetic checks; no network.
 
-    Only default Linux XDG locations, exactly one literal JSON global config and API
-    auth are supported. No cwd/project config, JSONC comments, env/file expansion,
+    Bounded validated XDG-selected global config/API auth and AZURE_RESOURCE_NAME
+    are supported. No cwd/project config, JSONC comments, env/file expansion,
     OAuth/token refresh, managed config, plugins, remote config or SDK execution.
     Paths/contents/errors are never returned to an agent or printed.
     """
     check_operator_context()
-    # HOME is not used to select a private file. These are this pinned host's
-    # default locations from public runtime source, not inspected host facts.
-    config_dir = Path("/home/kemal/.config/opencode")
-    candidates = [config_dir / name for name in ("config.json", "opencode.json", "opencode.jsonc", "config")]
-    try:
-        present = [path for path in candidates if path.exists() or path.is_symlink()]
-    except OSError as exc:
-        reason = "file_permissions" if isinstance(exc, PermissionError) else "file_unavailable"
-        raise Unavailable("private file discovery unavailable", reason=reason) from exc
-    if len(present) != 1 or present[0].name == "config":
-        raise Unavailable("ambiguous or missing literal global config", reason="configuration_unsupported")
-    config = private_json(present[0])
-    _, options = provider_settings(config)
-    api_auth = None
-    if options.get("apiKey") is None:
-        api_auth = private_json(Path("/home/kemal/.local/share/opencode/auth.json")).get("azure")
-    return contract_from_settings(config, api_auth)
+    # Copy only supported selected values, never dump/serialize the environment.
+    environment = {name: os.environ[name] for name in
+                   ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "AZURE_RESOURCE_NAME") if name in os.environ}
+    return contract_from_inputs(environment, private_json)
 
 
-def contract_from_settings(config, api_auth=None):
+def contract_from_settings(config, api_auth=None, *, resource_name=None):
     """Pure supported-subset interpretation; tests pass ONLY synthetic settings."""
     provider, options = provider_settings(config)
+    if api_auth is not None:
+        if (type(api_auth) is not dict or api_auth.get("type") != "api"
+                or type(api_auth.get("key")) is not str
+                or "metadata" in api_auth and type(api_auth["metadata"]) is not dict
+                or api_auth.get("metadata")):
+            raise Unavailable("existing auth mechanism/metadata unsupported", reason="configuration_unsupported")
     if (not isinstance(config.get("disabled_providers", []), list)
             or config.get("enabled_providers") is not None and not isinstance(config["enabled_providers"], list)):
         raise Unavailable("unsupported provider list shape", reason="configuration_unsupported")
@@ -191,6 +295,8 @@ def contract_from_settings(config, api_auth=None):
     # resourceName endpoint and send credentials to a different upstream.
     if "api" in provider:
         raise Unavailable("unsupported provider endpoint override", reason="configuration_unsupported")
+    if "env" in provider:
+        raise Unavailable("unsupported provider credential environment", reason="configuration_unsupported")
     allowed = {"baseURL", "resourceName", "apiKey", "apiVersion", "useDeploymentBasedUrls",
                "timeout", "headerTimeout", "chunkTimeout", "maxRetries"}
     if not isinstance(options, dict) or set(options) - allowed:
@@ -207,13 +313,20 @@ def contract_from_settings(config, api_auth=None):
     if not isinstance(deployment, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", deployment):
         raise Unavailable("unsupported deployment", reason="model_unsupported")
     base = options.get("baseURL")
+    # OpenCode resolveSDK treats an empty baseURL as catalog fallback; this
+    # subset does not reinterpret malformed/empty endpoints as resource settings.
+    if "baseURL" in options and (type(base) is not str or not base):
+        raise Unavailable("unsupported base URL", reason="configuration_unsupported")
     if base is None:
-        resource = options.get("resourceName")
+        # Azure custom(): first nonblank config resource, then API metadata
+        # (unsupported above), then AZURE_RESOURCE_NAME. No cognitive-services
+        # env, SDK env secret, OAuth accountId or arbitrary AZURE_ fallback.
+        resource = options.get("resourceName", resource_name)
         if not isinstance(resource, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,100}", resource):
             raise Unavailable("resource contract missing", reason="configuration_unsupported")
         # Source-defined SDK URL construction, not an invented host setting.
         base = f"https://{resource}.openai.azure.com/openai"
-    if not isinstance(base, str) or "{" in base:
+    if not isinstance(base, str) or "{" in base or "}" in base:
         raise Unavailable("nonliteral endpoint", reason="configuration_unsupported")
     parts = urlsplit(base)
     if parts.query or parts.fragment:
@@ -230,14 +343,10 @@ def contract_from_settings(config, api_auth=None):
             raise Unavailable("API version", reason="configuration_unsupported")
         endpoint += "?" + urlencode({"api-version": version})
     key = options.get("apiKey")
-    if key is None:
+    if "apiKey" not in options:
         entry = api_auth
         if not isinstance(entry, dict) or entry.get("type") != "api":
             raise Unavailable("existing API credential missing/unsupported", reason="configuration_unsupported")
-        # Metadata can set resourceName in OpenCode. Ambiguous endpoint sources
-        # require operator reconciliation instead of guessing config precedence.
-        if entry.get("metadata"):
-            raise Unavailable("auth metadata requires operator reconciliation", reason="configuration_unsupported")
         key = entry.get("key")
     if not isinstance(key, str) or "{" in key:
         raise Unavailable("nonliteral API credential", reason="configuration_unsupported")

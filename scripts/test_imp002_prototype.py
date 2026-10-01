@@ -13,6 +13,7 @@ import socket
 import tempfile
 import unittest
 from unittest.mock import patch
+from test_imp002_diagnostic import synthetic_ancestor
 
 import imp002_prototype as prototype
 import imp002_transport as transport
@@ -209,11 +210,9 @@ class InspectionTests(unittest.TestCase):
         inference.assert_not_called()
 
     def test_environment_override_offline_guard_without_private_discovery(self):
-        overrides = ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
-                     "XDG_RUNTIME_DIR", "XDG_CONFIG_DIRS", "XDG_DATA_DIRS",
-                     "OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT",
+        overrides = ("OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT",
                      "OPENCODE_AUTH_CONTENT", "OPENCODE_TEST_HOME", "OPENCODE_TEST_MANAGED_CONFIG_DIR",
-                     "AZURE_RESOURCE_NAME", "AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
+                     "AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME",
                      "OPENCODE_SYNTHETIC_SECRET_NAME", "AZURE_SYNTHETIC_SECRET_NAME", "XDG_SYNTHETIC_SECRET_NAME",
                      "XDG_SESSION_CONFIG_HOME")
         for name in overrides:
@@ -230,7 +229,7 @@ class InspectionTests(unittest.TestCase):
                 discovery.assert_not_called()
 
     def test_synthetic_file_parse_permissions_and_unavailable_categories(self):
-        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-inspect-test-") as name:
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-inspect-test-") as name, synthetic_ancestor():
             path = Path(name) / "synthetic-private-name.json"
             for body, reason in [("{synthetic-secret-value", "file_parse"),
                                  ('{"synthetic-secret-key":1,"synthetic-secret-key":2}', "file_parse"),
@@ -292,6 +291,26 @@ class InspectionTests(unittest.TestCase):
             })
             inference.assert_not_called()
             worker.assert_not_called()
+
+    def test_selected_input_success_and_refusal_reports_are_nonsecret(self):
+        from test_imp002_transport import KEY, settings
+        config = settings()
+        config["provider"]["azure"]["options"] = {}
+        environment = {"XDG_CONFIG_HOME": "/synthetic-private/config", "XDG_DATA_HOME": "/synthetic-private/data",
+                       "AZURE_RESOURCE_NAME": "synthetic-resource"}
+        files = {"opencode.json": config, "auth.json": {"azure": {"type": "api", "key": KEY}}}
+        effect = lambda: transport.contract_from_inputs(environment, lambda path, **_: files.get(path.name))
+        code, report = self.inspect(effect=effect)
+        self.assertEqual(code, 0)
+        self.assertEqual(set(report), {"operator_contract_resolved", "contract_sha256", "network_used", "credentials_disclosed"})
+        self.assertFalse(report["network_used"])
+        self.assertFalse(report["credentials_disclosed"])
+        for private in (KEY, "synthetic-private", "synthetic-resource", "openai.azure.com"):
+            self.assertNotIn(private, json.dumps(report))
+        config["provider"]["azure"]["options"]["baseURL"] = KEY
+        self.assert_failure("configuration_unsupported", effect=effect)
+        environment["AZURE_OTHER"] = KEY
+        self.assert_failure("environment_override", effect=effect)
 
 
 if __name__ == "__main__":

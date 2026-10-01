@@ -44,7 +44,7 @@ review approved the operator steps after rejecting provider-level endpoint overr
 Full session/proposal
 behavior remains unproved. These commands do not make the runner or product chat ready.
 
-### Reviewed continuation operator step
+### Continuation operator step (compatibility repair awaiting affected review)
 
 Do **not** run these operator modes from an agent or before independent review and
 passing synthetic checks. Only the human operator may resolve existing private
@@ -55,8 +55,8 @@ argument. From this repository root in a plain operator terminal:
 /usr/bin/python3 -I -B scripts/imp002_prototype.py operator-inspect
 ```
 
-This performs **no network/model operation**. It reads only the pinned host's
-default global config/API-auth locations privately, interpreting a narrow literal
+This performs **no network/model operation**. The prepared compatibility repair reads
+bounded validated XDG-selected global config/API-auth locations privately, interpreting a narrow literal
 JSON Azure Responses/API-key subset without running OpenCode, plugins or config
 expansion. It returns only a nonsecret contract fingerprint or a generic capability
 failure.
@@ -69,13 +69,12 @@ focused tests. Rerun the
 same inspection command and share only its JSON, never environment dumps, private files
 or exception/configuration details. Do not clear the environment to bypass a refusal.
 
-The name-only guard allows ordinary SSH metadata and exactly these XDG session names:
+The previous reviewed name-only guard allowed ordinary SSH metadata and these XDG session names:
 `XDG_SESSION_ID`, `XDG_SESSION_TYPE`, `XDG_SESSION_CLASS`, `XDG_SESSION_DESKTOP`,
-`XDG_CURRENT_DESKTOP`, `XDG_SEAT`, `XDG_VTNR`. It still refuses every `OPENCODE_*` and
-`AZURE_*` name, unknown `XDG_*` names, and directory settings `XDG_CONFIG_HOME`,
-`XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_DIRS`,
-`XDG_DATA_DIRS`, without reading or printing their values. This does not expand the
-supported config/auth subset or silently ignore effective directory/provider overrides.
+`XDG_CURRENT_DESKTOP`, `XDG_SEAT`, `XDG_VTNR`, but denied every XDG directory/Azure
+input. The human category result proved directory/resource inputs are present,
+not which variables, values or authentication mechanism. The owner approved the
+small compatibility repair below, not a live run or broader credential contract.
 Public source basis: pinned OpenCode
 [`global.ts`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/core/src/global.ts)
 uses the data/config/cache/state paths from
@@ -88,6 +87,77 @@ consume config/auth overrides; its
 and bundled [`@ai-sdk/azure` 3.0.93](https://unpkg.com/@ai-sdk/azure@3.0.93/dist/index.js)
 consume Azure resource/key environment inputs. None of that source establishes which
 variable was present in the human's terminal.
+
+#### Prepared measured compatibility repair
+
+**Affected independent review approved the human rerun; coordinator verified 47
+focused synthetic tests. No private resolver or live mode was run by agents.**
+Agents never run the resolver, diagnostic or operator modes. After approval, the
+next human-only command is the same `operator-inspect` command above. Share only
+its sanitized JSON and stop for the coordinator; success does not authorize live use.
+
+The resolver's name guard now admits the seven exact XDG directory names and the
+session names above, plus **only `AZURE_RESOURCE_NAME`**. Every `OPENCODE_*`, other
+`AZURE_*` (including `AZURE_API_KEY` and `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME`),
+and unknown `XDG_*` name still stops. Only reviewed human-run code reads selected
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `HOME` and `AZURE_RESOURCE_NAME` values privately.
+Cache/state/runtime/search-directory exports do not select this resolver's
+global-config/auth inputs and their values are never retrieved or traversed.
+No ambient secret environment mechanism is added.
+
+Source mapping for the implemented subset (public pinned source, not host settings):
+
+- OpenCode `v1.18.34` [`package.json`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/package.json)
+  pins Azure `3.0.93` and xdg-basedir `5.1.0`; the
+  [root catalog](https://github.com/anomalyco/opencode/blob/v1.18.34/package.json)
+  pins Remeda `2.26.0`.
+- xdg-basedir `5.1.0` chooses each nonempty config/data home environment value,
+  otherwise `os.homedir()`'s `.config`/`.local/share`. OpenCode `Global.Path` appends
+  `opencode`; `auth/index.ts` appends `auth.json` to data. This pinned host supports
+  only `/home/kemal` for home fallback; another or empty `HOME` stops when a fallback
+  is needed, rather than silently reading a different tree. Selected XDG paths must
+  be absolute and length/depth bounded, without dot traversal or control characters.
+- [`config.ts::loadGlobal`](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/config/config.ts)
+  loads `config.json`, `opencode.json`, then `opencode.jsonc` using
+  [`mergeDeep` 2.26.0](https://github.com/remeda/remeda/blob/v2.26.0/packages/remeda/src/mergeDeep.ts):
+  recursively merge plain objects, later arrays/scalars replace earlier values.
+  The resolver implements only literal JSON in those three files, including a
+  `.jsonc` file containing strict JSON. Comments, references, invalid/duplicate JSON,
+  nonfinite/deep/oversized data and any legacy `config` file stop. It never executes
+  JSONC/TOML/OpenCode loaders, legacy migration, plugins or referenced instructions.
+- `provider.ts::custom().azure` chooses config `resourceName`, then stored API
+  metadata/OAuth account, then `AZURE_RESOURCE_NAME`; config options are reapplied
+  after custom loaders. `resolveSDK` prefers nonempty options `baseURL`, then model
+  API URL; options `apiKey` overrides the stored API key. Within the supported subset,
+  a literal `baseURL` wins over resource inputs; otherwise literal config
+  `resourceName` wins over the environment name. Empty/malformed explicit settings
+  stop, rather than guessing catalog fallback. Stored Azure auth is checked even
+  with config `apiKey`: OAuth and nonempty/malformed API metadata remain unsupported.
+  `provider.api`, custom credential `provider.env`, model endpoint/options/headers
+  and non-Azure SDK overrides remain denied.
+- Azure SDK `createAzure` uses options `baseURL` or
+  `https://<resourceName>.openai.azure.com/openai`; Responses routes append `/v1/responses`
+  on Azure OpenAI hosts (or deployment-based routes when explicitly enabled), with
+  default `api-version=v1`. Its `AZURE_API_KEY` fallback is deliberately **not** supported.
+  OpenCode's `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` belongs to the separate
+  `azure-cognitive-services` loader, not the supported `azure` provider.
+
+Every selected file is opened relative to nofollow directory fds, including all
+ancestors, with checked root/operator ownership and non-writable directories
+(root-owned sticky ancestors allowed). Files must be operator-owned regular files,
+not group/world-writable or hardlinked, and at most 256 KiB. Missing default JSON
+files are skipped in source order; an unavailable/unsafe present file stops, never
+falls back to another tree. The existing diagnostic's directory check is reused;
+the diagnostic command itself is unchanged.
+
+This interprets **only the supported literal global contract**, not full effective
+host configuration. Account/managed/project/plugin sources and model catalog/cache
+inheritance are not loaded or established; no assertion is made that the real host
+session uses this contract. Actual XDG/resource values, auth mechanism, account/model
+compatibility and complete isolated session/proposal acceptance remain unproved.
+An unsupported source yields only a fixed sanitized refusal. No file paths, values,
+endpoint, deployment or credential appear in reports/arguments/logs or worker inputs;
+the existing host-only contract fingerprint and relay boundary are unchanged.
 
 ### Reviewed category diagnostic (human only)
 
@@ -133,19 +203,20 @@ and `other_sources:uninspected` always remain explicit. No network/OpenCode/work
 operation or config/environment edit occurs. Output is projected through fixed key,
 enum and boolean allowlists; no names, values, paths, URLs, credentials or errors escape.
 
-Stop after the sanitized operator result for a separately approved compatibility
-decision. This checkpoint supersedes repeating blind inspection or proceeding to the
-live command below: IMP-002 stays blocked and the runner stays stopped.
+The diagnostic checkpoint was followed by the measured compatibility authorization
+above. Stop after the reviewed inspection's sanitized operator result; do not proceed
+to the historical live command below. IMP-002 stays blocked and the runner stays stopped.
 
-The resolver also refuses ambiguous
-global files, unsupported auth/metadata/model/provider options, non-inference routes
+The resolver also refuses unsupported
+global formats, auth/metadata/model/provider options, non-inference routes
 and nonliteral settings; it does not pretend to implement full host config precedence.
 If unavailable, stop. The next useful operator action is privately reconciling the
 actual endpoint, deployment mapping, API version and auth mechanism with this
 supported subset; do not send private settings/secrets/logs to an agent or substitute
 invented settings, a fresh credential copy, host CLI fallback or network provisioning.
 
-If inspection succeeds, pin its returned fingerprint in the following operator
+**Historical continuation command, not authorized by the current compatibility repair.**
+Only after separately approved live continuation, pin a successful inspection fingerprint in the following operator
 command (the only argument is that **nonsecret** fingerprint):
 
 ```sh
