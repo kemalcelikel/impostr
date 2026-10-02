@@ -1367,12 +1367,28 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [ ] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+## [!] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
 
 **Depends on:** IMP-004, IMP-005
 **Scope:** PDF only, max50,000,000 original bytes; private project/conversation upload,
 status/list, escaped derived-text preview, attachment download and deletion. No OCR,
 image/DOCX/text-file upload, remote fetch or inline PDF rendering. IMP-018 adds sends.
+
+**Execution checkpoint (2026-10-02):** Phase one **5/5 used, exhausted** on
+`feature/impostr-v1`, baseline `bc0cd47`; phases two–five remain **0/5**.
+Preserved uncommitted extractor/protocol/client/Compose/fixtures/verifier/docs candidate.
+Initial implementation, two bounded diagnostic repairs, explicit user-namespace flag
+repair and exact NETLINK_ROUTE seccomp refinement consumed the five attempts.
+Independent boundary and affected repair reviews PASS; 26 focused pure tests passed.
+Dedicated pinned-image builds passed, but actual containment startup still fails:
+`bwrap: Failed to make / slave: Permission denied`. The responsible policy/capability
+is not established; no parser/channel runtime acceptance or intake/DB implementation.
+Every owned runtime/diagnostic attempt removed its containers/channel volume/image;
+cleanup passed. No privileges/policy removal, host fallback, private/provider input,
+live mode, push/PR or runner launch. Next requires owner-approved bounded recovery
+and resolution of the mount-namespace startup failure; no automatic requeue or
+borrowing later phase budgets. IMP-018/011 remain dependency-blocked. Historical
+zero-attempt readiness blocker below is preserved, not the current scope blocker.
 
 Owner approved implementation and confined-image parser installation; earlier numeric/
 design blocker is superseded by concrete current scope. Five ordered PDF phases span
