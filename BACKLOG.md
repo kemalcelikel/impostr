@@ -1369,6 +1369,36 @@ bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
 ## [!] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
 
+**Latest recovery checkpoint:** Additional startup repair **3/3 used**, original
+phase-one **5/5** and later phases **0/5** preserved. Attempt1 diagnosed exact root
+mount propagation EACCES without identifying policy; attempt2 replaced inner bwrap
+with reviewed mountless namespaces/Landlock ABI3/child seccomp; mechanical packaging/
+native ABI corrections stayed within that attempt. Attempt3 corrected the default
+probe stdin (CPython DEVNULL opened read/write) to explicit read-only input.
+Independent full/affected boundary reviews passed; pure suite reached41 passing tests.
+
+Coordinator actual `/usr/bin/python3 -B scripts/imp017_verify.py --reviewed-runtime`
+passed dedicated pinned build and namespace/denial/timeout/descendant/output cleanup.
+Encrypted fixture creation and supervisor/channel readiness were reached. The synthetic
+API representative client failed before its captured results could establish which
+fixture/request/assertion failed; generic `container-runtime/verifier` is not a root
+cause. Owned cleanup passed. Parser/text/channel/representative50MB acceptance and
+later channel peer/recovery tests remain unproved. Preserve all candidate code/docs;
+no intake/UI activation or failed-candidate delivery commit. No sudo/privileged/policy
+disable/host parsing/private inputs were used. Budget exhausted; next narrowly scoped
+authorized diagnostic should project fixed client stage/error categories, not raw
+tracebacks/PDF data or another blind sandbox adjustment. Runner stays stopped.
+
+**Owner-approved startup recovery:** Owner approved three focused additional attempts
+from `ff89d99`, preserving uncommitted extractor/channel candidate and original phase-one
+5/5 exhausted history. New repair0/3; later phases0/5. Interactive coordinator delegates
+minimal diagnosis/repair of inner bwrap mount-propagation failure, not blind identical
+reruns or permission expansion. No sudo/privileged/CAP_SYS_ADMIN/unconfined container,
+host parser or private configuration access. Review substantive boundary changes before
+actual owned runtime tests; verify parser/channel/resource enforcement and cleanup.
+No intake/UI activation from build-only success. Keep blocked until verified startup
+acceptance; then prepare owner-started remaining phases without restarting automatically.
+
 **Depends on:** IMP-004, IMP-005
 **Scope:** PDF only, max50,000,000 original bytes; private project/conversation upload,
 status/list, escaped derived-text preview, attachment download and deletion. No OCR,

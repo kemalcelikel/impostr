@@ -2,6 +2,30 @@
 
 ## Latest owner-started PDF/local-use runner batch
 
+**Current interactive PDF startup repair:** Owner approved three focused additional
+repair attempts after `ff89d99` stopped before parsing with `bwrap: Failed to make /
+slave: Permission denied`. Preserve original PDF phase-one 5/5 and candidate; new
+repair 0/3 initially, later PDF phases 0/5. Tech-lead coordinates senior implementation,
+affected independent review and owned disposable extractor checks; runner stays stopped.
+Diagnose the exact denied operation before changing the boundary. No sudo, privileged
+container, CAP_SYS_ADMIN, unconfined policy, host parsing or tool-denial bypass. No host
+config/auth reads. Pinned dependencies remain permitted only in extractor image.
+Keep network/credential/filesystem separation, bounded jobs and descendant cleanup;
+material isolation redesign must be reviewed and remain within these restrictions.
+Local verified repair/bookkeeping commits authorized, not pushes or automatic starts.
+
+**Latest PDF repair outcome:** Additional repair 3/3 consumed; original phase-one
+5/5 preserved, later phases0/5. Mandatory bwrap mount propagation was denied, so the
+reviewed candidate now uses mount-free namespaces plus Landlock ABI3/child seccomp
+inside the unchanged restricted converter container. Coordinator actual runtime
+passed pinned build, namespace/filesystem/socket denials, timeout/output bounds,
+escaped-descendant termination and owned cleanup. Representative PDF/channel client
+then failed with generic `container-runtime/verifier`; exact fixture/error is unknown.
+This is not proof of a Docker fault or successful extraction. Keep candidate uncommitted,
+IMP-017 blocked and runner stopped. Next requires renewed scoped repair authorization;
+first add fixed stage/fixture diagnostic to the existing captured client result, no raw
+PDF text/tracebacks/private inputs or privilege expansion. Reuse passing containment.
+
 Owner removed private HTTPS from this version and approved PDF-only attachments:
 text-readable, no OCR/scanned support, max50,000,000 original bytes (decimal50MB).
 Run IMP-017, then IMP-018, then IMP-011 on existing feature/impostr-v1; reuse delivered
