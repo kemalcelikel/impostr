@@ -2,6 +2,24 @@
 
 ## Latest owner-started PDF/local-use runner batch
 
+**Latest PDF storage/lifecycle delivery:** Intake `269710f` and lifecycle `8925dfa`
+complete IMP-017. Phase two2/5, phase three4/5 used; earlier extractor/repair histories
+preserved. Coordinator full lifecycle verifier passed focused API/static/type/format,
+fresh PostgreSQL, actual retry/busy/terminal-blob removal/delete race/API crash leases/
+concurrent ownership/revocation/graceful shutdown and all owned cleanup. Pure96 passed.
+
+Approved disposable cleanup may remove the extractor image: recreate the unchanged
+pinned inputs under an owned tag, validate actual source/build provenance and pin its
+immutable ID. This is packaging reconstruction, not sandbox redesign; don't stop only
+because a cleaned-up image is absent or trust a tag without validation. Existing helper
+implements this. Old artifact blocker below is history, not permission to weaken checks.
+
+Next owner-started batch: IMP-018 PDF text selection/composer/inference receipt and
+integrated rendered proof (phases4/5 each0/5), then IMP-011 local workflow/DB restore0/5.
+Use committed lifecycle base8925dfa and fresh exact fixture inputs; no rebuilding
+delivered behavior. At launch overnight takes sole coordination. Same no-live/provider
+test deferred/private-config/no-push/no-auto-start/exact775 handoff/cleanup limits.
+
 **Verified extractor delivery / next owner run:** Phase-one code is committed in
 `ca09dc3`. Coordinator56 tests and the full reviewed runtime verifier passed pinned
 build, containment, representative rejection/decimal50MB/expansion/encryption,

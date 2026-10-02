@@ -1367,7 +1367,27 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [!] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+## [x] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+
+**Latest delivery:** Extractor `ca09dc3`, intake `269710f`, lifecycle `8925dfa` complete
+this outcome. Phase two2/5 and phase three4/5 used; original extractor and extra-repair
+budgets/history preserved. Independent intake/lifecycle/affected orchestration review
+passed. Coordinator actual lifecycle verifier passed focused tests/Ruff/format/mypy,
+PostgreSQL/migrations and joined ready provenance, retry/busy, terminal rejection blob
+removal, deletion during extraction, API crash lease recovery, concurrent ownership,
+revocation and graceful shutdown. Pure96 tests passed. All owned cleanup passed.
+
+The latest stop was missing previously cleaned-up image, not a failed sandbox. Owned
+reconstruction now verifies unchanged committed extractor inputs and actual packaged
+source/build hashes before using immutable ID; no tag-only trust or shared-image
+overwrite/removal. Pinned provenance b976249c…4192 preserved. Corrected shutdown fixture
+matches pinned Uvicorn SIGTERM exit plus a fresh post-lifespan/PDF-drain marker; no
+authorization/deletion assertion removed. Older stopped/candidate prose below is history.
+
+Next: committed IMP-018 PDF-to-chat/composer/inference receipt, phases4/5 each0/5,
+then IMP-011 local workflow/restore0/5 in owner-started root batch. No new parser design,
+private credentials/live test/HTTPS/publication/automatic start. Entire PDF user workflow
+is not delivered until these dependent checks pass.
 
 **Current intake delivery / lifecycle stop (2026-10-02):** Phase two committed in
 `269710f`, **2/5 used**. Independent intake/harness/affected reviews PASS;

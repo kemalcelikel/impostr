@@ -2,6 +2,13 @@
 
 ## Purpose and release boundary
 
+**Current PDF intake/lifecycle:** IMP-017 is locally delivered (`269710f`, `8925dfa`):
+private durable raw uploads, confined extraction, bounded retry/failure/deletion and
+restart lease recovery. Actual authorization/concurrency/lifecycle checks and cleanup
+passed. PDF selection/composer/model-inclusion receipts and full restored workflow
+remain IMP-018/011. Safe reconstruction of cleaned-up pinned images is normal fixture
+packaging, never permission to change the parser boundary or trust unverified tags.
+
 **Current PDF capability:** Confined extractor phase one is locally verified and
 committed in `ca09dc3`, including decimal50MB text extraction, rejection/bounds,
 private channel denials and deadline/restart recovery with cleanup. Phase two's
