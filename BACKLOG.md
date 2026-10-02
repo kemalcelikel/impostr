@@ -1585,7 +1585,23 @@ boundary; no caps, parser, storage or recovery procedure is invented. No applica
 dependency or live-test changes or substantive implementation attempts; preserve all
 existing code/logs. Local outcome bookkeeping only, no push/PR or runner restart.
 
-## [ ] IMP-018 — Attach verified media to planning chat
+## [!] IMP-018 — Attach verified media to planning chat
+
+**Execution stop (2026-10-02):** Baseline `8324713`, existing `feature/impostr-v1`.
+Phase four **5/5 exhausted**; phase five **2/5 used** (initial verifier plus provenance/
+owner-overlay correction). Preserve all earlier PDF budgets. Uncommitted selected-reference,
+receipt, dispatch/deletion and synthetic verifier candidate remains; composer is not implemented.
+Independent product/API/harness and affected concurrency reviews PASS (static only).
+Last coordinator `scripts/imp018_verify.py --api-only` passed exact source mapping, builds,
+database and migration/current0010, then failed focused API
+`test_delete_outage_is_fenced_pending_and_purge_recovers_without_scrubbing_quotes`
+with a call-phase assertion. All owned cleanup passed. Earlier focused API passes are
+not final acceptance; fresh PostgreSQL previously passed two tests and failed the
+capture/delete race. Its reviewed fence-aware correction has no passing rerun yet.
+Static gates, actual inference/full PDF proof and rendered composer acceptance remain
+unproved. Owner renewal of bounded phase-four repair scope is required; do not borrow
+phase-five attempts or automatically requeue. Preserve candidate; no live/private input,
+push/PR or automatic starts. Affected local documentation records the unavailable feature.
 
 **Depends on:** IMP-005, IMP-017
 **Current owner scope: PDF text only.** Reuse ordinary chat and integrate selected

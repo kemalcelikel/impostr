@@ -42,15 +42,31 @@ snapshot, versions, source and hash-generation contract. Complete resolved `buil
 provenance is generated inside the dedicated image; no downloaded packages, image
 archive, generated PDFs, transcripts or runtime scratch belong in the source commit.
 
-IMP-017's three phases are now coordinator-verified: phase-one extractor delivery
-is committed in `ca09dc3`, phase-two DB/raw intake in `269710f`, and phase-three
-extraction/lifecycle is ready for the coordinator's verified delivery commit. Phase
-two used **2/5** attempts; phase three used **4/5**, with its final unused attempt
-not needed. Preserve all phase-one original/additional repair histories; these counts
-are not renewed. The next work is IMP-018 phases four/five (PDF composer/model receipt
-and integrated PDF proof), each **0/5**, then IMP-011 local-use/DB restore, **0/5**.
+IMP-017's three phases are delivered: phase-one extractor delivery is committed in
+`ca09dc3`, phase-two DB/raw intake in `269710f`, and phase-three extraction/lifecycle
+in `8925dfa`. Phase two used **2/5** attempts and phase three **4/5**; their histories
+are preserved. IMP-018 phase four is exhausted (**5/5**) and phase five has used
+**2/5**. A renewed finite phase-four scope is required before further implementation.
 No automatic runner/application start, UI/model activation, live provider acceptance
 or completed local-use workflow follows from IMP-017 acceptance.
+
+### IMP-018 PDF composer and inference receipt — unaccepted candidate
+
+The uncommitted backend candidate adds selected attachment references, an inference
+receipt and delete handling, but the PDF composer is absent. It is not a usable
+candidate: actual end-to-end inference and rendered proof have not passed. Static
+reviews passed; runtime acceptance did not. Earlier fresh-PostgreSQL evidence passed
+two tests and failed `capture_delete_race`; the latest corrective candidate has
+no passing fresh PostgreSQL rerun.
+
+Latest coordinator check, from repository root:
+`/usr/bin/python3 -I -B scripts/imp018_verify.py --api-only`.
+Build, DB startup, upgrade and current migration (`0010`) passed. The final focused API
+run failed at `test_delete_outage_is_fenced_pending_and_purge_recovers_without_scrubbing_quotes`
+with an `AssertionError` at the call assertion. Earlier focused API passes are not
+final acceptance. All owned cleanup passed. Do not treat this candidate as usable or
+claim full inference/rendered acceptance; preserve the later human live-provider test.
+No private configuration access, push or automatic start is authorized.
 
 ## PDF DB/raw intake phase two — coordinator-verified (IMP-017)
 
