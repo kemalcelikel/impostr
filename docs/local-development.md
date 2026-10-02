@@ -78,6 +78,55 @@ documents report missing-text pages and the explicit text-only label; there is n
 fidelity/comprehension or real-provider acceptance claim. No private HTTPS or other
 attachment formats are activated by this PDF-only slice.
 
+### PDF extraction lifecycle candidate — phase three
+
+The lifecycle candidate uses migration 0009 and an API-owned background thread,
+independent of chat enablement. Default `IMPOSTR_PDF_ENABLED=0` performs no channel
+dispatch; only exact `0`/`1` are supported. Explicit ordinary integration uses
+`compose.yaml` plus `compose.pdf-app.yaml`; the latter reuses unchanged phase-one
+converter packaging and mounts only its private Unix channel read-only in the API.
+The converter remains networkless, non-root, resource bounded, and without any DB,
+repository, broker, workspace or credential mounts. This candidate is **not yet
+runtime-accepted**, and these configuration facts are not an instruction to start it.
+
+Accepted originals are durably `pending`; one API pump claims them as `processing`
+with a 45-second token lease before conversion, closing its DB transaction/session
+before the existing 30-second whole-job client call. Completion atomically requires
+the same unexpired lease. Restart can reclaim expired work; completion after deletion
+or a newer claim cannot recreate/overwrite records. The maximum is three attempts.
+Only `busy`/`unavailable` retry with durable 5-/15-second backoff; exhaustion and all
+other rejections (including timeout) remove originals/derivatives and retain safe
+failure metadata. Ready derivatives are protocol-validated, including text hash,
+page coverage and the actual phase-one verified build fingerprint listed above.
+Metadata reports configured processing, attempts and transient retry status, not
+proof of converter health or model submission. No model/UI inclusion is added.
+
+Processing is server-owned once upload commits: logout/revocation blocks subsequent
+access but does not cancel extraction or delete retained project data. All attachment
+HTTP operations retain the existing current-actor/project/conversation checks.
+Explicit deletion and the existing conversation/project foreign-key cascades remove
+durable data; there is no separate filesystem authority/cache to orphan. In-flight
+private bytes may exist only until the bounded job returns/exits. Graceful API shutdown
+stops admission and joins its PDF thread; forced exit leaves only a recoverable lease.
+
+After independent review, the coordinator can use
+`/usr/bin/python3 -B scripts/imp017_lifecycle_verify.py --reviewed-lifecycle` for
+focused API/migration/static checks and actual joined unavailable/busy recovery,
+ready/rejected blob handling, deletion, API crash/lease recovery, PostgreSQL competing
+claims, revocation and owned cleanup. It reuses intake-owned fixture handling and
+existing synthetic PDF inputs; it does not repeat sandbox verification or build a
+converter. It requires the **previously verified exact image** to be available locally
+and fails closed if absent/drifted. Restoring that image is a coordinator prerequisite,
+not permission for this implementation agent to rebuild/install it. Actual runtime,
+API tests and Ruff/mypy checks remain coordinator work; pure policy/parser checks
+alone do not establish lifecycle acceptance. The coordinator's first lifecycle run
+stopped before these checks because `impostr-pdf:phase1` was absent; owned cleanup
+passed. Earlier phase-one cleanup intentionally removed this disposable image.
+The exact old Docker image is not a product prerequisite, but the explicit
+no-rebuild direction requires owner clarification before a bounded reconstruction
+of unchanged pinned packaging and exact build-provenance verification. No new
+parser/boundary acceptance is claimed, and no reconstruction has been performed.
+
 ### Preserved phase-one repair history (superseded by verification above)
 
 The following review-ready/blocked outcomes and next-step instructions describe

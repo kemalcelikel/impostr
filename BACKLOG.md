@@ -1367,7 +1367,27 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [ ] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+## [!] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+
+**Current intake delivery / lifecycle stop (2026-10-02):** Phase two committed in
+`269710f`, **2/5 used**. Independent intake/harness/affected reviews PASS;
+coordinator intake verifier passed build, migration0008, focused API, fresh PostgreSQL
+preservation/constraints/actual-overcap/hash/delete, Ruff/format/mypy, Nginx and owned
+cleanup. Phase three candidate is preserved uncommitted, **2/5 used** (initial
+lifecycle and provisioned HTTP-client correction), with independent review PASS and
+79 coordinator pure IMP-017 tests passing. No lifecycle runtime acceptance yet.
+
+The reviewed lifecycle verifier stopped at `verified_image_available`; actual Docker
+inspection confirmed `impostr-pdf:phase1` does not exist. Earlier owned cleanup
+deliberately removed it. Cleanup of this attempt passed. This is a disposable fixture
+artifact problem, not a demonstrated extraction failure or requirement for an owner
+artifact. The explicit no-rebuild direction prevents silently rematerializing it.
+Next needs owner clarification authorizing one unchanged pinned-image reconstruction,
+exact committed inputs/build-provenance comparison and affected fixture review, then
+only new lifecycle checks (not sandbox reimplementation/reacceptance). Preserve
+phase-one original5/5, both earlier3/3 and latest1/3; phases four/five remain0/5.
+No live/private inputs, pushes, privilege changes or automatic starts. Whole017 and
+dependent018/011 remain incomplete; preserve all lifecycle partial files.
 
 **Latest phase-one verified delivery:** Code/docs committed in `ca09dc3`. Coordinator
 56 pure tests and full reviewed `/usr/bin/python3 -B scripts/imp017_verify.py
