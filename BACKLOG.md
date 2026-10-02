@@ -1369,6 +1369,38 @@ bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
 ## [!] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
 
+**Latest actual PDF/restart checkpoint:** Renewed repair **3/3 used**, original
+phase-one5/5 and prior repair3/3 retained; later phases0/5. Attempt1 introduced strict
+fixed client diagnostics; attempt2 replaced the unrealistic expansion fixture with
+bounded valid compressed pages and exact limit rejection; attempt3 fixed acceptance
+receive shortening the EOF timeout, retaining the absolute job deadline and all
+stop/restart assertions. Additional fixed deadline diagnostics were mechanical.
+
+Coordinator52 pure tests passed. Reviewed runtime passed pinned build, isolation/
+timeout/output/escaped-descendant cleanup, representative valid/invalid/textless/mixed/
+active PDF checks, actual decimal50MB success, expansion limit and encrypted rejection,
+short-body/busy/overrun recovery, scratch reuse and peer credential denials. Deadline
+EOF and stopped-container assertions now pass. Post-restart extraction still fails
+`deadline-recovery/extract/pdf-error/unavailable`; owned cleanup passes. Do not mark
+phase one delivered or activate intake/UI from partial success.
+
+Known harness defect: restart readiness only tests socket.exists(); forced supervisor
+exit retains its named-volume socket pathname until new startup removes it. That can
+race metadata/connect guards, but actual failure cause remains unknown. Next smallest
+repair needs renewed finite authorization: fixed adapter stage/cause projection and
+new-listener readiness, not failed extraction retries or relaxed bounds. Preserve full
+candidate; no raw PDF/traceback/private input, privilege expansion, live model, push
+or automatic runner launch. Earlier generic client failure below is historical.
+
+**Renewed representative-client repair:** Owner approved three further focused attempts
+from `7c5765f`: new0/3, original phase-one5/5 and prior additional3/3 preserved; later
+phases0/5. Keep full candidate and passing containment. First add fixed sanitized
+client fixture/stage/error classification, then fix the actual demonstrated failure.
+No raw PDF/traceback/private-data reporting, broad sandbox changes or waived assertions.
+Interactive coordinator delegates implementation, reviews affected substantive repairs
+and owns exact disposable runtime/cleanup checks. Runner remains stopped until actual
+phase-one acceptance; no sudo/privileges/host parser/live modes/push/automatic launch.
+
 **Latest recovery checkpoint:** Additional startup repair **3/3 used**, original
 phase-one **5/5** and later phases **0/5** preserved. Attempt1 diagnosed exact root
 mount propagation EACCES without identifying policy; attempt2 replaced inner bwrap

@@ -2,6 +2,31 @@
 
 ## Latest owner-started PDF/local-use runner batch
 
+**Renewed PDF/channel repair:** Owner approved three further focused attempts after
+`7c5765f`, specifically to diagnose and fix the representative client failure. New
+budget0/3; retain original phase-one5/5 and earlier additional repair3/3, later phases0/5.
+Reuse reviewed passing mount-free containment. First project fixed fixture/stage/error
+categories from the existing captured client result; never expose raw PDF text,
+tracebacks/private inputs or weaken checks. Interactive tech-lead delegates senior
+implementation and owns disposable runtime checks; runner stays stopped. No privilege
+expansion, sudo, host parsing, private configuration, live model, pushes or automatic
+starts. Review substantive affected repairs before new boundary execution. Verified
+local task/checkpoint commits remain authorized; extraction must actually pass before
+declaring phase-one readiness.
+
+**Latest representative-client outcome:** Renewed repair3/3 consumed, original5/5
+and earlier repair3/3 preserved. Coordinator52 tests passed. Actual pinned build,
+containment/descendant/output checks, representative PDF rejections, decimal50MB
+success, expansion limit rejection, encrypted rejection, short-body/overrun recovery,
+scratch reuse and peer/credential denials passed. Whole-job EOF and stopped-container
+checks passed after absolute deadline correction, but post-restart extraction failed
+`deadline-recovery/extract/pdf-error/unavailable`. Owned cleanup passed.
+The restart harness only checks socket pathname existence, which can be stale after
+forced exit; this is a concrete readiness defect, not a proven cause of the observed
+failure. Candidate remains uncommitted, IMP-017 blocked and runner stopped. Next
+requires renewed finite scope for fixed adapter-stage diagnostics and genuine new
+listener readiness; no blind extraction retries, policy relaxation or raw private output.
+
 **Current interactive PDF startup repair:** Owner approved three focused additional
 repair attempts after `ff89d99` stopped before parsing with `bwrap: Failed to make /
 slave: Permission denied`. Preserve original PDF phase-one 5/5 and candidate; new
