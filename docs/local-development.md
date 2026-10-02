@@ -10,6 +10,304 @@ shared-server release. Candidate review evidence applies only to the exact
 reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
 delivered release. Consult `BACKLOG.md` for task outcomes.
 
+## PDF extractor phase one — locally verified (IMP-017)
+
+`compose.pdf.yaml` is standalone, opt-in boundary packaging, not an ordinary-stack
+PDF feature. Intake, durable attachments and model inclusion are not delivered by
+this slice. The affected reviewed extractor/channel boundary now has actual
+coordinator acceptance: **56 pure tests and the full runtime helper passed**, including
+pinned build, mountless namespace/Landlock/seccomp containment, filesystem/socket
+denials, output/timeout/escaped-descendant cleanup, representative PDFs, exact decimal
+50MB success, expansion limit and encrypted rejection, busy/short-body/overrun recovery,
+scratch reuse, peer/credential denials, new-listener readiness, whole-job deadline EOF,
+stopped-container and post-restart extraction recovery. Owned cleanup passed. This
+supersedes the failed intermediate outcomes preserved below; it is not merely mock
+or pathname-existence evidence.
+
+Verified coordinator command from repository root:
+`/usr/bin/python3 -B scripts/imp017_verify.py --reviewed-runtime`.
+It uses an owned disposable standalone stack and removes its containers, channel
+volume and image; it does not activate application PDF intake. No additional runtime
+rerun is needed for this documentation-only finalization.
+
+Exact successful build references (nonsecret hashes, not retained runtime artifacts):
+
+- Build provenance SHA256:
+  `b976249ca1a5aea47689ac9210b15611b6b9c88ab9c337f766e5e1569faa4192`
+- Image ID:
+  `sha256:68efe37a1cb9e110def0d47369dff31218df21d118359f22e766b24472addcaf`
+
+The checked-in dependency lock and image-build recorder preserve the pinned base,
+snapshot, versions, source and hash-generation contract. Complete resolved `build.json`
+provenance is generated inside the dedicated image; no downloaded packages, image
+archive, generated PDFs, transcripts or runtime scratch belong in the source commit.
+
+Phase one is locally verified and ready for the coordinator's selective delivery
+commit; **the whole IMP-017 is not complete**. Remaining ordered work is IMP-017
+phase two (DB/intake), then phase three (extraction/lifecycle), IMP-018 phases four/five
+(model/composer integration and integrated PDF proof), then IMP-011 local-use
+verification. No automatic runner/application start or intake/UI/model activation
+follows from this acceptance. New restart repair used **1/3**, with **2 unused**;
+original phase-one5/5 and both previous repair3/3 histories are retained, later PDF
+phases remain0/5.
+
+Limits remain PDF text-layer only: no OCR/scanned support or image/diagram understanding,
+max50,000,000 original bytes, 500 pages, 128KiB UTF-8 derivative and 30s whole-job
+deadline, in the existing networkless non-root resource-bounded extractor. Mixed
+documents report missing-text pages and the explicit text-only label; there is no
+fidelity/comprehension or real-provider acceptance claim. No private HTTPS or other
+attachment formats are activated by this PDF-only slice.
+
+### Preserved phase-one repair history (superseded by verification above)
+
+The following review-ready/blocked outcomes and next-step instructions describe
+earlier checkpoints, not current prerequisites or authorization for more diagnostics.
+
+**Renewed diagnostic (attempt 1/3):** The subsequent coordinator run passed
+the pinned build and mountless namespace/Landlock/seccomp denial, timeout/output,
+escaped-descendant and owned-cleanup checks. Representative channel execution then
+failed with only `container-runtime/verifier`; this establishes neither a Docker
+fault nor successful extraction. Prior startup repair 3/3 and original phase-one
+5/5 are retained; later phases remain 0/5.
+
+The renewed diagnostic leaves containment, parser policies and cleanup unchanged.
+It catches the synthetic client's failures into a fixed record, then projects only
+`client_fixture`, `client_stage`, `client_error`, `result_status` and `result_code`
+from the **same captured client stdout**. Stage/fixture/error/status/code are fixed
+enums; unknown or noncanonical records (including extra keys, raw output or trailing
+data) yield fixed unknown fields. Only the exact ordered prefix of known PASS lines
+may precede a record. No PDF text, exception strings, traceback, paths, settings or
+stderr are reported. A failed representative exec is `client-workflow-failure`, not
+an attributed container/parser fault. Failure still denies acceptance and runs owned
+cleanup.
+
+**Expansion fixture repair (previous renewed attempt 2/3):** Coordinator's
+diagnostic run passed 45 pure tests, pinned build/containment and owned cleanup, then
+reported `client_fixture=expansion client_stage=extract client_error=pdf-error
+result_status=unknown result_code=invalid`. In this exact client order, all fourteen
+small fixtures had completed their assertions: valid text and mixed coverage, scanned,
+zero, punctuation, spoof, malformed, escaped/compressed actions, embedded files, XFA,
+rich media, external streams and page-limit rejection. The decimal50MB fixture then
+returned ready at exactly 50,000,000 bytes. These are status/text checks, not proof
+of each rejected fixture's specific reason. Encrypted bytes had been generated,
+but encrypted rejection, busy/short-body, overrun, peer and deadline-restart checks
+had not run. No full phase-one acceptance follows from this intermediate evidence.
+
+The old expansion stream placed 100,000 text copies at the same coordinate, testing
+pathological layout rather than predictable output expansion. No obvious object/xref
+defect was found; `pdf-error/invalid` raised by the client is not a worker rejection
+code and does not prove a qpdf fault. A whole-job EOF remains a hypothesis, not a
+measured timeout cause. Replace that workload with 32 ordinary pages, each holding
+48 non-overlapping Courier lines in small Flate streams: compressed input <1MB,
+inflated content <256KiB and visible text >128KiB, within the unchanged 500-page
+bound. Pure tests check the exact generated lengths/xref/references/layout; they
+do not execute a host parser or establish actual parser acceptance.
+
+`expansion: PASS` now requires the exact validated `rejected('limit')` result, not
+an invalid/timeout rejection or a dropped channel. Worker/supervisor/protocol,
+containment, time/output/page/resource bounds and owned cleanup are unchanged.
+The host also reprints only the canonical captured prefix of known PASS markers
+before a fixed client failure; malformed records still yield unknown fields and
+no partial PASS projection. The corrected fixture awaits affected review and real
+confined execution; renewed budget is 2/3, earlier 5/5 + 3/3 retained, later 0/5.
+
+**Deadline diagnostic continuation (2/3 used):** Coordinator subsequently
+passed 47 pure tests, pinned build/containment, all representative checks (including
+exact limit expansion, encrypted rejection and decimal50MB), busy/short-body,
+counted-overrun, scratch reuse and both peer denials. Owned cleanup passed. The next
+`whole-job-deadline-restart` stage failed with only `container-runtime/verifier`;
+trigger, stopped-state, restart, readiness and recovery outcomes were indistinguishable.
+This does not identify a root cause or complete phase-one acceptance.
+
+The diagnostic-only continuation reuses the existing captured client result and
+strict fixed schema. `deadline_step` identifies the host fixture operation; trigger
+and recovery clients report fixed `deadline-trigger`/`deadline-recovery` fixtures,
+stage/error/status/code, including distinct connection-error versus timeout versus
+assertion/PDFError. Unknown/raw/noncanonical output stays unknown. No logs, exception
+strings, PDF text or new private lookups are added. A reset, timeout or nonempty
+reply still **fails** the unchanged EOF assertion. The accepted-but-unfinished body,
+35s socket timeout, 40s exec bound, stopped-container assertion, bounded readiness
+loop and ready recovery assertion remain. No production boundary or limit changes.
+50 pure tests cover the fixture diagnostics and mocked failure/cleanup paths; actual
+deadline behavior still awaits affected review and coordinator execution. The final
+focused repair attempt 3/3 remains available only after an actual failure is located.
+Static tracing identifies one concrete harness concern to distinguish, not yet the
+measured failure: protocol `receive(... +2)` resets the socket timeout while reading
+the acceptance frame, so the following EOF read does not retain the preceding 35s
+setting. The diagnostic leaves this behavior unchanged and tests that mutation;
+use the actual fixed trigger/stage/error result before selecting a correction.
+
+**Confirmed harness repair (previous renewed attempt 3/3):** Coordinator's fixed
+diagnostic located the failure at `deadline_step=trigger`, acceptance received, then
+`client_stage=deadline-eof client_error=timeout`. This confirms the fixture's short
+acceptance-frame socket timeout was retained for the deliberate whole-job wait.
+The trigger now captures an absolute `monotonic() + JOB_SECONDS + 5` deadline before
+connecting, then restores only its **remaining** time after acceptance. The fixed 5s
+grace is a harness wait allowance, not a change to the supervisor's 30s hard job
+deadline. Elapsed connection/acceptance time is deducted; an expired absolute wait
+fails rather than being renewed. EOF, stopped-container, bounded restart readiness
+and ready recovery assertions remain mandatory; resets/nonempty replies still fail.
+
+52 pure tests pass, including a fake acceptance receive that shortens the socket
+timeout and an EOF check that succeeds only when the original remaining wait is
+restored, plus expired-deadline rejection without sleeps. Production/parser/channel
+containment and limits are unchanged; reuse the coordinator's passing representative,
+50MB/expansion/encrypted, busy/overrun/scratch/peer and cleanup evidence. Actual repaired
+deadline/restart acceptance awaits affected review and coordinator verification.
+Renewed budget is now 3/3; original phase-one5/5, earlier repair3/3 and later0/5 retained.
+
+**New-listener repair (new restart budget attempt 1/3):** From
+`2a3d08c`, owner approved three focused attempts, preserving original5/5 and both
+previous repair3/3 histories, later0/5. Coordinator's prior extraction/containment,
+deadline EOF and stopped-container checks passed; recovery raised
+`deadline-recovery/extract/pdf-error/unavailable`, with owned cleanup passing.
+Socket pathname existence could report the old named-volume socket after forced
+exit. This is a concrete harness defect, not an established cause of that failure.
+
+The harness now records only the old socket device/inode internally before triggering
+the deadline. After restart it checks the container is running, then waits at most
+10s (12s outer exec limit) for different socket identity, the existing exact directory/
+socket ownership and modes, and an authenticated responding listener. The check
+holds the current socket's nofollow O_PATH reference across connect and revalidates
+its identity/metadata afterward. It uses the already-tested synthetic UID10002:GID10001
+credential denial: this UID can connect but the supervisor rejects it **before**
+job/lease acquisition. No header, data, ping extension or extraction job is sent.
+EOF/reset confirms the existing denial path responded; a stale/missing/replaced
+socket, unfinished permissions, refused connection or nonresponsive listener cannot
+produce `new-listener: PASS`. Container-running is checked again afterward.
+
+Only listener startup is polled. One recovery extraction follows, with **no retry**
+after parser/channel failure. Strict snapshot parsing prevents raw identity output
+from reaching reports; readiness failures use existing fixed client fields. No
+production/protocol/image/security-policy or resource-bound changes are made.
+56 pure tests pass, including stale/changed/missing socket, refused/nonresponsive
+listener, metadata/credential checks, no-send behavior and mocked failure cleanup.
+Affected review caught that UID10002:GID10001 cannot import from the private
+UID10001 mode0700 `/fixture`. The mechanical attempt-one correction makes the
+denied-UID listener check fully inline with only fixed standard-library dependencies
+and fixed diagnostics. Its metadata/peer/deadline/held-inode checks are retained;
+no private fixture permissions or image packaging are changed. Tests execute these
+actual inline definitions with fakes and verify no private imports or secret output.
+Use the unchanged full verifier command below once after affected review; no new
+restart-only mode or acceptance bypass. Actual new-listener/recovery acceptance is
+still for the coordinator, not proved by these pure tests.
+
+After affected independent review, the coordinator alone runs from repository root:
+`/usr/bin/python3 -B scripts/imp017_verify.py --reviewed-runtime`.
+Use its sanitized fixture/stage/error and cleanup outcome to choose the next focused
+repair; do not relax passing containment or retry blind. The older startup narrative
+below is preserved as history.
+
+The first additional diagnostic slice leaves Compose, image, seccomp and parser
+launch/cleanup unchanged. Public
+[`bubblewrap.c` v0.8.0](https://github.com/containers/bubblewrap/blob/v0.8.0/bubblewrap.c)
+ties the error to `mount(NULL, "/", NULL, MS_SILENT | MS_SLAVE | MS_REC, NULL)`.
+After independent review of this diagnostic, the coordinator alone runs from root:
+`/usr/bin/python3 -B scripts/imp017_verify.py --reviewed-runtime`.
+Do **not** run `scripts/imp017_mount_probe.py` directly on the host.
+
+Only an exact `mount-propagation-denied` startup failure triggers the new helper in
+a separate disposable, networkless extractor-image container with the same dropped
+capabilities, seccomp, no-new-privileges and resource limits, and no channel mount.
+It verifies non-root/zero-capability outer identity, atomically creates fresh user
+and mount namespaces, verifies both changed, writes only its own fixed single-ID
+maps, and requires namespace-local mount capability before trying that one syscall.
+It emits only `root-propagation-diagnostic=<fixed-stage>:<fixed-outcome>` and
+`root-propagation-policy=unattributed`. Unreadable self facts stop without another
+reader; no policy lookup, tracing dependency or permission expansion is attempted.
+The verifier still fails containment and cleans up even if that diagnostic says
+`root-slave-recursive:ok`. Python reproduction is not the actual bwrap execution:
+success or denial cannot attribute executable-specific AppArmor or another policy.
+`namespace-guard`/map/unshare failures mean a required diagnostic capability is
+unavailable; stop for the sanitized result, not blind retries or further allowances.
+
+Coordinator's attempt-one diagnostic subsequently reported
+`root-slave-recursive:eacces`, policy unattributed, with build and cleanup passing.
+**Attempt two is a material mountless candidate, not runtime acceptance.** It keeps
+outer Compose limits/security and the Unix API contract. An existing image
+`util-linux` package is required at `2.38.1-5+deb12u3`, unshare release `2.38.1`;
+the image build checks it before/after parser installation and records its digest.
+It never installs or upgrades that launcher. Missing/drifted packaging stops; actual
+availability in the pinned image remains for coordinator verification.
+
+Trusted single-thread bootstrap invokes only `unshare --user --map-current-user
+--pid --net --ipc --fork --kill-child=KILL`, with no mount namespace, mount-proc,
+root change or persistent namespaces. It verifies new user/network namespaces,
+unchanged mount namespace and job PID1 identity using container self facts, then
+requires Landlock ABI >=3, all ABI3 filesystem rights handled (REFER/TRUNCATE
+included), zero capabilities and no-new-privileges. Immutable runtime/worker/library/
+font reads and harmless device access are granted; only the exact generated job
+directory is writable. The dynamic loader and two parser executables alone get
+execute rights. `/proc`, `/sys`, `/run`, `/supervisor`, spool and sibling scratch
+are not granted. Path metadata remains visible: no hidden-path or private proc
+mount claim. Landlock is not silently optional.
+Public source references are
+[`unshare.c` v2.38.1](https://github.com/util-linux/util-linux/blob/v2.38.1/sys-utils/unshare.c)
+(propagation changes are conditional on a mount namespace; none is requested) and
+[Linux 6.8 Landlock documentation](https://www.kernel.org/doc/html/v6.8/userspace-api/landlock.html).
+These are source evidence, not proof that the actual kernel enables Landlock.
+
+Outer seccomp additionally admits only the three privilege-neutral Landlock
+self-restriction syscalls. Its historical netlink allowance remains outer-only:
+the child stacks an architecture-checked, inherited default-deny filter blocking
+all socket/comms/FD-reception calls, mounts/namespaces/namespace-capable clone,
+ptrace/FD-stealing, privilege changes and metadata mutations Landlock doesn't cover.
+Supervisor passes a read-only descriptor for its owned anonymous spool; bootstrap
+checks stdin access and pipe outputs and closes all descriptors above 2 before
+parsing. Job PID1 teardown kills even double-fork/setsid descendants; launcher
+parent-death, supervisor process-group kill/subreaping, whole-job exit and container
+teardown remain backstops. Scratch cannot be reused after unproved reaping.
+
+Independent **implemented-boundary** review is required before the coordinator
+runs the same verifier command above. It now checks fixed image-resident probe
+modes through the exact production bootstrap (no arbitrary code/path transport),
+actual file read/write/metadata and socket denials, escaped-descendant cleanup,
+then unchanged representative parser/channel workflow and deadline recovery.
+No privileged, host-parser, unconfined or bwrap retry fallback exists.
+Capability failures report only fixed `sandbox-<stage>-unavailable` categories;
+no exception, namespace ID, policy name, input or host path escapes. Do not repeat
+a denied setup with another reader or silently drop enforcement to reach parsing.
+
+Coordinator's first mountless run built successfully and cleaned up, but stopped
+at `sandbox-descriptors-unavailable` before parser execution. That old category
+covered identity, no-new-privileges, standard-FD checks, limit setup **and** closing;
+it does not establish a denied close syscall or a leaked descriptor. The follow-up
+mechanical native-ABI correction explicitly types all five glibc `prctl` arguments
+(variadic arguments are unsigned-long width) and `close_range`'s three arguments.
+The seccomp program pointer is passed at full native width. Fixed stages now
+distinguish `identity`, `no-new-privileges`, `stdin`, `outputs`, `limits` and
+`close-fds`. Full `close_range(3, UINT_MAX, 0)` stays mandatory, with no fallback or
+`/proc` enumeration; closing only to a lowered NOFILE limit could leave preexisting
+high-numbered descriptors open. This is a glibc call, not CPython's absent
+`os.close_range` API. Cause attribution and the corrected runtime remain unproved
+until affected review and the coordinator's same verifier command.
+
+The next coordinator result narrowed the startup failure to
+`sandbox-stdin-unavailable`, again with build/cleanup passing. The exact startup
+probe calls `run(..., source=None)`, which selected `subprocess.DEVNULL`;
+[CPython 3.12.11 `Popen._get_devnull`](https://github.com/python/cpython/blob/v3.12.11/Lib/subprocess.py)
+opens that descriptor **O_RDWR**, even for stdin. **Additional attempt 3/3** fixes
+the shared runner default to open only `/dev/null` with `O_RDONLY | O_CLOEXEC`,
+passing its explicit descriptor and closing the parent's copy after spawn, including
+spawn failure. Production's already-read-only spool and supplied read-only pipes
+stay unchanged. The bootstrap's read-only-stdin assertion is retained; there is no
+writable-input exemption, alternate path or changed syscall policy. Missing default
+input capability fails before launch. Original phase-one 5/5 and later phases 0/5
+remain preserved; no further substantive attempt is available automatically.
+The repair awaits affected independent review and coordinator runtime verification,
+not another blind allowance change or a claim that containment now passes.
+
+Historical bwrap diagnostic source basis is Debian bubblewrap **0.8.0-2+deb12u1**:
+[`network.c::loopback_setup`](https://github.com/containers/bubblewrap/blob/v0.8.0/network.c)
+uses exactly that socket to configure loopback. The public
+[Debian source descriptor](https://deb.debian.org/debian/pool/main/b/bubblewrap/bubblewrap_0.8.0-2+deb12u1.dsc)
+lists SHA-256 `957ad1149db9033db88e988b12bcebe349a445e1efc8a9b59ad2939a113d333a`
+for the original source and `37917e8abdd6df1d1118f089e9cf1f9374e1b5bb21c8a70d7de4e9b5dfb10f6d`
+for Debian patches. Both downloaded archives matched those hashes; the complete
+patch series changes neither `network.c` nor `loopback_setup`. This was source-only
+inspection without installation/execution, not independent signature verification
+or proof of the built image; the coordinator still verifies build provenance.
+
 ## Operator-only chat-safety prototype (IMP-002)
 
 ### Ordinary foreground planning connection (IMP-005)

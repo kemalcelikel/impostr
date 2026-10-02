@@ -28,3 +28,14 @@ api/**/.ruff_cache/
 api/**/*.pyc
 api/**/.env
 api/**/.env.*
+!pdf-extractor/
+!pdf-extractor/Dockerfile
+!pdf-extractor/dependencies.lock.json
+!pdf-extractor/build.py
+!pdf-extractor/worker.py
+!pdf-extractor/structure.py
+!pdf-extractor/bounded_json.py
+!pdf-extractor/process.py
+!pdf-extractor/supervisor.py
+!pdf-extractor/bootstrap.py
+!pdf-extractor/probe.py

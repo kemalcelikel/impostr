@@ -1,0 +1,22 @@
+{
+  "architecture": "amd64",
+  "base": "python:3.12.11-slim-bookworm@sha256:c00fc7b44d844b6da22861ec24af43968a5200eac4ec607b4725d585165d6b49",
+  "snapshot": "20261001T000000Z",
+  "repositories": ["debian bookworm main", "debian-security bookworm-security main"],
+  "packages": {
+    "qpdf": "11.3.0-1+deb12u1",
+    "libqpdf29": "11.3.0-1+deb12u1",
+    "poppler-utils": "22.12.0-2+deb12u3",
+    "libpoppler126": "22.12.0-2+deb12u3"
+  },
+  "existing_launcher": {"package": "util-linux", "version": "2.38.1-5+deb12u3", "binary": "/usr/bin/unshare", "release": "unshare from util-linux 2.38.1", "installation": "Verify in pinned base; NEVER install or upgrade launcher to satisfy missing capability."},
+  "sources": {
+    "qpdf": "https://snapshot.debian.org/package/qpdf/11.3.0-1%2Bdeb12u1/",
+    "poppler": "https://snapshot.debian.org/package/poppler/22.12.0-2%2Bdeb12u3/",
+    "bubblewrap": "https://snapshot.debian.org/package/bubblewrap/0.8.0-2%2Bdeb12u1/",
+    "util_linux_launcher": "https://github.com/util-linux/util-linux/blob/v2.38.1/sys-utils/unshare.c",
+    "base": "https://hub.docker.com/v2/repositories/library/python/tags/3.12.11-slim-bookworm",
+    "object_contract": "https://qpdf.readthedocs.io/en/11.3/json.html"
+  },
+  "closure": "Fixed base + snapshot; signed InRelease -> SHA256 Packages -> SHA256 debs. Build records resolved package/version/source and every downloaded deb SHA256 in build.json. Coordinator must inspect/archive build.json and image digest before runtime acceptance; no mutable repository or unsigned fallback."
+}
