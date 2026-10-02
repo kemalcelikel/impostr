@@ -3,11 +3,15 @@
 ## Purpose and release boundary
 
 **Current PDF capability:** Confined extractor phase one is locally verified and
-committed in `ca09dc3`, including real decimal50MB text extraction, rejection/bounds,
-private channel denials and deadline/restart recovery with cleanup. Upload/DB retention,
-selected-PDF chat integration and local restore checks remain implementation work;
-do not present the standalone extractor as delivered attachment UI. Live testing
-remains deferred; this proof used synthetic PDFs only.
+committed in `ca09dc3`, including decimal50MB text extraction, rejection/bounds,
+private channel denials and deadline/restart recovery with cleanup. Phase two's
+project/conversation-scoped raw PDF intake and PostgreSQL persistence are coordinator-
+verified for local delivery: the API supports upload, status/list, raw download,
+preview and deletion. Accepted uploads remain pending envelope-checked bytes; there
+is no parser dispatch, automatic readiness, UI or model inclusion yet. Selected-PDF
+chat integration and local restore checks remain implementation work; do not present
+this as delivered attachment UI. Both phases used synthetic inputs; live testing
+remains deferred.
 
 **Latest owner scope — same-PC use and PDFs only:** Private HTTPS/phone/LAN access
 is removed from this version, not a readiness gate. Revisit only on a future owner

@@ -364,6 +364,107 @@ class ConversationPreference(Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
 
+class ProjectAttachment(Base):
+    """Private originals and derivatives; never load blobs in metadata queries."""
+
+    __tablename__ = "project_attachments"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "project_id"],
+            ["conversations.id", "conversations.project_id"],
+            ondelete="CASCADE",
+            name="fk_attachment_conversation_project",
+        ),
+        CheckConstraint("length(filename) BETWEEN 1 AND 180", name="ck_attachment_filename"),
+        CheckConstraint(
+            "status IN ('pending','processing','ready','failed')", name="ck_attachment_status"
+        ),
+        CheckConstraint(
+            "original_size IS NULL OR original_size BETWEEN 1 AND 50000000",
+            name="ck_attachment_original_size",
+        ),
+        CheckConstraint(
+            "(original_size IS NULL AND original_sha256 IS NULL) OR "
+            "(original_size IS NOT NULL AND original_sha256 IS NOT NULL "
+            "AND length(original_sha256) = 64)",
+            name="ck_attachment_original_metadata",
+        ),
+        CheckConstraint(
+            "(status = 'failed' AND original IS NULL) OR "
+            "(status <> 'failed' AND original IS NOT NULL AND original_size IS NOT NULL "
+            "AND length(original) = original_size)",
+            name="ck_attachment_original",
+        ),
+        CheckConstraint(
+            "(status = 'failed' AND failure_code IS NOT NULL AND failure_code IN "
+            "('busy','invalid','encrypted','active_content','no_text','limit','timeout',"
+            "'unavailable','upload_interrupted')) OR (status <> 'failed' AND failure_code IS NULL)",
+            name="ck_attachment_failure",
+        ),
+        CheckConstraint(
+            "attempt_count BETWEEN 0 AND 32767 AND "
+            "((status = 'processing' AND lease_id IS NOT NULL AND lease_until IS NOT NULL) OR "
+            "(status <> 'processing' AND lease_id IS NULL AND lease_until IS NULL))",
+            name="ck_attachment_lease",
+        ),
+        CheckConstraint(
+            "(status = 'ready' AND text_content IS NOT NULL AND text_size IS NOT NULL "
+            "AND text_size BETWEEN 1 AND 131072 AND text_sha256 IS NOT NULL "
+            "AND length(text_sha256) = 64 AND page_count IS NOT NULL "
+            "AND page_count BETWEEN 1 AND 500 AND missing_pages IS NOT NULL "
+            "AND length(CAST(missing_pages AS TEXT)) <= 2500 "
+            "AND extraction_policy = 'imp017-text-v1' AND qpdf_version = '11.3.0' "
+            "AND pdftotext_version = '22.12.0' AND extractor_build_sha256 IS NOT NULL "
+            "AND length(extractor_build_sha256) = 64 "
+            "AND extraction_policy IS NOT NULL AND qpdf_version IS NOT NULL "
+            "AND pdftotext_version IS NOT NULL) OR "
+            "(status <> 'ready' AND text_content IS NULL AND text_size IS NULL "
+            "AND text_sha256 IS NULL AND page_count IS NULL AND missing_pages IS NULL "
+            "AND extraction_policy IS NULL AND qpdf_version IS NULL "
+            "AND pdftotext_version IS NULL AND extractor_build_sha256 IS NULL)",
+            name="ck_attachment_derivative",
+        ),
+        CheckConstraint(
+            "text_content IS NULL OR octet_length(text_content) = text_size",
+            name="ck_attachment_text_bytes",
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "text_content IS NULL OR length(CAST(text_content AS BLOB)) = text_size",
+            name="ck_attachment_text_bytes",
+        ).ddl_if(dialect="sqlite"),
+        Index("ix_attachment_conversation_created", "conversation_id", "created_at", "id"),
+        Index("ix_attachment_status_lease", "status", "lease_until"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    uploader_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(180), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    failure_code: Mapped[str | None] = mapped_column(String(32))
+    original: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    original_size: Mapped[int | None] = mapped_column(Integer)
+    original_sha256: Mapped[str | None] = mapped_column(String(64))
+    text_content: Mapped[str | None] = mapped_column(Text, deferred=True)
+    text_size: Mapped[int | None] = mapped_column(Integer)
+    text_sha256: Mapped[str | None] = mapped_column(String(64))
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    missing_pages: Mapped[list[int] | None] = mapped_column(JSON(none_as_null=True))
+    extraction_policy: Mapped[str | None] = mapped_column(String(32))
+    qpdf_version: Mapped[str | None] = mapped_column(String(16))
+    pdftotext_version: Mapped[str | None] = mapped_column(String(16))
+    extractor_build_sha256: Mapped[str | None] = mapped_column(String(64))
+    attempt_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    lease_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ChatTurn(Base):
     __tablename__ = "chat_turns"
     __table_args__ = (

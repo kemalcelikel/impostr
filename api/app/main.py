@@ -16,6 +16,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
 from app.admin import router as admin_router
+from app.attachments import router as attachments_router
 from app.auth import router as auth_router
 from app.backlog_tasks import router as backlog_tasks_router
 from app.chat import router as chat_router
@@ -121,6 +122,7 @@ def create_app(
     api_router.include_router(document_pair_approvals_router)
     api_router.include_router(project_approval_manifests_router)
     api_router.include_router(chat_router)
+    api_router.include_router(attachments_router)
     application.include_router(api_router)
 
     @application.middleware("http")

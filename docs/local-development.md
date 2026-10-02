@@ -13,8 +13,8 @@ delivered release. Consult `BACKLOG.md` for task outcomes.
 ## PDF extractor phase one — locally verified (IMP-017)
 
 `compose.pdf.yaml` is standalone, opt-in boundary packaging, not an ordinary-stack
-PDF feature. Intake, durable attachments and model inclusion are not delivered by
-this slice. The affected reviewed extractor/channel boundary now has actual
+PDF feature. This phase-one extractor/channel boundary is not itself the ordinary
+application intake or model integration. The affected reviewed boundary now has actual
 coordinator acceptance: **56 pure tests and the full runtime helper passed**, including
 pinned build, mountless namespace/Landlock/seccomp containment, filesystem/socket
 denials, output/timeout/escaped-descendant cleanup, representative PDFs, exact decimal
@@ -42,14 +42,34 @@ snapshot, versions, source and hash-generation contract. Complete resolved `buil
 provenance is generated inside the dedicated image; no downloaded packages, image
 archive, generated PDFs, transcripts or runtime scratch belong in the source commit.
 
-Phase one is locally verified and ready for the coordinator's selective delivery
-commit; **the whole IMP-017 is not complete**. Remaining ordered work is IMP-017
-phase two (DB/intake), then phase three (extraction/lifecycle), IMP-018 phases four/five
-(model/composer integration and integrated PDF proof), then IMP-011 local-use
-verification. No automatic runner/application start or intake/UI/model activation
-follows from this acceptance. New restart repair used **1/3**, with **2 unused**;
-original phase-one5/5 and both previous repair3/3 histories are retained, later PDF
-phases remain0/5.
+Phase one is locally verified; **the whole IMP-017 is not complete**. Phase two
+(DB/raw intake) is now also coordinator-verified, with phase three
+(extraction/lifecycle), IMP-018 phases four/five (model/composer integration and
+integrated PDF proof), then IMP-011 local-use verification still remaining. No
+automatic runner/application start or intake/UI/model activation follows from
+phase-one acceptance. Phase two used **2/5** attempts (initial attempt and focused
+diagnostic-logic repair); phase one retains its original 5/5 and both previous
+repair3/3 histories. Phases three through five remain 0/5.
+
+## PDF DB/raw intake phase two — coordinator-verified (IMP-017)
+
+The API persists project- and conversation-scoped attachment records and raw PDF
+originals in PostgreSQL, with status/list, raw download, escaped text-preview and
+delete routes under `/api/projects/{project}/chat/{conversation}/attachments`.
+Upload uses `POST .../upload?filename=<name>.pdf` with a raw `application/pdf`
+request body; the actual body is bounded to 50,000,000 bytes and its digest is
+recorded. Intake checks the PDF envelope, not PDF structural validity: an accepted
+upload is `pending`, not validated or ready. There is no parser dispatch, automatic
+processing/readiness, UI or model inclusion in this phase; preview is unavailable
+until a future extraction lifecycle supplies ready text.
+
+Coordinator synthetic verification passed build, migration 0008, focused API and
+fresh PostgreSQL preservation/over-cap/hash/delete checks, Ruff, format, mypy,
+Nginx checks and owned cleanup. Command from repository root:
+`/usr/bin/python3 -I -B scripts/imp017_intake_verify.py`. This is a
+coordinator-only synthetic disposable verification, **not** normal operator setup
+or an instruction to start PDF intake. Phase two is verified for local delivery;
+the whole IMP-017 remains incomplete.
 
 Limits remain PDF text-layer only: no OCR/scanned support or image/diagram understanding,
 max50,000,000 original bytes, 500 pages, 128KiB UTF-8 derivative and 30s whole-job
