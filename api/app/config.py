@@ -13,6 +13,7 @@ class AppSettings:
     public_origin: str
     rate_limit_key: bytes
     chat_enabled: bool = False
+    pdf_enabled: bool = False
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.public_origin)
@@ -47,6 +48,8 @@ class AppSettings:
 
         if len(self.rate_limit_key) < 32:
             raise ValueError("The rate-limit key must contain at least 32 bytes")
+        if type(self.pdf_enabled) is not bool:
+            raise ValueError("PDF processing must be explicitly enabled or disabled")
 
     @property
     def secure_cookies(self) -> bool:
@@ -63,8 +66,12 @@ class AppSettings:
         if not rate_limit_key:
             raise RuntimeError("IMPOSTR_RATE_LIMIT_KEY must be configured")
 
+        pdf_flag = os.environ.get("IMPOSTR_PDF_ENABLED", "0")
+        if pdf_flag not in {"0", "1"}:
+            raise ValueError("IMPOSTR_PDF_ENABLED must be 0 or 1")
         return cls(
             public_origin=public_origin,
             rate_limit_key=rate_limit_key.encode("utf-8"),
             chat_enabled=os.environ.get("IMPOSTR_CHAT_ENABLED") == "1",
+            pdf_enabled=pdf_flag == "1",
         )

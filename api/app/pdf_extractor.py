@@ -1,4 +1,4 @@
-"""Unwired API-side extractor client. No intake, lifecycle, or DB work in phase one."""
+"""Private API-side extractor client; no parser, workspace or DB dependencies."""
 
 import os
 import socket
@@ -68,5 +68,7 @@ class UnixPDFExtractor:
                 return value
         except PDFError:
             raise
+        except TimeoutError as exc:
+            raise PDFError("timeout") from exc
         except (OSError, ValueError) as exc:
             raise PDFError("unavailable") from exc

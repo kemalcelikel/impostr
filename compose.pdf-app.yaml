@@ -1,0 +1,19 @@
+# Explicit ordinary-stack PDF opt-in: compose.yaml + this file, independent of chat.
+# Reuses phase-one packaging unchanged. No converter DB/network/repo/credential access.
+services:
+  pdf-extractor:
+    extends:
+      file: compose.pdf.yaml
+      service: pdf-extractor
+    restart: unless-stopped
+  api:
+    environment:
+      IMPOSTR_PDF_ENABLED: "1"
+    volumes:
+      - pdf-channel:/run/impostr-pdf:ro
+    stop_grace_period: 55s
+    depends_on:
+      pdf-extractor:
+        condition: service_started
+volumes:
+  pdf-channel:

@@ -434,6 +434,12 @@ class ProjectAttachment(Base):
         ).ddl_if(dialect="sqlite"),
         Index("ix_attachment_conversation_created", "conversation_id", "created_at", "id"),
         Index("ix_attachment_status_lease", "status", "lease_until"),
+        CheckConstraint(
+            "(next_attempt_at IS NULL OR status = 'pending') AND "
+            "(last_error_code IS NULL OR (status = 'pending' AND "
+            "last_error_code IN ('busy','unavailable')))",
+            name="ck_attachment_retry",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -460,6 +466,8 @@ class ProjectAttachment(Base):
     attempt_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     lease_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -1,4 +1,4 @@
-"""DB/raw PDF intake only. No parser, extractor dispatch, retry or model inclusion.
+"""Private durable PDF intake/status/preview. No parser or model inclusion here.
 
 POST .../attachments/upload?filename=reference.pdf with a raw application/pdf body.
 An accepted envelope is durably pending, NOT a validated PDF or ready to send.
@@ -28,7 +28,7 @@ router = APIRouter(
 )
 
 
-def view(row: ProjectAttachment) -> dict[str, Any]:
+def view(row: ProjectAttachment, processing_available: bool = False) -> dict[str, Any]:
     # Deliberately excludes both deferred blobs. No implicit parser or ready claim.
     return {
         "id": str(row.id),
@@ -52,7 +52,10 @@ def view(row: ProjectAttachment) -> dict[str, Any]:
             if row.status == "ready"
             else None
         ),
-        "processing_available": False,
+        "processing_available": processing_available,
+        "attempt_count": row.attempt_count,
+        "last_error_code": row.last_error_code,
+        "next_attempt_at": row.next_attempt_at.isoformat() if row.next_attempt_at else None,
         "included_in_model": False,
         "created_at": row.created_at.isoformat(),
     }
@@ -140,8 +143,8 @@ async def upload(
     record_audit(
         db, action="project.attachment.upload", actor_user_id=actor.id, project_id=project_id
     )
-    db.commit()  # Always before any future conversion; phase two never starts one.
-    metadata = view(row)
+    db.commit()  # Before the background worker can claim this upload.
+    metadata = view(row, request.app.state.settings.pdf_enabled)
     if failure:
         return JSONResponse({"detail": failure[2], "attachment": metadata}, status_code=failure[0])
     return JSONResponse(metadata, status_code=201)
@@ -151,6 +154,7 @@ async def upload(
 def listing(
     project_id: uuid.UUID,
     conversation_id: uuid.UUID,
+    request: Request,
     db: DbSession,
     actor: CurrentActor,
     after: uuid.UUID | None = None,
@@ -164,7 +168,7 @@ def listing(
     if after is not None:
         statement = statement.where(ProjectAttachment.id > after)
     rows = list(db.scalars(statement.order_by(ProjectAttachment.id).limit(101)))
-    items = [view(row) for row in rows[:100]]
+    items = [view(row, request.app.state.settings.pdf_enabled) for row in rows[:100]]
     audit_access(db, actor, project_id)
     db.commit()
     return {"attachments": items, "next_after": items[-1]["id"] if len(rows) > 100 else None}
@@ -175,12 +179,15 @@ def status(
     project_id: uuid.UUID,
     conversation_id: uuid.UUID,
     attachment_id: uuid.UUID,
+    request: Request,
     db: DbSession,
     actor: CurrentActor,
 ) -> dict[str, Any]:
     authorize(db, actor, project_id, lock=True)
     conversation(db, project_id, conversation_id)
-    metadata = view(load(db, project_id, conversation_id, attachment_id))
+    metadata = view(
+        load(db, project_id, conversation_id, attachment_id), request.app.state.settings.pdf_enabled
+    )
     audit_access(db, actor, project_id)
     db.commit()
     return metadata
@@ -224,7 +231,7 @@ def preview(
     conversation(db, project_id, conversation_id)
     row = load(db, project_id, conversation_id, attachment_id)
     if row.status != "ready":
-        raise HTTPException(409, "PDF text is not ready; processing is not available in this slice")
+        raise HTTPException(409, "PDF text is not ready; check attachment status")
     try:
         validated = result(
             {

@@ -1,4 +1,4 @@
-"""0007 -> 0008 preservation and guards, using the existing SQLite test seam."""
+"""0007 -> current PDF schema preservation/guards, using the SQLite test seam."""
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ def check_preservation(engine, stage=lambda _: None):
     stage("preservation_snapshot")
     before = history(engine)
     stage("preservation_upgrade")
-    migrate(engine, "20261002_0008")
+    migrate(engine, "head")
     stage("preservation_history")
     assert history(engine) == before
     with engine.connect() as connection:
@@ -189,7 +189,7 @@ def check_preservation(engine, stage=lambda _: None):
     migrate(engine, "20261001_0007", downgrade=True)
     assert history(engine) == before
     stage("preservation_reupgrade")
-    migrate(engine, "20261002_0008")
+    migrate(engine, "head")
     return ids
 
 

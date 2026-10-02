@@ -153,7 +153,7 @@ class IntakeHarnessTests(unittest.TestCase):
         self.assertEqual(dumped.buffer, bytearray())
 
         head = intake.HeadOutput()
-        head.feed(b"irrelevant output\n20261002_0008 (head)\n")
+        head.feed(b"irrelevant output\n20261002_0009 (head)\n")
         head.finish()
         for invalid in (b"20261001_0007 (head)\n", b"private revision detail\n"):
             parser = intake.HeadOutput()

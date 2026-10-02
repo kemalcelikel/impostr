@@ -17,6 +17,7 @@
 # API tests compare backlog parsing with the repository's compatibility helper.
 !scripts/
 !scripts/backlog.py
+!scripts/imp017_fixtures.py
 !overnight-agent/
 !overnight-agent/PROJECT.md.example
 !overnight-agent/AGENTS.md.example

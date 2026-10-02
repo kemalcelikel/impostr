@@ -31,5 +31,6 @@ COPY api/pyproject.toml ./pyproject.toml
 COPY api/tests ./tests
 # Keep the root helper outside /app so API lint only covers API sources.
 COPY scripts/backlog.py /opt/impostr-compat/backlog.py
+COPY scripts/imp017_fixtures.py /opt/impostr-pdf-fixtures/imp017_fixtures.py
 USER 10001:10001
 CMD ["pytest", "-p", "no:cacheprovider"]

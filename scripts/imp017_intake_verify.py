@@ -33,7 +33,7 @@ API_CHECK_FILES = (
     "tests/test_attachments_migration.py",
     "tests/test_attachments_postgres.py",
 )
-EXPECTED_HEAD = "20261002_0008"
+EXPECTED_HEAD = "20261002_0009"
 POSTGRES_STAGES = frozenset(
     {
         "schema_create",

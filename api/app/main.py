@@ -28,6 +28,7 @@ from app.dependencies import require_browser_mutation
 from app.document_contract import DocumentKind
 from app.document_pair_approvals import router as document_pair_approvals_router
 from app.passwords import dummy_password_hash
+from app.pdf_lifecycle import PDFProcessor
 from app.project_approval_manifests import router as project_approval_manifests_router
 from app.project_documents import (
     router as project_documents_router,
@@ -69,11 +70,19 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         dispatcher = Dispatcher(database_engine, UnixBroker())
         application.state.chat_dispatcher = dispatcher
         dispatcher.thread.start()
+    if application.state.settings.pdf_enabled:
+        processor = PDFProcessor(database_engine)
+        application.state.pdf_processor = processor
+        processor.thread.start()
     try:
         yield
     finally:
-        if application.state.chat_dispatcher is not None:
-            application.state.chat_dispatcher.close()
+        try:
+            if application.state.pdf_processor is not None:
+                application.state.pdf_processor.close()
+        finally:
+            if application.state.chat_dispatcher is not None:
+                application.state.chat_dispatcher.close()
 
 
 def _initialize_project_documents(
@@ -103,6 +112,7 @@ def create_app(
     application.state.database_engine = engine
     application.state.settings = settings
     application.state.chat_dispatcher = None
+    application.state.pdf_processor = None
     application.state.workspace_store = WorkspaceStore(
         workspace_root
         if workspace_root is not None

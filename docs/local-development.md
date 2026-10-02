@@ -42,14 +42,15 @@ snapshot, versions, source and hash-generation contract. Complete resolved `buil
 provenance is generated inside the dedicated image; no downloaded packages, image
 archive, generated PDFs, transcripts or runtime scratch belong in the source commit.
 
-Phase one is locally verified; **the whole IMP-017 is not complete**. Phase two
-(DB/raw intake) is now also coordinator-verified, with phase three
-(extraction/lifecycle), IMP-018 phases four/five (model/composer integration and
-integrated PDF proof), then IMP-011 local-use verification still remaining. No
-automatic runner/application start or intake/UI/model activation follows from
-phase-one acceptance. Phase two used **2/5** attempts (initial attempt and focused
-diagnostic-logic repair); phase one retains its original 5/5 and both previous
-repair3/3 histories. Phases three through five remain 0/5.
+IMP-017's three phases are now coordinator-verified: phase-one extractor delivery
+is committed in `ca09dc3`, phase-two DB/raw intake in `269710f`, and phase-three
+extraction/lifecycle is ready for the coordinator's verified delivery commit. Phase
+two used **2/5** attempts; phase three used **4/5**, with its final unused attempt
+not needed. Preserve all phase-one original/additional repair histories; these counts
+are not renewed. The next work is IMP-018 phases four/five (PDF composer/model receipt
+and integrated PDF proof), each **0/5**, then IMP-011 local-use/DB restore, **0/5**.
+No automatic runner/application start, UI/model activation, live provider acceptance
+or completed local-use workflow follows from IMP-017 acceptance.
 
 ## PDF DB/raw intake phase two — coordinator-verified (IMP-017)
 
@@ -68,8 +69,8 @@ fresh PostgreSQL preservation/over-cap/hash/delete checks, Ruff, format, mypy,
 Nginx checks and owned cleanup. Command from repository root:
 `/usr/bin/python3 -I -B scripts/imp017_intake_verify.py`. This is a
 coordinator-only synthetic disposable verification, **not** normal operator setup
-or an instruction to start PDF intake. Phase two is verified for local delivery;
-the whole IMP-017 remains incomplete.
+or an instruction to start PDF intake. Phase two remains delivered in `269710f`;
+its migration/API evidence is preserved, not invalidated by the phase-three addition.
 
 Limits remain PDF text-layer only: no OCR/scanned support or image/diagram understanding,
 max50,000,000 original bytes, 500 pages, 128KiB UTF-8 derivative and 30s whole-job
@@ -78,16 +79,17 @@ documents report missing-text pages and the explicit text-only label; there is n
 fidelity/comprehension or real-provider acceptance claim. No private HTTPS or other
 attachment formats are activated by this PDF-only slice.
 
-### PDF extraction lifecycle candidate — phase three
+### PDF extraction lifecycle — coordinator-verified phase three
 
-The lifecycle candidate uses migration 0009 and an API-owned background thread,
+The verified lifecycle uses migration 0009 and an API-owned background thread,
 independent of chat enablement. Default `IMPOSTR_PDF_ENABLED=0` performs no channel
 dispatch; only exact `0`/`1` are supported. Explicit ordinary integration uses
 `compose.yaml` plus `compose.pdf-app.yaml`; the latter reuses unchanged phase-one
 converter packaging and mounts only its private Unix channel read-only in the API.
 The converter remains networkless, non-root, resource bounded, and without any DB,
-repository, broker, workspace or credential mounts. This candidate is **not yet
-runtime-accepted**, and these configuration facts are not an instruction to start it.
+repository, broker, workspace or credential mounts. The reviewed candidate passed
+the coordinator's full runtime helper; these configuration facts are still not an
+instruction to start the application or runner.
 
 Accepted originals are durably `pending`; one API pump claims them as `processing`
 with a 45-second token lease before conversion, closing its DB transaction/session
@@ -109,23 +111,63 @@ durable data; there is no separate filesystem authority/cache to orphan. In-flig
 private bytes may exist only until the bounded job returns/exits. Graceful API shutdown
 stops admission and joins its PDF thread; forced exit leaves only a recoverable lease.
 
-After independent review, the coordinator can use
-`/usr/bin/python3 -B scripts/imp017_lifecycle_verify.py --reviewed-lifecycle` for
-focused API/migration/static checks and actual joined unavailable/busy recovery,
-ready/rejected blob handling, deletion, API crash/lease recovery, PostgreSQL competing
-claims, revocation and owned cleanup. It reuses intake-owned fixture handling and
-existing synthetic PDF inputs; it does not repeat sandbox verification or build a
-converter. It requires the **previously verified exact image** to be available locally
-and fails closed if absent/drifted. Restoring that image is a coordinator prerequisite,
-not permission for this implementation agent to rebuild/install it. Actual runtime,
-API tests and Ruff/mypy checks remain coordinator work; pure policy/parser checks
-alone do not establish lifecycle acceptance. The coordinator's first lifecycle run
-stopped before these checks because `impostr-pdf:phase1` was absent; owned cleanup
-passed. Earlier phase-one cleanup intentionally removed this disposable image.
-The exact old Docker image is not a product prerequisite, but the explicit
-no-rebuild direction requires owner clarification before a bounded reconstruction
-of unchanged pinned packaging and exact build-provenance verification. No new
-parser/boundary acceptance is claimed, and no reconstruction has been performed.
+After affected independent review, the coordinator's actual
+`/usr/bin/python3 -B scripts/imp017_lifecycle_verify.py --reviewed-lifecycle` passed
+source/build provenance, API/DB build and migration, focused API tests, Ruff lint/format,
+mypy and fresh PostgreSQL checks. The joined run passed unavailable recovery, actual
+ready provenance, busy admission/durable retry, terminal blob removal, deletion during
+extraction, API crash/lease recovery, concurrent PostgreSQL lease ownership, revoked
+access and graceful shutdown. All joined/stack/account/volume/image/input cleanup
+passed. The **96 pure IMP-017 tests** are retained passing evidence; no repeat check
+is needed for this documentation-only finalization. Phase three is verified at
+**4/5 used**, with the remaining **1/5 not needed**.
+
+The helper reuses intake-owned fixture handling and synthetic PDF inputs; it does not
+repeat sandbox verification. The initial absent-image stop was an ordinary artifact
+failure: phase-one cleanup had intentionally removed `impostr-pdf:phase1`. Attempt
+3/5 added the reviewed absence-only reconstruction and mechanical fixture diagnostics/
+mock correction; attempt 4/5 corrected the final shutdown expectation. These failed
+intermediate checkpoints are history, not active blockers.
+
+Before use, the helper requires extractor inputs to match committed `ca09dc3` via
+`git diff --no-ext-diff --no-textconv --exit-code`, including dependency lock, build
+recorder, bootstrap, protocol, seccomp and standalone Compose packaging. It validates
+the original `.dockerignore` hash with only the exact synthetic fixture allowance
+added, and refuses a Dockerfile-specific ignore override. An existing shared image
+is never rebuilt, retagged or removed. Only a successful empty shared-tag inventory
+allows one bounded reconstruction under an exclusively reserved per-run tag, using
+the existing standalone Compose build with `--env-file /dev/null` and the fixture's
+minimal environment/fresh HOME. No application `.env` or private Docker configuration
+is read; networked parser installation remains confined to the pinned image build.
+
+For either path, a container is created but not started. Bounded `docker cp` archives
+are hashed locally to require exact worker/supervisor source bytes and both actual
+`build.json` hashes equal to `b976249ca1a5aea47689ac9210b15611b6b9c88ab9c337f766e5e1569faa4192`.
+Lifecycle execution is pinned to that validated immutable image ID, not a mutable tag
+or the historical Docker ID alone. Output projects only fixed stages and nonsecret
+source/build/image hashes. Cleanup removes owned containers/volumes and only the
+owned reconstructed image tag, leaving pre-existing images untouched. Failed build,
+source/provenance checks or cleanup fail acceptance, without automatic retries.
+Focused pytest failures project at most 16 allowlisted file/test-function names from
+the existing short summary, with only `assertion`/`unknown` categories. Parameter
+IDs, assertion values, source snippets and raw logs are discarded; unrecognized
+output retains a fixed unknown finding. This changes reporting, not test execution.
+
+Actual reconstruction passed the unchanged source-base check against `ca09dc3` and
+the exact build hash above. Its different immutable Docker image ID was correctly
+accepted only after actual packaged provenance validation and pinned for execution.
+Reconstructing this owned disposable artifact is permitted packaging recreation,
+not extractor reimplementation or policy relaxation. Owned cleanup removed it; no
+retained image or historical Docker ID is a prerequisite for continuation.
+
+The final joined shutdown check was accepted in phase-three **attempt 4/5**.
+After revoked-access assertions pass, it requires a fresh completion marker written
+only after successful application lifespan exit, including the PDF processor's bounded
+close/join. Pinned Uvicorn 0.54.0 re-raises SIGTERM after graceful shutdown, so the
+expected subprocess status is `-SIGTERM`, not zero; that status without the fresh
+marker does not pass. A fixed `shutdown` substage isolates failures from revocation.
+Previously passing lifecycle/security/static/PG checks remain valid evidence; this
+fixture correction does not change product authorization, retention or parsing.
 
 ### Preserved phase-one repair history (superseded by verification above)
 
