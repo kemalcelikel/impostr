@@ -2,6 +2,13 @@
 
 ## Purpose and release boundary
 
+**Current PDF capability:** Confined extractor phase one is locally verified and
+committed in `ca09dc3`, including real decimal50MB text extraction, rejection/bounds,
+private channel denials and deadline/restart recovery with cleanup. Upload/DB retention,
+selected-PDF chat integration and local restore checks remain implementation work;
+do not present the standalone extractor as delivered attachment UI. Live testing
+remains deferred; this proof used synthetic PDFs only.
+
 **Latest owner scope — same-PC use and PDFs only:** Private HTTPS/phone/LAN access
 is removed from this version, not a readiness gate. Revisit only on a future owner
 request; keep loopback binding, no raw LAN shortcut. Attachments are ONLY text-readable

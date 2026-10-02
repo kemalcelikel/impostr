@@ -1367,7 +1367,35 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [!] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+## [ ] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+
+**Latest phase-one verified delivery:** Code/docs committed in `ca09dc3`. Coordinator
+56 pure tests and full reviewed `/usr/bin/python3 -B scripts/imp017_verify.py
+--reviewed-runtime` passed all gates: pinned build, namespace/file/socket denial,
+timeout/output/escaped-descendant cleanup, representative PDFs, decimal50MB success,
+expansion-limit/encrypted rejection, short-body/overrun/scratch reuse, peer credential
+denials, genuine new-listener readiness and whole-job deadline/restart extraction.
+Owned cleanup passed. Build provenance b976249c…4192/image68efe37a…dcaf recorded in
+local docs. Latest repair **1/3 used**, two unused; original phase-one5/5 and both
+previous3/3 histories remain. No provider/private input or privilege changes.
+
+Next owner-started root assignment resumes **phase two DB/intake**, then **phase three
+extraction/lifecycle**, each0/5; do not repeat verified sandbox. Entire IMP-017 remains
+incomplete until intake and durable lifecycle acceptance passes and is committed.
+Then continue IMP-018 phases4/5 each0/5, followed by IMP-011 local workflow/restore0/5
+within the already approved batch. Reuse valid evidence; review new data/model/fixture
+boundaries before actual execution. No automatic launch, live model/config discovery,
+push/PR or reopening cancelled HTTPS/other upload formats. Earlier failure checkpoints
+below are preserved history, superseded by this delivery.
+
+**Latest owner direction:** Three focused restart-repair attempts approved from
+`2a3d08c`, new0/3; original5/5 and both previous3/3 repair budgets preserved. Owner
+requests moving on, not repeated diagnostics. Correct stale-path readiness to prove
+new listener before a single recovery extraction; reuse prior PDF/containment checks.
+Add only fixed adapter-stage evidence needed to locate a concrete failure, no broad
+redesign or new acceptance scope. Verified phase-one delivery enables the remaining
+intake/extraction-lifecycle/UI/local-use batch; do not claim acceptance if recovery
+still fails. Same review/local commits/cleanup/no-privilege/no-live/no-auto-start limits.
 
 **Latest actual PDF/restart checkpoint:** Renewed repair **3/3 used**, original
 phase-one5/5 and prior repair3/3 retained; later phases0/5. Attempt1 introduced strict

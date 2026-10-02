@@ -2,6 +2,32 @@
 
 ## Latest owner-started PDF/local-use runner batch
 
+**Verified extractor delivery / next owner run:** Phase-one code is committed in
+`ca09dc3`. Coordinator56 tests and the full reviewed runtime verifier passed pinned
+build, containment, representative rejection/decimal50MB/expansion/encryption,
+channel/body/peer recovery, new-listener and whole-job deadline/restart, owned cleanup.
+Latest restart repair1/3 used (two unused), original5/5 and both earlier3/3 histories
+preserved. Old blocked startup/client/restart entries below are history, not gates.
+
+Owner-started root runner now resumes IMP-017 **phase two** DB/raw intake, then phase
+three extraction/lifecycle, commits accepted017, continues IMP-018 phases four/five
+PDF/composer/model receipt, then IMP-011 concrete local workflow/DB restore. Remaining
+PDF phases each0/5; local-use checks0/5. No rebuilding verified sandbox or recycling
+unused repair budgets. Whole017 is not delivered yet. Fresh fixture profiles must use
+actual committed inputs. Same synthetic-only/exact775 handoff/owned cleanup and
+no-live/no-private-config/no-push/no-auto-start limits. At launch overnight takes sole
+coordination; interactive implementation ends at this verified handoff.
+
+**Latest bounded restart repair:** Owner approved three focused attempts from
+`2a3d08c` and explicitly requested moving on without a diagnostic loop. New0/3;
+retain original5/5 and both earlier repair3/3 histories. Fix actual new-listener
+readiness, then verify deadline/restart recovery using existing representative checks.
+Reuse passing extraction/containment evidence. No broad redesign, blind extraction
+retries, policy relaxation, private data output or extra features. Interactive
+coordinator delegates implementation; review affected substantive changes before
+runtime. Runner stays stopped during repair; once phase-one acceptance passes,
+commit verified extractor and hand remaining phases back to owner-started runner.
+
 **Renewed PDF/channel repair:** Owner approved three further focused attempts after
 `7c5765f`, specifically to diagnose and fix the representative client failure. New
 budget0/3; retain original phase-one5/5 and earlier additional repair3/3, later phases0/5.
