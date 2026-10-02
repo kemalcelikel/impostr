@@ -1587,6 +1587,36 @@ existing code/logs. Local outcome bookkeeping only, no push/PR or runner restart
 
 ## [!] IMP-018 — Attach verified media to planning chat
 
+**Latest interactive outcome:** Additional repair **3/3 consumed**, historical
+phase-four5/5 and phase-five2/5 preserved. Attempt1 added exact failure-line projection
+and reconciled runtime-identical baseline4d46a40; attempt2 fixed the intermittent
+receipt assertion selecting turns[0] after a follow-up with tied SQLite timestamps.
+It now selects the original turn ID and still requires sent; deterministic reversed
+UUID/timestamp regression rejects real receipt loss. Product deletion protections
+were not relaxed. Attempt3 isolates fixed-file Ruff input/output via container Python;
+actual output capture remains empty without its expected diagnostic metrics.
+
+Coordinator repeatedly passed focused API tests, PostgreSQL3 capture/delete race and
+Ruff lint; pure74 tests passed. Exact31 inputs validated, migration0010 passed. All
+owned cleanup passed. Format mismatch remains in tests/test_chat_references.py and
+the formatter's zero-output cause is unknown. Mypy and full synthetic inference/receipt/
+purge verification were not reached; composer still unimplemented. Preserve candidate
+uncommitted, no backend/whole-item delivery claim. Further full rebuild guessing is
+not useful: next finite authorized check should isolate the one owned command/image/
+output attachment with a fixed sentinel and source-only capture. No new installation,
+private inputs, weakened fingerprints or automatic runner restart.
+
+**Owner-approved deletion/recovery repair:** Owner directed “do it” after the
+`4d46a40` stop. New three focused phase-four repair attempts0/3, retaining original
+phase-four5/5 and phase-five2/5; all prior work/budgets preserved. Repair exact remaining
+delete/outage assertion and verify pinned API/PostgreSQL/static plus actual PDF inference
+receipt/purge behavior. Interactive tech-lead delegates code, selectively reviews
+substantive fixes and owns synthetic runtime/cleanup checks. No broad redesign or
+assertion removal; user and assistant quotations remain distinct from structured
+attachment-text copies. Exact committed-base/input reconciliation required; no denied
+tool bypass, private/live data, installs, pushes or automatic runner start. Composer
+and rendered phase-five work remain incomplete. Keep blocked until genuine acceptance.
+
 **Execution stop (2026-10-02):** Baseline `8324713`, existing `feature/impostr-v1`.
 Phase four **5/5 exhausted**; phase five **2/5 used** (initial verifier plus provenance/
 owner-overlay correction). Preserve all earlier PDF budgets. Uncommitted selected-reference,

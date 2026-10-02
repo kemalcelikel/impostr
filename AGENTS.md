@@ -2,6 +2,31 @@
 
 ## Latest owner-started PDF/local-use runner batch
 
+**Latest deletion-repair checkpoint:** Additional repair3/3 used, original phase-four
+5/5 and phase-five2/5 retained. Outage test was intermittently selecting a new queued
+turn by list position when SQLite timestamps tied; original-ID assertion and regression
+now preserve the exact sent-receipt requirement. Coordinator focused API, fresh
+PostgreSQL3 and Ruff lint pass; all owned cleanup passes. Pure74 tests passed.
+Pinned formatter still rejects `tests/test_chat_references.py`; attempts to capture
+its formatted source return zero output, cause unknown. Do not repeat full builds to
+guess output routing. Mypy/full inference/purge proof and composer/rendered work are
+unverified; candidate remains uncommitted, IMP-018 blocked and runner stopped.
+Next limited investigation must isolate the single owned formatter command/image/
+attachment with a fixed sentinel, retaining source fingerprints and cleanup. Requires
+renewed scope; no installation, assertion waiver or false backend delivery.
+
+**Current PDF-to-chat deletion repair:** After stop `4d46a40`, owner approved three
+additional focused attempts to finish phase-four deletion/outage and backend acceptance.
+New0/3; preserve original phase-four5/5 and phase-five2/5 histories, all delivered017
+code and the full uncommitted018 candidate. Interactive coordinator delegates senior
+repair and owns disposable checks; runner stays stopped. First locate the exact failing
+assertion, preserve deletion fencing, retained-payload purge, idempotency and user/agent
+quotation retention. Review substantive repairs; pass relevant API/PostgreSQL/static
+and actual inference/receipt boundaries before backend delivery. No sandbox redesign,
+private configuration/live model/permission expansion/install/push/automatic starts.
+Reconcile exact verifier inputs/base without bypassing fingerprint checks. Composer
+work remains pending; don't mark whole018 done from API-only success.
+
 **Latest PDF storage/lifecycle delivery:** Intake `269710f` and lifecycle `8925dfa`
 complete IMP-017. Phase two2/5, phase three4/5 used; earlier extractor/repair histories
 preserved. Coordinator full lifecycle verifier passed focused API/static/type/format,
