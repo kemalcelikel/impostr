@@ -1367,6 +1367,76 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
+## [!] IMP-025 — Send authorized original PDFs through OpenCode and the model relay
+
+**Depends on:** IMP-005, IMP-017
+
+Replace the unfinished derivative-text handoff with native PDF file parts under
+PROJECT.md's Native PDF contract. Reuse the preserved IMP-018 candidate, not a new
+chat implementation. This outcome delivers backend/API/worker/transport behavior;
+composer is IMP-026 and physical extractor removal is IMP-027. Attempts initially0/3.
+
+**Current outcome (2026-10-14): blocked on pinned runtime capability.** Original-file
+capture/inline transport, per-call authorization, exact receipts and forward migrations
+0011/0012 are implemented but unaccepted; full dirty IMP-018/025 candidate is preserved.
+Independent boundary/harness reviews and affected repairs passed. Coordinator exact-input
+209-file build, fresh PostgreSQL preservation/legacy-completion fence/send constraints/
+capture-delete race (2 tests), migration0012, focused API, Ruff lint/format and mypy42
+passed. Native execution stopped at broker startup: only the public OpenCode executable
+hash differs from the required1.18.34 pin; installed version is1.19.0. No receiver/PDF
+byte, tool-follow-up/history, near-bound or native outage/purge runtime proof passed.
+Repairs **2/3 used**, one remains; old budgets unchanged. All owned cleanup passed.
+Owner must provide the approved pinned capability or authorize a bounded reviewed
+compatibility decision; no agent installation, pin waiver or automatic requeue.
+Verifier candidate fingerprint over58bee09:
+`4ad667f43837325cbe40f64693a5bd025adf7d0c45f06e28f6000f0e057c7ad4`.
+After authorized recovery, reconcile the actual bookkeeping HEAD/fingerprint rather
+than bypassing the verifier's exact-base check. No implementation delivery, push/PR,
+live/provider test or downstream-task acceptance; affected docs record this stop.
+
+### Acceptance
+
+- Uploads become available for native attachment without extractor availability or
+  derived-text readiness. Before exposing native status/availability, disable legacy
+  extraction claims and drain or fence outstanding completions so old rejection or
+  retry-exhaustion cleanup cannot remove retained originals. Physical removal is IMP-027.
+  Store original identity/size, not base64 in turn/event JSON.
+  Keep metadata lists binary-free. Existing stored originals remain usable where they
+  meet native limits; failed legacy extraction with no original is honestly unavailable.
+  Preserve originals/history with forward schema changes, never rewrite migrations.
+- Explicit selection binds ordered IDs/original hashes to durable idempotent turns.
+  Only authorized selected originals/history reach OpenCode native file parts and Azure
+  Responses inline `input_file`; no remote URLs/provider upload store, arbitrary file
+  reads, image types, general proxy or credentials enter the worker. Planning edits,
+  native questions/permissions and tool follow-ups keep working with attached files.
+- Derive/document finite PDF-bearing framing/body limits for base64 + JSON + existing
+  text context; preserve small non-PDF control/text limits. Enforce the per-file and
+  combined request allowance, including reconstructed history/follow-ups, before send.
+  Over-limit legacy originals remain downloadable/deletable. No silent truncation,
+  history dropping, blind resubmission or duplicate replies on reconnect/restart.
+- Adapt trusted receipts to exact ordered original hashes and serialized request bytes,
+  preserving sent/uncertain/failed-before-send semantics. Wrong/missing/foreign/changed
+  files cannot produce a matching sent receipt; a provider rejection is visible and
+  not called successful reading. Revalidate deletion/revocation before each submission.
+- Preserve deletion fencing, confirmed stop/visible active conflict, outage cleanup
+  recovery and purge of DB/broker/native-session/workspace structured content copies.
+  Retain non-content idempotency/receipt history, human/assistant quotations and the
+  already-observed sent fact; prior provider input cannot be retracted.
+
+### Focused verification
+
+Independent review of changed binary/relay/deletion/migration boundaries before owned
+synthetic execution. Pass the actual pinned OpenCode→shim→host-transport path with a
+synthetic receiver inspecting exact decoded PDF bytes/hash, not just worker ACK or
+"PDF read successfully". Exercise one native planning tool follow-up and reconstruct
+history with the file; reject altered/foreign/deleted inputs and byte/aggregate overflow.
+Check admission near the selected native bound through actual transport, not only constants.
+Focused API/static and fresh PostgreSQL migration/preservation plus capture/delete race;
+legacy rejection completion cannot overwrite/delete a transitioned original; one
+outage/restart receipt/purge regression. Reuse unchanged chat evidence and owned
+fixtures/cleanup; no real Azure call or parser rebuild. Existing text-only verifiers
+and fingerprints must be adapted to actual inputs, never relabeled as PDF proof.
+
 ## [x] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
 
 **Latest delivery:** Extractor `ca09dc3`, intake `269710f`, lifecycle `8925dfa` complete

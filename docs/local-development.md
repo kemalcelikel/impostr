@@ -10,6 +10,42 @@ shared-server release. Candidate review evidence applies only to the exact
 reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
 delivered release. Consult `BACKLOG.md` for task outcomes.
 
+## Native PDF plan — IMP-025 candidate blocked, not accepted (2026-10-14)
+
+The native-PDF sequence remains IMP-025 original-file handoff and exact receipts,
+IMP-026 composer, IMP-027 extractor retirement, then IMP-011 local workflow/restore.
+IMP-025 has an implemented but **unaccepted** candidate for original PDF input. It
+must not be described as delivered or usable. IMP-026's composer is absent and
+IMP-027's extractor removal remains pending. Preserve prior outcomes, budgets, logs,
+and private logs; IMP-018's historical budget and candidate remain unchanged.
+
+The coordinator's candidate fingerprint
+`4ad667f43837325cbe40f64693a5bd025adf7d0c45f06e28f6000f0e057c7ad4` over base
+`58bee09` passed frozen 209-input verification, build, two fresh PostgreSQL tests for
+legacy-completion fencing, preservation/schema checks and capture/delete race,
+migration `0012`, focused API checks, Ruff lint/format, and mypy (42). However,
+broker startup failed before any native receiver ran. `check_runtime` confirmed the
+only public OpenCode executable hash drift; `opencode --version` reported 1.19.0,
+while the boundary pins 1.18.34. Thus native byte/path/follow-up/history/near-bound/
+outage runtime behavior is not verified, and this missing pinned capability blocks
+acceptance. Two of three focused repairs have been used (1 remains).
+
+The unaccepted transport allocation is 68 MiB (71,303,168 bytes) for PDF-bearing
+frames/requests, with a separately checked 512 KiB non-binary envelope and existing
+small text/control/tool limits retained. At most 416 historical/current file
+occurrences contribute to a strict aggregate below 50,000,000 original bytes:
+base64 contributes at most 66,668,328 bytes, leaving room for that envelope. Each
+occurrence counts, including repeated history/tool follow-ups; no silent truncation
+or history dropping is permitted. These calculations are not near-bound runtime proof.
+
+Do not rebuild parsers, install on the host, waive the pin, or adopt a new runtime.
+Further work requires the owner to provide the approved pinned runtime or explicitly
+authorize a bounded, reviewed compatibility decision; neither installation/update
+nor pin change is automatic. Real-provider testing remains human-deferred and must
+not be run as part of this work. The older PDF sections retain delivered legacy
+evidence and superseded IMP-018 diagnostics; their parser/formatter instructions are
+not current assignments or native-PDF proof.
+
 ## PDF extractor phase one — locally verified (IMP-017)
 
 `compose.pdf.yaml` is standalone, opt-in boundary packaging, not an ordinary-stack
