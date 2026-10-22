@@ -7,7 +7,35 @@ export type ChatEvent = {
   type: string;
   data: Record<string, unknown>;
 };
-export type ChatTurn = { id: string; prompt: string; state: string };
+export type PdfSelection = {
+  attachment_id: string;
+  expected_sha256: string;
+  reference_kind: "native-original-v1" | "legacy-text-v1";
+};
+export type ChatAttachment = Omit<PdfSelection, "reference_kind"> & {
+  reference_kind: "native-original-v1";
+  filename: string;
+  original_size: number;
+};
+export type ChatTurn = {
+  id: string;
+  prompt: string;
+  state: string;
+  selections?: PdfSelection[];
+  references?: {
+    attachment_id: string;
+    filename: string;
+    original_size: number | null;
+    kind?: string;
+    availability?: "available" | "unavailable";
+  }[];
+  submission?: {
+    status: "queued" | "sent" | "failed-before-send" | "uncertain";
+    reconciliation_pending: boolean;
+    reference_kind?: "none" | "native-original-v1" | "legacy-text-v1" | "mixed";
+    meaning?: string;
+  };
+};
 export type Question = {
   header: string;
   question: string;
@@ -23,7 +51,7 @@ export type Interaction = {
   data: { questions?: Question[]; permission?: string; once_allowed?: boolean };
 };
 export type ChatHistory = { turns: ChatTurn[]; interactions: Interaction[] };
-export type ChatDraft = { text: string; requestId: string };
+export type ChatDraft = { text: string; requestId: string; attachments?: ChatAttachment[] };
 export type ChatMemory = {
   drafts: Record<string, ChatDraft>;
   answers: Record<string, string[][]>;

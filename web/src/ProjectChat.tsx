@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, apiRequest } from "./api";
+import AttachmentComposer from "./AttachmentComposer";
 import {
   mergeEvents,
   streamChat,
@@ -8,6 +9,7 @@ import {
   type ChatHistory,
   type ChatMemory,
   type ChatTurn,
+  type ChatAttachment,
   type Interaction,
 } from "./chat";
 
@@ -15,6 +17,8 @@ const control =
   "min-h-11 rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50";
 type Conversation = { id: string; title: string };
 const ignoreMemory: (snapshot: ChatMemory) => void = () => {};
+const needsReceiptRefresh = (turn: ChatTurn) =>
+  turn.submission?.reconciliation_pending || turn.submission?.status === "queued";
 
 function InteractionCard({
   interaction,
@@ -182,14 +186,20 @@ export default function ProjectChat({
     callbacks.current = { onSessionExpired, onDocumentsChanged };
   });
   const draft = draftsMemory.drafts[selected]?.text ?? "";
+  const selectedAttachments = draftsMemory.drafts[selected]?.attachments ?? [];
   const activeTurn = history.turns.find(
     (turn) =>
       !terminalStates.has(turn.state) &&
       !events.some((event) => event.turn_id === turn.id && terminalStates.has(event.type)),
   );
   const pending =
-    Object.values(draftsMemory.drafts).some((value) => value.text.length > 0) ||
-    Object.values(draftsMemory.answers).some((values) => values.some((value) => value.length));
+    Object.values(draftsMemory.drafts).some(
+      (value) => value.text.length > 0 || Boolean(value.attachments?.length),
+    ) || Object.values(draftsMemory.answers).some((values) => values.some((value) => value.length));
+  const pendingReceiptKey = history.turns
+    .filter(needsReceiptRefresh)
+    .map((turn) => turn.id)
+    .join(",");
   useEffect(() => {
     onPendingChange(pending);
   }, [pending, onPendingChange]);
@@ -298,6 +308,38 @@ export default function ProjectChat({
     };
   }, [root, selected, retry]);
 
+  useEffect(() => {
+    if (!selected || !pendingReceiptKey) return;
+    const controller = new AbortController();
+    let remaining = 5;
+    let timer: ReturnType<typeof setTimeout>;
+    const base = `${root}/${encodeURIComponent(selected)}`;
+    async function reconcilePendingReceipts(): Promise<void> {
+      if (controller.signal.aborted || remaining === 0) return;
+      remaining -= 1;
+      try {
+        const value = await apiRequest<ChatHistory>(base, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setHistory(value);
+        if (value.turns.some(needsReceiptRefresh) && remaining > 0) {
+          timer = setTimeout(reconcilePendingReceipts, 1500);
+        }
+      } catch (failure) {
+        if (controller.signal.aborted) return;
+        if (failure instanceof ApiError && failure.status === 401) {
+          callbacks.current.onSessionExpired();
+          return;
+        }
+        // History remains visible; a later reconnect revalidates receipts.
+      }
+    }
+    timer = setTimeout(reconcilePendingReceipts, 1500);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [root, selected, retry, pendingReceiptKey]);
+
   async function mutate<T>(
     path: string,
     body?: unknown,
@@ -324,7 +366,9 @@ export default function ProjectChat({
         callbacks.current.onSessionExpired();
       } else
         setError(
-          failure instanceof Error ? failure.message : "Chat request failed. Your text is kept.",
+          failure instanceof Error
+            ? failure.message
+            : "Chat request failed. Your message and PDF selections are kept.",
         );
     } finally {
       actionBusy.current = false;
@@ -360,6 +404,13 @@ export default function ProjectChat({
     const value = await mutate<ChatTurn>(`${root}/${selected}/turns`, {
       request_id: sending.requestId,
       prompt: sending.text,
+      selections: (sending.attachments ?? []).map(
+        ({ attachment_id, expected_sha256, reference_kind }) => ({
+          attachment_id,
+          expected_sha256,
+          reference_kind,
+        }),
+      ),
     });
     if (value) {
       setDraftsMemory((current) => {
@@ -516,6 +567,46 @@ export default function ProjectChat({
             <article className="grid min-w-0 gap-3" key={turn.id}>
               <p className="text-xs font-semibold text-copy-muted">You</p>
               <p className="break-words whitespace-pre-wrap text-sm">{turn.prompt}</p>
+              {turn.references?.length ? (
+                <ul
+                  aria-label={`PDF references for ${turn.prompt || "this turn"}`}
+                  className="grid gap-1"
+                >
+                  {turn.references.map((reference) => (
+                    <li className="break-all text-xs text-copy-muted" key={reference.attachment_id}>
+                      {reference.filename} ·{" "}
+                      {reference.original_size === null
+                        ? "size unavailable"
+                        : `${reference.original_size.toLocaleString()} bytes`}{" "}
+                      {reference.kind === "native-original-v1"
+                        ? reference.availability === "unavailable"
+                          ? "historical reference; original unavailable"
+                          : "original PDF reference"
+                        : "historical extracted-text reference; original-file submission is not established"}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {turn.submission ? (
+                <p className="text-xs text-copy-muted" role="status">
+                  {turn.submission.status === "sent"
+                    ? turn.submission.reference_kind === "native-original-v1"
+                      ? "Original PDF sent to Azure (submission confirmed; provider acceptance is not implied)"
+                      : turn.submission.reference_kind === "legacy-text-v1" ||
+                          turn.submission.reference_kind === "mixed"
+                        ? "Sent (historical extracted-text or mixed submission; original-file delivery is not established)"
+                        : "Sent (submission confirmed; provider acceptance is not implied)"
+                    : turn.submission.status === "failed-before-send"
+                      ? "Not sent (receipt confirms no model submission)"
+                      : turn.submission.status === "uncertain"
+                        ? `Uncertain${
+                            turn.submission.reconciliation_pending
+                              ? " · checking receipt"
+                              : " · no automatic resubmission"
+                          }`
+                        : "Sending · awaiting submission receipt"}
+                </p>
+              ) : null}
               <p className="text-xs font-semibold text-accent">tech-lead · {turn.state}</p>
               <p className="break-words whitespace-pre-wrap text-sm leading-6">
                 {turnEvents
@@ -600,6 +691,30 @@ export default function ProjectChat({
           );
         })}
       </div>
+      {selected ? (
+        <AttachmentComposer
+          key={`${projectId}:${selected}`}
+          projectId={projectId}
+          conversationId={selected}
+          csrfToken={csrfToken}
+          selected={selectedAttachments}
+          disabled={busy}
+          onSelectionChange={(attachments: ChatAttachment[]) => {
+            setDraftsMemory((snapshot) => ({
+              ...snapshot,
+              drafts: {
+                ...snapshot.drafts,
+                [selected]: {
+                  text: snapshot.drafts[selected]?.text ?? "",
+                  requestId: crypto.randomUUID(),
+                  attachments,
+                },
+              },
+            }));
+          }}
+          onSessionExpired={onSessionExpired}
+        />
+      ) : null}
       <form className="grid gap-2" onSubmit={(event) => void send(event)}>
         <label htmlFor={`chat-composer-${projectId}`} className="text-sm font-medium">
           Message tech-lead
@@ -615,7 +730,14 @@ export default function ProjectChat({
             const requestId = crypto.randomUUID();
             setDraftsMemory((current) => ({
               ...current,
-              drafts: { ...current.drafts, [selected]: { text, requestId } },
+              drafts: {
+                ...current.drafts,
+                [selected]: {
+                  text,
+                  requestId,
+                  attachments: current.drafts[selected]?.attachments ?? [],
+                },
+              },
             }));
           }}
           onKeyDown={(event) => {
@@ -635,7 +757,7 @@ export default function ProjectChat({
             disabled={!selected || busy || Boolean(activeTurn) || !draft.trim()}
             type="submit"
           >
-            Send
+            {busy ? "Sending…" : "Send"}
           </button>
           {activeTurn ? (
             <button

@@ -39,6 +39,7 @@ import urllib.request
 import uuid
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path, PurePosixPath
@@ -829,6 +830,79 @@ IMP024_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
         "api/migrations/versions/20261001_0007_durable_chat.py", *NESTED_TEMPLATE_PATHS,
     ),
     host_inputs=IMP024_HOST_INPUTS,
+)
+
+# IMP-026 is intentionally anchored to the verified native backend delivery, not
+# IMP-024's older text-chat profile. Only the five active composer source files
+# are overlaid; changed tests and this fixture harness are fingerprinted but not
+# copied into the app. The committed native backend and its ordinary host
+# Connection dependencies are pinned by the base commit/support-file digests.
+IMP026_BASE_COMMIT = "bd6454c77f819d106c56c599f46602cb1f01c9fe"
+IMP026_NATIVE_ANCESTOR = "a966d7775567860fb5943fb9db080f241aadc27d"
+IMP026_BOOKKEEPING_PATHS = frozenset({
+    "AGENTS.md", "PROJECT.md", "BACKLOG.md", "DONE.md", "docs/agent-history.md",
+    "docs/local-development.md", "docs/local-scope-history.md",
+})
+IMP026_RUNTIME_INPUTS = (
+    ("web/src/AttachmentComposer.tsx", "added"),
+    ("web/src/ProjectChat.tsx", "modified"),
+    ("web/src/chat.ts", "modified"),
+    ("web/src/api.ts", "modified"),
+    ("scripts/imp026_browser.py", "added"),
+)
+IMP026_TEST_INPUTS = (("web/src/ProjectChat.test.tsx", "modified"),)
+IMP026_HARNESS_INPUTS = (
+    ("scripts/local_browser_fixture.py", "modified"),
+    ("scripts/imp026_browser_fixture.py", "added"),
+    ("scripts/test_imp026_browser_fixture.py", "added"),
+)
+IMP026_SUPPORT_INPUTS = (
+    "compose.chat.yaml",
+    "scripts/imp002_diagnostic.py", "scripts/imp002_prototype.py", "scripts/imp002_relay.py",
+    "scripts/imp002_transport.py", "scripts/imp002_worker.py", "scripts/imp005_connection.py",
+    "scripts/imp005_verify.py", "scripts/imp017_fixtures.py", "scripts/imp018_receipts.py", "scripts/imp023_worker.py",
+    "scripts/imp024_broker.py", "scripts/imp024_inference.py", "scripts/imp024_operator.py",
+    "scripts/imp024_operator_helper.py", "scripts/imp024_operator_product.py",
+    "scripts/imp024_operator_transport.py", "scripts/imp024_operator_verify.py",
+    "scripts/imp024_protocol.py", "scripts/imp024_product_worker.py", "scripts/imp024_verify.py",
+    "scripts/imp024_worker.py", "scripts/imp025_verify.py",
+)
+IMP026_CANDIDATE_DOCKERIGNORE_RULES = (
+    "**", "!api/", "!api/Dockerfile", "!api/requirements.lock", "!api/requirements-dev.lock",
+    "!api/pyproject.toml", "!api/alembic.ini", "!api/app/", "!api/app/**",
+    "!api/migrations/", "!api/migrations/**", "!api/tests/", "!api/tests/**",
+    "!scripts/", "!scripts/backlog.py", "!scripts/imp017_fixtures.py",
+    "!overnight-agent/", "!overnight-agent/PROJECT.md.example",
+    "!overnight-agent/AGENTS.md.example", "!overnight-agent/BACKLOG.md.example",
+    "api/**/__pycache__/", "api/**/.pytest_cache/", "api/**/.mypy_cache/",
+    "api/**/.ruff_cache/", "api/**/*.pyc", "api/**/.env", "api/**/.env.*",
+    "!pdf-extractor/", "!pdf-extractor/Dockerfile", "!pdf-extractor/dependencies.lock.json",
+    "!pdf-extractor/build.py", "!pdf-extractor/worker.py", "!pdf-extractor/structure.py",
+    "!pdf-extractor/bounded_json.py", "!pdf-extractor/process.py", "!pdf-extractor/supervisor.py",
+    "!pdf-extractor/bootstrap.py", "!pdf-extractor/probe.py",
+)
+IMP026_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
+    base_commit=IMP026_BASE_COMMIT,
+    reviewed_inputs=IMP026_RUNTIME_INPUTS,
+    nonruntime_test_changes=IMP026_TEST_INPUTS,
+    fingerprint_test_changes=True,
+    strict_scope=True,
+    status_paths=tuple(path for path, _status in (
+        *IMP026_RUNTIME_INPUTS, *IMP026_TEST_INPUTS, *IMP026_HARNESS_INPUTS,
+    )),
+    allowed_input_modes=frozenset({0o644, 0o664}),
+    harness_changes=IMP026_HARNESS_INPUTS,
+    fingerprint_harness_changes=True,
+    committed_support_paths=IMP026_SUPPORT_INPUTS,
+    required_snapshot_paths=(
+        ".dockerignore", "compose.yaml", "compose.chat.yaml", "api/Dockerfile",
+        "api/app/chat.py", "api/app/chat_protocol.py", "api/app/chat_broker.py",
+        "api/app/chat_dispatch.py", "api/app/chat_receipts.py", "api/app/chat_references.py",
+        "api/migrations/versions/20261014_0011_native_pdf_storage.py",
+        "api/migrations/versions/20261014_0012_native_send_authorization.py",
+        "web/src/ProjectChat.tsx", "web/src/AttachmentComposer.tsx",
+        "scripts/imp025_verify.py", "scripts/imp005_connection.py",
+    ),
 )
 
 
@@ -2229,6 +2303,9 @@ def validate_candidate_reviewed_paths(
             or not (_is_candidate_build_scope(path) or (
                 policy is IMP024_CANDIDATE_PREVIEW_POLICY
                 and path == "scripts/imp024_broker.py"
+            ) or (
+                policy is IMP026_CANDIDATE_PREVIEW_POLICY
+                and path == "scripts/imp026_browser.py"
             ))
             or _is_candidate_secret_path(path)
         ):
@@ -2645,6 +2722,13 @@ def _collect_candidate_worktree_inputs(
         private_home=private_home,
         status_paths=policy.status_paths or CANDIDATE_STATUS_PATHS,
     )
+    if policy is IMP026_CANDIDATE_PREVIEW_POLICY:
+        # A locally committed declared repair is still captured byte-for-byte.
+        # Staged/unexpected worktree states continue to be rejected below.
+        _head, committed = imp026_verified_head(repository_root, private_home=private_home)
+        for path, status in committed.items():
+            if path in policy.status_paths:
+                changes.setdefault(path, status)
 
     for path, status in changes.items():
         if path in expected:
@@ -2761,6 +2845,44 @@ def _resolve_head_commit(repository_root: Path, *, private_home: Path) -> str:
     ):
         raise FixtureError("The committed source revision could not be verified.")
     return commit
+
+
+def imp026_verified_head(repository_root: Path, *, private_home: Path) -> tuple[str, dict[str, str]]:
+    """Admit only native ancestry plus declared composer repairs/bookkeeping."""
+    head = _resolve_head_commit(repository_root, private_home=private_home)
+    commands = (
+        ["merge-base", "--is-ancestor", IMP026_NATIVE_ANCESTOR, IMP026_BASE_COMMIT],
+        ["merge-base", "--is-ancestor", IMP026_BASE_COMMIT, head],
+        ["diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status", "-z",
+         IMP026_BASE_COMMIT, head],
+    )
+    try:
+        for arguments in commands:
+            result = subprocess.run(
+                ["git", *arguments], cwd=repository_root, env=_git_environment(private_home),
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                check=False, timeout=30,
+            )
+            if result.returncode != 0 or len(result.stdout) > 128 * 1024:
+                raise FixtureError("The native candidate ancestry could not be verified.")
+    except (OSError, subprocess.SubprocessError):
+        raise FixtureError("The native candidate ancestry could not be verified.") from None
+    fields = result.stdout.split(b"\0")
+    if fields[-1] != b"" or len(fields) % 2 != 1:
+        raise FixtureError("The native candidate committed scope is invalid.")
+    declared = dict((*IMP026_RUNTIME_INPUTS, *IMP026_TEST_INPUTS, *IMP026_HARNESS_INPUTS))
+    changes = {}
+    for code, raw_path in zip(fields[0:-1:2], fields[1:-1:2]):
+        try:
+            path = raw_path.decode("utf-8", "strict")
+        except UnicodeError:
+            raise FixtureError("The native candidate committed scope is invalid.") from None
+        status = {b"A": "added", b"M": "modified"}.get(code)
+        if (path in changes or status is None
+                or (path not in IMP026_BOOKKEEPING_PATHS and declared.get(path) != status)):
+            raise FixtureError("The native candidate contains an undeclared committed change.")
+        changes[path] = status
+    return head, changes
 
 
 def _write_candidate_snapshot_file(
@@ -2926,7 +3048,12 @@ def archive_candidate_snapshot(
     """Overlay only the fixed dirty runtime allowlist on its pinned commit."""
     repository = repository_root.resolve(strict=True)
     commit = _resolve_head_commit(repository, private_home=private_home)
-    if commit != policy.base_commit:
+    native = policy is IMP026_CANDIDATE_PREVIEW_POLICY
+    if native:
+        verified_head, _changes = imp026_verified_head(repository, private_home=private_home)
+        if commit != verified_head:
+            raise FixtureError("The native candidate HEAD changed during capture.")
+    elif commit != policy.base_commit:
         raise FixtureError("Candidate preview is pinned to a different committed base.")
     records, contents = _collect_candidate_worktree_inputs(
         repository,
@@ -2945,13 +3072,8 @@ def archive_candidate_snapshot(
         private_home=private_home,
         expected_commit=commit,
         additional_paths=policy.committed_support_paths,
+        native_candidate=native,
     )
-    for path in policy.required_snapshot_paths:
-        _read_candidate_file(
-            destination,
-            path,
-            maximum_bytes=policy.max_file_bytes,
-        )
     runtime_paths = {path for path, _status in policy.reviewed_inputs}
     if policy.host_inputs:
         # The synthetic overlay is inventory-only: preview generates its one
@@ -2968,11 +3090,21 @@ def archive_candidate_snapshot(
     for record in records:
         if record.path not in runtime_paths or record.status == "committed":
             continue
+        status = record.status
+        if native and status == "added" and (destination / record.path).exists():
+            # The verified HEAD may already contain this declared addition.
+            status = "modified"
         _write_candidate_snapshot_file(
             destination,
             record.path,
             contents[record.path],
-            status=record.status,
+            status=status,
+        )
+    for path in policy.required_snapshot_paths:
+        _read_candidate_file(
+            destination,
+            path,
+            maximum_bytes=policy.max_file_bytes,
         )
     support_file_digests = tuple(
         (
@@ -3011,6 +3143,7 @@ def validate_candidate_dockerignore(
     imp014: bool = False,
     imp010: bool = False,
     imp024: bool = False,
+    imp026: bool = False,
 ) -> None:
     """Keep each candidate's root-context build limited to its reviewed inputs."""
     try:
@@ -3026,9 +3159,11 @@ def validate_candidate_dockerignore(
         )
     except UnicodeDecodeError:
         raise FixtureError("The candidate root build ignore file is invalid.") from None
-    if sum((imp007, imp014, imp010, imp024)) > 1:
+    if sum((imp007, imp014, imp010, imp024, imp026)) > 1:
         raise FixtureError("The candidate root build profile is ambiguous.")
-    if imp010 or imp014 or imp024:
+    if imp026:
+        expected_rules = IMP026_CANDIDATE_DOCKERIGNORE_RULES
+    elif imp010 or imp014 or imp024:
         expected_rules = (
             IMP010_CANDIDATE_DOCKERIGNORE_RULES
             if imp010
@@ -3115,11 +3250,17 @@ def archive_head_snapshot(
     private_home: Path,
     expected_commit: str | None = None,
     additional_paths: Sequence[str] = (),
+    native_candidate: bool = False,
 ) -> str:
     """Create an isolated source tree from one resolved HEAD commit, never the worktree."""
     allowed_support_files = APP_SNAPSHOT_FILES | APP_SNAPSHOT_SUPPORT_FILES
     if expected_commit == IMP024_CANDIDATE_BASE_COMMIT:
         allowed_support_files |= frozenset((*IMP024_HOST_INPUTS, "scripts/imp024_browser.py"))
+    if native_candidate:
+        head, _changes = imp026_verified_head(repository_root, private_home=private_home)
+        if expected_commit != head:
+            raise FixtureError("The native snapshot HEAD changed during capture.")
+        allowed_support_files |= frozenset(IMP026_SUPPORT_INPUTS)
     if len(set(additional_paths)) != len(additional_paths) or any(
         path not in allowed_support_files for path in additional_paths
     ):
@@ -3742,12 +3883,15 @@ class ComposeController:
         imp014_candidate: bool = False,
         imp010_candidate: bool = False,
         imp024_candidate: bool = False,
+        imp026_candidate: bool = False,
         committed_migration_profile: str | None = None,
     ) -> None:
-        if sum((approval_candidate, imp007_candidate, imp014_candidate, imp010_candidate, imp024_candidate)) > 1:
+        if sum((approval_candidate, imp007_candidate, imp014_candidate, imp010_candidate,
+                imp024_candidate, imp026_candidate)) > 1:
             raise FixtureError("A candidate snapshot cannot select two migration profiles.")
         if (
-            approval_candidate or imp007_candidate or imp014_candidate or imp010_candidate or imp024_candidate
+            approval_candidate or imp007_candidate or imp014_candidate or imp010_candidate
+            or imp024_candidate or imp026_candidate
         ) and not candidate:
             profile = (
                 "IMP-013"
@@ -3779,6 +3923,7 @@ class ComposeController:
         self.imp014_candidate = imp014_candidate
         self.imp010_candidate = imp010_candidate
         self.imp024_candidate = imp024_candidate
+        self.imp026_candidate = imp026_candidate
         self.committed_migration_profile = committed_migration_profile
 
     def command(self, arguments: Sequence[str]) -> list[str]:
@@ -3954,12 +4099,13 @@ class ComposeController:
         )
 
     def migrate(self) -> str:
-        if self.imp024_candidate:
+        if self.imp024_candidate or self.imp026_candidate:
             self.invoke(["run", "--rm", "api", "alembic", "upgrade", "head"], label="fresh chat migration", timeout=300)
             current = self.invoke(["run", "--rm", "api", "alembic", "current"], label="chat migration head", capture_stdout=True)
-            if migration_revision_status(current, expected_revision="20261001_0007") != "expected":
+            expected_revision = "20261014_0012" if self.imp026_candidate else "20261001_0007"
+            if migration_revision_status(current, expected_revision=expected_revision) != "expected":
                 raise FixtureError("The chat migration head is unexpected.")
-            return "0007 expected"
+            return "0012 expected" if self.imp026_candidate else "0007 expected"
         if self.imp010_candidate:
             migration_profile = "imp010"
         elif self.imp014_candidate:
@@ -4396,13 +4542,14 @@ def validate_candidate_compose_config(
     source_dir: Path,
     *,
     chat_directory: Path | None = None,
+    native_chat: bool = False,
 ) -> None:
     """Apply the committed fixture's safety checks plus the candidate root context."""
     if chat_directory is not None:
         # Remove ONLY the validated exception from a copy for the original full
         # no-host-attachment checks. Unknown mounts/options still fail there.
         config = json.loads(config_text)
-        validate_chat_bind(config, identity, chat_directory)
+        validate_chat_bind(config, identity, chat_directory, native=native_chat)
         api = config["services"]["api"]
         del api["volumes"]
         del api["environment"]["IMPOSTR_CHAT_ENABLED"]
@@ -4535,8 +4682,10 @@ def validate_candidate_compose_config(
         raise FixtureError("The candidate Compose configuration failed safety checks.") from None
 
 
-def validate_chat_bind(config: Any, identity: RunIdentity, directory: Path) -> None:
+def validate_chat_bind(config: Any, identity: RunIdentity, directory: Path, *, native: bool = False) -> None:
     expected = Path("/tmp/opencode") / ("impostr-browser-chat-" + identity.run_id)
+    if native:
+        expected = expected / "r/channel"
     if directory != expected:
         raise FixtureError("The chat bind is not this run's exact owned directory.")
     try:
@@ -4956,7 +5105,7 @@ class FixtureSupervisor:
             r"[0-9a-f]{64}", candidate_fingerprint
         ) is None:
             raise FixtureError("The candidate fingerprint must be a lowercase SHA-256 value.")
-        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010", "imp024"}:
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010", "imp024", "imp026"}:
             raise FixtureError("The candidate review scope is invalid.")
         self.candidate_preflight = candidate_preflight
         self.candidate_fingerprint = candidate_fingerprint
@@ -4974,8 +5123,12 @@ class FixtureSupervisor:
             raise FixtureError("The IMP-010 candidate scope requires explicit opt-in.")
         if candidate_variant == "imp024" and not self.candidate_mode:
             raise FixtureError("The IMP-024 candidate scope requires explicit opt-in.")
+        if candidate_variant == "imp026" and not self.candidate_mode:
+            raise FixtureError("The IMP-026 candidate scope requires explicit opt-in.")
         self.chat_guardian: subprocess.Popen[bytes] | None = None
         self.chat_directory: Path | None = None
+        self.chat_runtime_root: Path | None = None
+        self.native_review_pdf: Path | None = None
         self.channel_ready = False
         self.channel_status = initial_cleanup_status()
         self.cleanup_member_accounts = "not-created"
@@ -5011,6 +5164,9 @@ class FixtureSupervisor:
             state_dir=self.state_dir,
             project_name=self.identity.project_name if self.identity is not None else None,
             owned=owned,
+            native_fingerprint=(self.candidate_snapshot.fingerprint
+                                if self.candidate_variant == "imp026" and self.candidate_snapshot is not None
+                                else None),
         )
 
     def _say(self, message: str) -> None:
@@ -5093,10 +5249,11 @@ class FixtureSupervisor:
                 imp014=self.candidate_variant == "imp014",
                 imp010=self.candidate_variant == "imp010",
                 imp024=self.candidate_variant == "imp024",
+                imp026=self.candidate_variant == "imp026",
             )
             set_candidate_snapshot_loopback_host(self.source_dir, host)
             set_candidate_snapshot_review_images(self.source_dir, self.identity.project_name)
-            if self.candidate_variant == "imp024":
+            if self.candidate_variant in {"imp024", "imp026"}:
                 self._prepare_chat_broker()
             self.candidate_snapshot.prepared_compose_sha256 = hashlib.sha256(
                 _read_candidate_file(
@@ -5129,6 +5286,7 @@ class FixtureSupervisor:
             imp014_candidate=self.candidate_variant == "imp014",
             imp010_candidate=self.candidate_variant == "imp010",
             imp024_candidate=self.candidate_variant == "imp024",
+            imp026_candidate=self.candidate_variant == "imp026",
             committed_migration_profile=committed_migration_profile,
         )
 
@@ -5137,7 +5295,10 @@ class FixtureSupervisor:
         self.docker.probe_local_engine()
         config_text = self.compose.config_json()
         if self.candidate_mode:
-            validate_candidate_compose_config(config_text, self.identity, self.source_dir, chat_directory=self.chat_directory)
+            validate_candidate_compose_config(
+                config_text, self.identity, self.source_dir,
+                chat_directory=self.chat_directory, native_chat=self.candidate_variant == "imp026",
+            )
         else:
             validate_compose_config(config_text, self.identity)
         del config_text
@@ -5203,10 +5364,12 @@ class FixtureSupervisor:
             self.candidate_snapshot,
             prepared=self.candidate_snapshot.prepared_compose_sha256 is not None,
         )
-        if self.candidate_variant == "imp024" and self.chat_guardian is not None and self.chat_guardian.poll() is not None:
+        if self.candidate_variant in {"imp024", "imp026"} and self.chat_guardian is not None and self.chat_guardian.poll() is not None:
             raise FixtureError("The owned synthetic broker stopped unexpectedly.")
 
     def _candidate_policy(self) -> CandidatePreviewPolicy:
+        if self.candidate_variant == "imp026":
+            return IMP026_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp024":
             return IMP024_CANDIDATE_PREVIEW_POLICY
         if self.candidate_variant == "imp010":
@@ -5220,6 +5383,9 @@ class FixtureSupervisor:
         return CANDIDATE_PREVIEW_POLICY
 
     def _prepare_chat_broker(self) -> None:
+        if self.candidate_variant == "imp026":
+            self._prepare_native_browser_connection()
+            return
         if self.source_dir is None or self.identity is None or self.state_dir is None:
             raise FixtureError("Chat fixture state unavailable.")
         if (os.getuid(), os.geteuid(), os.getgid()) != (1000, 1000, 1000):
@@ -5245,6 +5411,70 @@ class FixtureSupervisor:
             return text.replace(marker, marker + "      IMPOSTR_CHAT_ENABLED: '1'\n    volumes:\n      - type: bind\n        source: " + str(directory) + "\n        target: /run/impostr-broker\n        read_only: true\n        bind:\n          create_host_path: false\n", 1)
         _rewrite_candidate_compose(self.source_dir, bind)
 
+    def _prepare_native_browser_connection(self) -> None:
+        """Run the ordinary native Connection from this exact frozen snapshot."""
+        if self.source_dir is None or self.identity is None or self.state_dir is None:
+            raise FixtureError("Native browser fixture state is unavailable.")
+        if (os.getuid(), os.geteuid(), os.getgid()) != (1000, 1000, 1000):
+            raise FixtureError("Native browser fixture requires measured UID/GID1000.")
+        self.chat_runtime_root = Path("/tmp/opencode") / (
+            "impostr-browser-chat-" + self.identity.run_id
+        )
+        self.chat_directory = self.chat_runtime_root / "r/channel"
+        if self.candidate_snapshot is None:
+            raise FixtureError("The native candidate fingerprint is unavailable.")
+        # Recovery must also wait for this exact synthetic-input directory; the
+        # project/run name alone cannot identify the fingerprint-derived input.
+        self._register_recovery_context(owned=False)
+        self.native_review_pdf = Path("/tmp/opencode") / (
+            "impostr-imp026-review-" + self.candidate_snapshot.fingerprint[:20]
+        ) / "native-review.pdf"
+        if self.chat_runtime_root.exists() or self.chat_runtime_root.is_symlink():
+            raise FixtureError("The generated native chat directory already exists.")
+        try:
+            self.chat_guardian = subprocess.Popen(
+                [
+                    "/usr/bin/python3", "-I", "-B",
+                    str(self.source_dir / "scripts/imp026_browser.py"),
+                    "--directory", str(self.chat_runtime_root),
+                    "--lifetime", str(self.lifetime_minutes * 60 + STARTUP_TIMEOUT_SECONDS),
+                    "--fingerprint", self.candidate_snapshot.fingerprint,
+                ],
+                cwd=self.source_dir,
+                env={"PATH": "/usr/bin:/bin"},
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            with selectors.DefaultSelector() as selector:
+                selector.register(self.chat_guardian.stdout, selectors.EVENT_READ)
+                if not selector.select(30) or os.read(self.chat_guardian.stdout.fileno(), 16) != b"READY\n":
+                    raise FixtureError("The native synthetic Connection did not start.")
+        except OSError:
+            raise FixtureError("The native synthetic Connection could not be started.") from None
+
+        directory = self.chat_directory
+
+        def bind(text: str) -> str:
+            marker = "      IMPOSTR_WORKSPACE_ROOT: /workspaces\n"
+            if text.count(marker) != 3 or "  api:\n" not in text:
+                raise FixtureError("The candidate Compose base changed.")
+            return text.replace(
+                marker,
+                marker + "      IMPOSTR_CHAT_ENABLED: '1'\n    volumes:\n"
+                "      - type: bind\n"
+                f"        source: {directory}\n"
+                "        target: /run/impostr-broker\n"
+                "        read_only: true\n"
+                "        bind:\n"
+                "          create_host_path: false\n",
+                1,
+            )
+
+        _rewrite_candidate_compose(self.source_dir, bind)
+        self._say("Synthetic native-PDF upload file: " + str(self.native_review_pdf))
+
     def _stop_chat_broker(self) -> None:
         if self.chat_guardian is None:
             return
@@ -5257,7 +5487,11 @@ class FixtureSupervisor:
             raise FixtureError("Owned chat broker cleanup did not finish.") from None
         if process.stdout is not None:
             process.stdout.close()
-        paths = (self.chat_directory, self.chat_directory.with_name(self.chat_directory.name + "-scratch")) if self.chat_directory else ()
+        paths = ((self.chat_runtime_root, self.native_review_pdf.parent)
+                 if self.chat_runtime_root is not None and self.native_review_pdf is not None else
+                 (self.chat_runtime_root,) if self.chat_runtime_root is not None else
+                 (self.chat_directory, self.chat_directory.with_name(self.chat_directory.name + "-scratch"))
+                 if self.chat_directory else ())
         if status != 0 or any(path.exists() or path.is_symlink() for path in paths):
             raise FixtureError("Owned chat broker/channel/worker cleanup was not verified.")
         self.chat_guardian = None
@@ -6800,7 +7034,10 @@ def _verify_control_lock_descriptor(directory: Path, descriptor: int) -> None:
 def _validate_recovery_metadata(value: Any) -> dict[str, Any]:
     if (
         not isinstance(value, dict)
-        or set(value) != {"state_dir", "project_name", "owned", "resources_removed"}
+        or set(value) not in (
+            {"state_dir", "project_name", "owned", "resources_removed"},
+            {"state_dir", "project_name", "owned", "resources_removed", "native_fingerprint"},
+        )
         or not isinstance(value["state_dir"], str)
         or not Path(value["state_dir"]).is_absolute()
         or "\0" in value["state_dir"]
@@ -6809,6 +7046,9 @@ def _validate_recovery_metadata(value: Any) -> dict[str, Any]:
         or type(value["resources_removed"]) is not bool
         or (value["owned"] and value["project_name"] is None)
         or (value["resources_removed"] and not value["owned"])
+        or ("native_fingerprint" in value and (
+            value["project_name"] is None or not isinstance(value["native_fingerprint"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", value["native_fingerprint"]) is None))
     ):
         raise FixtureError("The private fixture recovery registration is malformed.")
     project_name = value["project_name"]
@@ -6874,6 +7114,7 @@ def update_control_recovery(
     state_dir: Path,
     project_name: str | None,
     owned: bool,
+    native_fingerprint: str | None = None,
 ) -> None:
     """Durably register only nonsecret state/ownership data before Compose writes."""
     deadline = time.monotonic() + 5
@@ -6893,6 +7134,7 @@ def update_control_recovery(
             "project_name": project_name,
             "owned": owned,
             "resources_removed": False,
+            **({"native_fingerprint": native_fingerprint} if native_fingerprint is not None else {}),
         }
     )
     previous = record.get("recovery")
@@ -6905,6 +7147,8 @@ def update_control_recovery(
             )
             or (previous["owned"] and not owned)
             or previous["resources_removed"]
+            or ("native_fingerprint" in previous
+                and previous["native_fingerprint"] != native_fingerprint)
         ):
             raise FixtureError("The private fixture recovery registration changed unexpectedly.")
     record["recovery"] = new_recovery
@@ -6967,6 +7211,130 @@ def _private_recovery_result(
     }
 
 
+WATCHDOG_PARENT = Path("/tmp/opencode")
+
+
+def _registered_watchdog_names(recovery: Mapping[str, Any]) -> tuple[str, str]:
+    recovery = _validate_recovery_metadata(dict(recovery))
+    project = recovery["project_name"]
+    if project is None:
+        raise FixtureError("The registered watchdog identity is unavailable.")
+    name = "impostr-browser-chat-" + project.removeprefix("impostr-review-")
+    return name, name + "-scratch"
+
+
+def _watchdog_inode(info: os.stat_result) -> tuple[int, ...]:
+    return info.st_dev, info.st_ino, info.st_uid, info.st_gid, info.st_mode
+
+
+def _pin_watchdog_directory(stack: ExitStack, parent_fd: int | None, name: str | Path,
+                            modes: frozenset[int]) -> tuple[int, os.stat_result] | None:
+    """Check ownership/mode before opening or listing; retain the exact inode."""
+    try:
+        before = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if (not stat.S_ISDIR(before.st_mode) or before.st_uid != 1000 or before.st_gid != 1000
+            or stat.S_IMODE(before.st_mode) not in modes):
+        raise FixtureError("The registered watchdog directory is unsafe.")
+    fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    stack.callback(os.close, fd)
+    if _watchdog_inode(os.fstat(fd)) != _watchdog_inode(before):
+        raise FixtureError("The registered watchdog directory changed.")
+    return fd, before
+
+
+def inspect_registered_watchdog_layout(recovery: Mapping[str, Any]) -> dict[str, str]:
+    """Read only fixed directory structure, never files or reported entry names."""
+    report = {"watchdog_root_layout": "unsafe", "watchdog_scratch_layout": "unsafe"}
+    root_name, scratch_name = _registered_watchdog_names(recovery)
+    with ExitStack() as stack:
+        try:
+            parent = _pin_watchdog_directory(stack, None, WATCHDOG_PARENT, frozenset({0o700, 0o711, 0o755, 0o775}))
+            if parent is None:
+                return report
+            parent_fd, _parent_info = parent
+        except (FixtureError, OSError):
+            return report
+        for name, field, modes in (
+            (root_name, "watchdog_root_layout", frozenset({0o700, 0o711})),
+            (scratch_name, "watchdog_scratch_layout", frozenset({0o700})),
+        ):
+            try:
+                pinned = _pin_watchdog_directory(stack, parent_fd, name, modes)
+                if pinned is None:
+                    report[field] = "absent"
+                    continue
+                fd, info = pinned
+                entries = set(os.listdir(fd))
+                report[field] = "nonempty" if entries else "owned-empty"
+                if field == "watchdog_root_layout" and stat.S_IMODE(info.st_mode) == 0o700 and entries == {"r"}:
+                    runtime = _pin_watchdog_directory(stack, fd, "r", frozenset({0o711}))
+                    if runtime is not None and set(os.listdir(runtime[0])) == {"channel", "private"}:
+                        for child, mode in (("channel", 0o711), ("private", 0o700)):
+                            child_field = "native_" + child + "_layout"
+                            report[child_field] = "unsafe"
+                            child_pin = _pin_watchdog_directory(stack, runtime[0], child, frozenset({mode}))
+                            if child_pin is None:
+                                report[child_field] = "absent"
+                            else:
+                                report[child_field] = "nonempty" if os.listdir(child_pin[0]) else "owned-empty"
+                        if all(report["native_" + child + "_layout"] in {"owned-empty", "nonempty"}
+                               for child in ("channel", "private")):
+                            report[field] = "known-native-shape"
+            except (FixtureError, OSError):
+                report[field] = "unsafe"
+    return report
+
+
+def _remove_empty_registered_watchdog_dirs(control_directory: Path, lock_fd: int,
+                                            record: Mapping[str, Any]) -> None:
+    """Only pre-Compose empty fixture dirs; no adoption/unlink/recursive cleanup."""
+    if (os.getuid(), os.geteuid(), os.getgid(), os.getegid()) != (1000, 1000, 1000, 1000):
+        raise FixtureError("Empty watchdog recovery requires UID/GID1000.")
+    _verify_control_lock_descriptor(control_directory, lock_fd)
+    if _read_control_record(control_directory) != record:
+        raise FixtureError("The watchdog recovery registration changed.")
+    process_fd = _open_verified_supervisor_pidfd(record)
+    if process_fd is not None:
+        os.close(process_fd)
+        raise FixtureError("The watchdog supervisor is still active.")
+    recovery = _validate_recovery_metadata(dict(record["recovery"]))
+    status = read_cleanup_status(APPROVED_HANDOFF_DIRECTORY)
+    if recovery["owned"] or status is None or any(status[field] != "not-created" for field in (
+        "member_login", "member_accounts", "owned_compose", "owned_images",
+    )):
+        raise FixtureError("Empty watchdog recovery is not a pre-resource failure.")
+    names = _registered_watchdog_names(recovery)
+    with ExitStack() as stack:
+        parent = _pin_watchdog_directory(stack, None, WATCHDOG_PARENT, frozenset({0o700, 0o711, 0o755, 0o775}))
+        if parent is None:
+            raise FixtureError("The watchdog parent is unavailable.")
+        parent_fd, parent_info = parent
+        pinned = [(name, _pin_watchdog_directory(stack, parent_fd, name, modes))
+                  for name, modes in zip(names, (frozenset({0o700, 0o711}), frozenset({0o700})))]
+        # Validate BOTH directories before any removal. Even a known native
+        # layout/connection.lock is crash state, not permission to delete it.
+        if any(item is not None and os.listdir(item[0]) for _name, item in pinned):
+            raise FixtureError("The registered watchdog directories are nonempty.")
+        cleanup_failed = False
+        for name, item in pinned:
+            if item is None:
+                continue
+            fd, info = item
+            if (_watchdog_inode(os.stat(WATCHDOG_PARENT, follow_symlinks=False)) != _watchdog_inode(parent_info)
+                    or _watchdog_inode(os.fstat(parent_fd)) != _watchdog_inode(parent_info)
+                    or _watchdog_inode(os.stat(name, dir_fd=parent_fd, follow_symlinks=False)) != _watchdog_inode(info)
+                    or _watchdog_inode(os.fstat(fd)) != _watchdog_inode(info) or os.listdir(fd)):
+                raise FixtureError("The empty watchdog directory changed before removal.")
+            try:
+                os.rmdir(name, dir_fd=parent_fd)
+            except OSError:
+                cleanup_failed = True
+        if cleanup_failed:
+            raise FixtureError("Empty watchdog cleanup remains unverified.")
+
+
 def recover_registered_project(control_directory: Path) -> dict[str, str]:
     """Recover only the project registered after its empty-name ownership check."""
     try:
@@ -7026,9 +7394,13 @@ def recover_registered_project(control_directory: Path) -> dict[str, str]:
             chat_directory = Path("/tmp/opencode") / ("impostr-browser-chat-" + project_name.removeprefix("impostr-review-"))
             deadline = time.monotonic() + 90
             scratch = chat_directory.with_name(chat_directory.name + "-scratch")
-            while any(path.exists() or path.is_symlink() for path in (chat_directory, scratch)) and time.monotonic() < deadline:
+            paths = [chat_directory, scratch]
+            if "native_fingerprint" in recovery:
+                paths.append(Path("/tmp/opencode") / (
+                    "impostr-imp026-review-" + recovery["native_fingerprint"][:20]))
+            while any(path.exists() or path.is_symlink() for path in paths) and time.monotonic() < deadline:
                 time.sleep(0.1)
-            if any(path.exists() or path.is_symlink() for path in (chat_directory, scratch)):
+            if any(path.exists() or path.is_symlink() for path in paths):
                 raise FixtureError("Owned chat watchdog cleanup remains unverified.")
         if not owned:
             if state_dir.exists():
@@ -7165,6 +7537,7 @@ def _open_verified_supervisor_pidfd(record: Mapping[str, int]) -> int | None:
                 "--imp014-candidate-fingerprint",
                 "--imp010-candidate-fingerprint",
                 "--imp024-candidate-fingerprint",
+                "--imp026-candidate-fingerprint",
             }
             and re.fullmatch(r"[0-9a-f]{64}", arguments[8]) is not None
         )
@@ -7464,6 +7837,7 @@ def _run_guardian(
                 "imp014": "--imp014-candidate-fingerprint",
                 "imp010": "--imp010-candidate-fingerprint",
                 "imp024": "--imp024-candidate-fingerprint",
+                "imp026": "--imp026-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -7598,8 +7972,8 @@ def launch_unattended(
     lock_fd = _open_control_lock(control_directory)
     guardian: subprocess.Popen[bytes] | None = None
     try:
-        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010", "imp024"} or (
-            candidate_variant in {"imp007", "imp013", "imp014", "imp010", "imp024"}
+        if candidate_variant not in {"imp004", "imp007", "imp013", "imp014", "imp010", "imp024", "imp026"} or (
+            candidate_variant in {"imp007", "imp013", "imp014", "imp010", "imp024", "imp026"}
             and candidate_fingerprint is None
         ):
             raise FixtureError("The candidate review scope requires a valid opt-in fingerprint.")
@@ -7635,6 +8009,7 @@ def launch_unattended(
                 "imp014": "--imp014-candidate-fingerprint",
                 "imp010": "--imp010-candidate-fingerprint",
                 "imp024": "--imp024-candidate-fingerprint",
+                "imp026": "--imp026-candidate-fingerprint",
             }.get(candidate_variant)
             if fingerprint_flag is None:
                 raise FixtureError("The candidate review scope is invalid.")
@@ -7744,6 +8119,10 @@ def _attempt_unattended_recovery(handoff_directory: Path) -> int | None:
             if record is not None:
                 _remove_control_record(control_directory, record["pid"])
             return 0
+        if (record is not None and "recovery" in record
+                and record["recovery"]["project_name"] is not None
+                and not record["recovery"]["owned"]):
+            _remove_empty_registered_watchdog_dirs(control_directory, lock_fd, record)
         cleanup_verified = _write_guardian_failure_status(
             handoff_directory,
             control_directory=control_directory,
@@ -7754,7 +8133,7 @@ def _attempt_unattended_recovery(handoff_directory: Path) -> int | None:
                 _remove_control_record(control_directory, record["pid"])
             return 0
         return 1
-    except FixtureError:
+    except (FixtureError, OSError):
         return 1
     finally:
         os.close(lock_fd)
@@ -7801,6 +8180,14 @@ def _print_recovery_action(handoff_directory: Path | None = None) -> None:
             "The fixture has no verifiable owned-project recovery registration. Do not run broad "
             "Docker teardown; preserve this run's private state and request operator-assisted "
             "recovery.",
+            file=sys.stderr,
+        )
+        return
+    if status is not None and status["owned_compose"] == status["owned_images"] == "not-created":
+        print(
+            "No owned Compose resources were created. Private state or owned chat watchdog cleanup "
+            "is still unverified; preserve this run's recovery state and request operator-assisted "
+            "diagnosis. A Docker engine failure has not been established.",
             file=sys.stderr,
         )
         return
@@ -7915,6 +8302,7 @@ def _add_candidate_fingerprint_arguments(
     include_imp014: bool = False,
     include_imp010: bool = False,
     include_imp024: bool = False,
+    include_imp026: bool = False,
 ) -> None:
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -7946,6 +8334,9 @@ def _add_candidate_fingerprint_arguments(
     if include_imp024:
         group.add_argument("--imp024-candidate-fingerprint", type=_candidate_fingerprint_argument,
                            help="opt into exact reviewed synthetic chat UI/broker candidate")
+    if include_imp026:
+        group.add_argument("--imp026-candidate-fingerprint", type=_candidate_fingerprint_argument,
+                           help="opt into the pinned native-PDF composer browser candidate")
     if include_imp010:
         group.add_argument(
             "--imp010-candidate-fingerprint",
@@ -7956,6 +8347,9 @@ def _add_candidate_fingerprint_arguments(
 
 
 def _candidate_selection(parsed: argparse.Namespace) -> tuple[str | None, str]:
+    imp026_fingerprint = getattr(parsed, "imp026_candidate_fingerprint", None)
+    if imp026_fingerprint is not None:
+        return imp026_fingerprint, "imp026"
     imp024_fingerprint = getattr(parsed, "imp024_candidate_fingerprint", None)
     if imp024_fingerprint is not None:
         return imp024_fingerprint, "imp024"
@@ -8086,6 +8480,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         include_imp014=True,
         include_imp010=True,
         include_imp024=True,
+        include_imp026=True,
     )
     stop = subparsers.add_parser(
         "stop",
@@ -8118,6 +8513,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         include_imp014=True,
         include_imp010=True,
         include_imp024=True,
+        include_imp026=True,
     )
 
     supervise = subparsers.add_parser("_supervise", help="internal fixture supervisor process")
@@ -8129,6 +8525,7 @@ def _parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         include_imp014=True,
         include_imp010=True,
         include_imp024=True,
+        include_imp026=True,
     )
 
     parsed = parser.parse_args(arguments)
