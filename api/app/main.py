@@ -69,17 +69,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         dispatcher = Dispatcher(database_engine, UnixBroker())
         application.state.chat_dispatcher = dispatcher
         dispatcher.thread.start()
-    # Legacy extraction admission is disabled even if an old deployment sets
-    # pdf_enabled. Migration 0011 fences outstanding claims before native storage.
     try:
         yield
     finally:
-        try:
-            if application.state.pdf_processor is not None:
-                application.state.pdf_processor.close()
-        finally:
-            if application.state.chat_dispatcher is not None:
-                application.state.chat_dispatcher.close()
+        if application.state.chat_dispatcher is not None:
+            application.state.chat_dispatcher.close()
 
 
 def _initialize_project_documents(
@@ -109,7 +103,6 @@ def create_app(
     application.state.database_engine = engine
     application.state.settings = settings
     application.state.chat_dispatcher = None
-    application.state.pdf_processor = None
     application.state.workspace_store = WorkspaceStore(
         workspace_root
         if workspace_root is not None

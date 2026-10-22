@@ -7,14 +7,14 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from app.pdf_intake import IntakeError, filename_metadata, original_body
-from app.pdf_protocol import MAX_ORIGINAL
+from app.chat_protocol import NATIVE_PDF_BYTE_LIMIT
 
 
 class IntakeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_exact_decimal_cap_and_actual_overcap_without_clipping(self):
+    async def test_strict_decimal_cap_and_actual_overcap_without_clipping(self):
         async def chunks(extra=False):
             yield b"%PDF-"
-            remaining = MAX_ORIGINAL - 5
+            remaining = NATIVE_PDF_BYTE_LIMIT - 6
             block = b"x" * 65536
             while remaining:
                 count = min(len(block), remaining)
@@ -22,10 +22,10 @@ class IntakeTests(unittest.IsolatedAsyncioTestCase):
                 remaining -= count
             if extra:
                 yield b"!"
-                self.fail("Must stop at the first overcap chunk")
+                self.fail("Must stop at the first boundary chunk")
 
         data, digest = await original_body(chunks())
-        self.assertEqual(len(data), 50_000_000)
+        self.assertEqual(len(data), 49_999_999)
         self.assertEqual(digest, hashlib.sha256(data).hexdigest())
         del data
         with self.assertRaises(IntakeError) as caught:

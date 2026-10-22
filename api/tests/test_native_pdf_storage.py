@@ -3,19 +3,18 @@
 import hashlib
 import json
 import uuid
-from dataclasses import replace
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from imp025_native_fixture import submit_pdf
+from imp025_native_fixture import legacy_reference_metadata, submit_pdf
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
-from test_attachments import PDF, ready_derivative, upload
+from test_attachments import PDF, upload
 from test_projects import _login
 
 from app.chat_protocol import NATIVE_PDF_REFERENCE, inline_pdf_data, native_dispatch_context
-from app.chat_references import legacy_reference_metadata, resolve_context, resolve_dispatch_context
+from app.chat_references import resolve_context, resolve_dispatch_context
 from app.main import create_app
 from app.models import ChatSubmissionReceipt, ChatTurn, ChatTurnPdfSelection, ProjectAttachment
 
@@ -115,7 +114,7 @@ def test_original_hash_and_bytes_revalidated_and_derivative_not_required(chat_se
     assert response.status_code == 202
     with Session(engine) as db, db.begin():
         row = db.get(ProjectAttachment, uuid.UUID(selected["attachment_id"]))
-        assert row.status == "stored" and row.text_content is None
+        assert row.status == "stored"
         row.original = row.original.replace(b"Synthetic", b"Altered!!")  # Same byte length.
     dispatcher.tick()
     assert not any(call["op"] == "start" for call in broker.calls)
@@ -174,10 +173,8 @@ def test_legacy_receipt_and_replay_hash_semantics_are_not_relabelled(chat_setup)
     turn_id = uuid.UUID(response.json()["id"])
     client.post(f"{base}/{conv}/turns/{turn_id}/abort", headers=headers)
     with Session(engine) as db, db.begin():
-        ready_derivative(db, selected["attachment_id"], PDF.decode())
         row = db.get(ProjectAttachment, uuid.UUID(selected["attachment_id"]))
-        row.status = "stored"  # Retained legacy derivative after forward transition.
-        legacy = legacy_reference_metadata(row)
+        legacy = legacy_reference_metadata(row, PDF.decode())
         assert legacy["text_sha256"] == selected["expected_sha256"]  # Hash collision in domains.
         turn = db.get(ChatTurn, turn_id)
         turn.payload = dict(turn.payload, references=[legacy])
@@ -272,11 +269,3 @@ def test_oversized_legacy_original_download_delete_but_not_capture_and_no_origin
     failed = upload(client, f"{base}/{conv}/attachments", b"invalid").json()["attachment"]
     assert failed["native_available"] is False and failed["original_sha256"] is None
     assert client.get(f"{base}/{conv}/attachments/{failed['id']}/raw").status_code == 404
-
-
-def test_startup_disables_legacy_processor_even_when_old_pdf_setting_enabled(
-    engine, settings, workspace_root
-):
-    enabled = replace(settings, pdf_enabled=True)
-    with TestClient(create_app(engine, enabled, workspace_root=workspace_root)) as client:
-        assert client.app.state.pdf_processor is None

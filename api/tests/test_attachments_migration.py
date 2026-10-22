@@ -182,20 +182,27 @@ def check_preservation(engine, stage=lambda _: None):
         assert "project_attachments" in inspect(connection).get_table_names()
     owner_id, project_id, conversation_id = ids
     stage("preservation_original")
-    with Session(engine) as db, db.begin():
-        row = ProjectAttachment(
-            project_id=project_id,
-            conversation_id=conversation_id,
-            uploader_user_id=owner_id,
-            filename="reference.pdf",
-            original=b"%PDF-test",
-            original_size=9,
-            original_sha256="a" * 64,
-            status="pending",  # Historical 0009 schema precedes native storage.
+    # Seed the historical table using its reflected schema, not today's model.
+    attachment_id = uuid.uuid4()
+    def identity(value):
+        return value.hex if engine.dialect.name == "sqlite" else value
+
+    with engine.begin() as db:
+        table = Table("project_attachments", MetaData(), autoload_with=db)
+        db.execute(
+            table.insert().values(
+                id=identity(attachment_id),
+                project_id=identity(project_id),
+                conversation_id=identity(conversation_id),
+                uploader_user_id=identity(owner_id),
+                filename="reference.pdf",
+                original=b"%PDF-test",
+                original_size=9,
+                original_sha256="a" * 64,
+                status="pending",
+                attempt_count=0,
+            )
         )
-        db.add(row)
-        db.flush()
-        attachment_id = row.id
     stage("preservation_retained_downgrade")
     with pytest.raises(RuntimeError, match="Cannot discard retained attachments"):
         migrate(engine, "20261001_0007", downgrade=True)

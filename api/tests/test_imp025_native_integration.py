@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 from test_attachments_migration import history, migrate
-from test_native_pdf_migration import check_native_transition, snapshot
+from test_native_pdf_migration import check_extractor_retirement, check_native_transition, snapshot
 from test_native_pdf_storage import selected_original
 from test_projects import _login
 
@@ -172,9 +172,14 @@ def native_postgres():
             owner.dispose()
 
 
+@pytest.mark.parametrize("populated", [False, True])
+def test_postgres_extractor_retirement_preservation(native_postgres, populated):
+    check_extractor_retirement(native_postgres, populated=populated)
+
+
 def test_postgres_native_migrations_preservation_and_legacy_fence(native_postgres):
     engine = native_postgres
-    check_native_transition(engine)  # Real legacy completion CAS and original preservation.
+    check_native_transition(engine)  # Historical SQL completion fence and original preservation.
     print("IMP025_STAGE pg_legacy_fence", flush=True)
     before_history = history(engine)
     before_originals = snapshot(engine, "project_attachments")

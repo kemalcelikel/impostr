@@ -57,9 +57,7 @@ POSTGRES_STAGES = (
     "roundtrip_upload",
     "roundtrip_stored_original",
     "roundtrip_raw",
-    "roundtrip_pending_metadata",
-    "roundtrip_derivative_commit",
-    "roundtrip_preview",
+    "roundtrip_stored_metadata",
     "roundtrip_delete",
     "overcap_upload",
     "overcap_discarded_blob",
@@ -128,7 +126,7 @@ def test_fresh_postgres_intake_migration_api_and_owned_cleanup(tmp_path: Path):
                 for column in inspect(connection).get_columns("project_attachments")
             }
             assert str(columns["original"]["type"]) == "BYTEA"
-            assert str(columns["text_content"]["type"]) == "TEXT"
+            assert "text_content" not in columns
         # Composite FK rejects a real existing conversation under a different project.
         mark("schema_conversation_fk")
         with Session(engine) as db, pytest.raises(IntegrityError):

@@ -66,6 +66,7 @@ class InputsTests(unittest.TestCase):
             "api/migrations/versions/20261002_0010_pdf_turn_selections.py",
             "api/migrations/versions/20261014_0011_native_pdf_storage.py",
             "api/migrations/versions/20261014_0012_native_send_authorization.py",
+            "api/migrations/versions/20261022_0013_retire_pdf_extraction.py",
             "scripts/imp025_verify.py",
         ):
             with self.subTest(name=name):
@@ -79,7 +80,7 @@ class InputsTests(unittest.TestCase):
             self.assertTrue(verify.source_path(name), name)
         for name in (".env", ".opencode/progress.md", "AGENTS.md", "api/.env", "web/node_modules/x.js",
                       "overnight-agent/opencode.json", "scripts/private.log", "../api/app/main.py",
-                      *verify.SUPERSEDED_INPUTS):
+                      *verify.SUPERSEDED_INPUTS, *verify.RETIRED_INPUTS):
             self.assertFalse(verify.source_path(name), name)
 
     def test_capture_without_superseded_files_still_requires_native_inputs(self):
@@ -217,11 +218,26 @@ class InputsTests(unittest.TestCase):
         with patch.object(verify, "Verify") as runtime, patch.object(verify, "capture", return_value=({}, verify.CHECKPOINT)), \
                 patch.object(verify, "report"), patch("sys.stderr", new=io.StringIO()):
             for argv in (["--synthetic"], ["--api-only", "--fingerprint", "a" * 64],
+                         ["--retirement-only"], ["--retirement-only", "--fingerprint", "a" * 64],
+                         ["--retirement-only", "--synthetic", "--reviewed-harness", "--fingerprint", "a" * 64],
                          ["--preflight", "--reviewed-harness"], ["--preflight", "--frozen"]):
                 with self.assertRaises(SystemExit):
                     verify.main(argv)
             self.assertEqual(verify.main(["--synthetic", "--reviewed-harness", "--fingerprint", "f" * 64]), 1)
             runtime.assert_not_called()
+
+    def test_frozen_retirement_mode_validates_source_before_runner_construction(self):
+        argv = ["--retirement-only", "--reviewed-harness", "--fingerprint", "a" * 64, "--frozen"]
+        with patch.object(verify, "check_frozen") as frozen, \
+                patch.object(verify, "NativeVerify") as runner:
+            runner.return_value.run.return_value = 0
+            self.assertEqual(verify.main(argv), 0)
+            frozen.assert_called_once_with("a" * 64)
+            runner.assert_called_once_with(False, retirement_only=True)
+        with patch.object(verify, "check_frozen", side_effect=verify.Unavailable), \
+                patch.object(verify, "NativeVerify") as runner, patch.object(verify, "report"):
+            self.assertEqual(verify.main(argv), 1)
+            runner.assert_not_called()
 
     def test_api_fixture_sources_parse_without_importing_host_dependencies(self):
         for name in ("api/tests/imp025_native_fixture.py", "api/tests/test_imp025_native_integration.py"):
@@ -531,6 +547,32 @@ class ProductDiagnosticTests(unittest.TestCase):
 
 
 class OutputAndOrchestrationTests(unittest.TestCase):
+    def test_retirement_only_runs_two_preservation_cases_and_cleans_on_failure(self):
+        runner = verify.NativeVerify(False, retirement_only=True)
+        runner.base = ["owned-compose"]
+        runner.owner_overlay = Path("/owned/native-owner.yaml")
+        for failed in (False, True):
+            with self.subTest(failed=failed), patch.object(runner, "prepare"), \
+                    patch.object(runner, "compose") as compose, \
+                    patch.object(runner, "command", side_effect=verify.Unavailable if failed else None) as command, \
+                    patch.object(runner, "check") as check, \
+                    patch.object(runner, "cleanup", return_value=True) as cleanup, \
+                    patch.object(runner, "run_native") as native, patch.object(verify, "report"):
+                self.assertEqual(runner.run(), 1 if failed else 0)
+                self.assertEqual([call.args for call in compose.call_args_list], [
+                    ("build", "db"), ("up", "-d", "--wait", "db"),
+                ])
+                command.assert_called_once()
+                self.assertEqual(command.call_args.args[0], [
+                    "owned-compose", "-f", "/owned/native-owner.yaml", "run", "--build", "--rm",
+                    "api-integration-owner-check", "python", "-m", "pytest", "-p", "no:cacheprovider",
+                    "--tb=no", "--show-capture=no", "--color=no", "-s", verify.RETIREMENT_TEST,
+                ])
+                self.assertEqual(command.call_args.kwargs["output"].expected, 2)
+                check.assert_not_called()
+                native.assert_not_called()
+                cleanup.assert_called_once()
+
     def test_pytest_requires_execution_no_skips_and_exact_pg_count(self):
         output = verify.ResultOutput(expected=2)
         output.feed(b"private arbitrary output\n2 passed in 0.1s\n")

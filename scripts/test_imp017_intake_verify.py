@@ -153,7 +153,7 @@ class IntakeHarnessTests(unittest.TestCase):
         self.assertEqual(dumped.buffer, bytearray())
 
         head = intake.HeadOutput()
-        head.feed(b"irrelevant output\n20261002_0009 (head)\n")
+        head.feed(b"irrelevant output\n20261022_0013 (head)\n")
         head.finish()
         for invalid in (b"20261001_0007 (head)\n", b"private revision detail\n"):
             parser = intake.HeadOutput()
@@ -215,7 +215,7 @@ class IntakeHarnessTests(unittest.TestCase):
     def test_postgres_projection_rejects_unknown_stage_category_and_malformed_data(self):
         valid = {
             "diagnostic": "imp017_intake_postgres",
-            "stage": "roundtrip_derivative_commit",
+            "stage": "roundtrip_stored_metadata",
             "category": "integrity",
         }
         for value in (

@@ -6,6 +6,7 @@ host discovery, private configuration or reusable login; normal Member sign-in.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from contextlib import contextmanager
 from dataclasses import replace
@@ -26,6 +27,27 @@ from app.config import AppSettings
 from app.main import create_app
 from app.models import ChatTurn, Project, User
 from app.passwords import hash_password
+
+
+def legacy_reference_metadata(row, text):
+    """Synthetic historical receipt snapshot only; never writes derivative columns."""
+    return {
+        "attachment_id": str(row.id),
+        "filename": row.filename,
+        "original_sha256": row.original_sha256,
+        "original_size": row.original_size,
+        "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+        "text_size": len(text.encode()),
+        "page_count": 2,
+        "missing_pages": [2],
+        "label": "Extracted text only; images and layout not included",
+        "provenance": {
+            "policy": "imp017-text-v1",
+            "qpdf": "11.3.0",
+            "pdftotext": "22.12.0",
+            "build_sha256": "a" * 64,
+        },
+    }
 
 
 def submit_pdf(setup, selections, *, request_id=None, prompt="Use PDF references"):

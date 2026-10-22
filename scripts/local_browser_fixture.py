@@ -860,7 +860,7 @@ IMP026_SUPPORT_INPUTS = (
     "compose.chat.yaml",
     "scripts/imp002_diagnostic.py", "scripts/imp002_prototype.py", "scripts/imp002_relay.py",
     "scripts/imp002_transport.py", "scripts/imp002_worker.py", "scripts/imp005_connection.py",
-    "scripts/imp005_verify.py", "scripts/imp017_fixtures.py", "scripts/imp018_receipts.py", "scripts/imp023_worker.py",
+    "scripts/imp005_verify.py", "scripts/imp025_fixtures.py", "scripts/imp018_receipts.py", "scripts/imp023_worker.py",
     "scripts/imp024_broker.py", "scripts/imp024_inference.py", "scripts/imp024_operator.py",
     "scripts/imp024_operator_helper.py", "scripts/imp024_operator_product.py",
     "scripts/imp024_operator_transport.py", "scripts/imp024_operator_verify.py",
@@ -871,15 +871,11 @@ IMP026_CANDIDATE_DOCKERIGNORE_RULES = (
     "**", "!api/", "!api/Dockerfile", "!api/requirements.lock", "!api/requirements-dev.lock",
     "!api/pyproject.toml", "!api/alembic.ini", "!api/app/", "!api/app/**",
     "!api/migrations/", "!api/migrations/**", "!api/tests/", "!api/tests/**",
-    "!scripts/", "!scripts/backlog.py", "!scripts/imp017_fixtures.py",
+    "!scripts/", "!scripts/backlog.py", "!scripts/imp025_fixtures.py",
     "!overnight-agent/", "!overnight-agent/PROJECT.md.example",
     "!overnight-agent/AGENTS.md.example", "!overnight-agent/BACKLOG.md.example",
     "api/**/__pycache__/", "api/**/.pytest_cache/", "api/**/.mypy_cache/",
     "api/**/.ruff_cache/", "api/**/*.pyc", "api/**/.env", "api/**/.env.*",
-    "!pdf-extractor/", "!pdf-extractor/Dockerfile", "!pdf-extractor/dependencies.lock.json",
-    "!pdf-extractor/build.py", "!pdf-extractor/worker.py", "!pdf-extractor/structure.py",
-    "!pdf-extractor/bounded_json.py", "!pdf-extractor/process.py", "!pdf-extractor/supervisor.py",
-    "!pdf-extractor/bootstrap.py", "!pdf-extractor/probe.py",
 )
 IMP026_CANDIDATE_PREVIEW_POLICY = CandidatePreviewPolicy(
     base_commit=IMP026_BASE_COMMIT,
@@ -2848,7 +2844,9 @@ def _resolve_head_commit(repository_root: Path, *, private_home: Path) -> str:
 
 
 def imp026_verified_head(repository_root: Path, *, private_home: Path) -> tuple[str, dict[str, str]]:
-    """Admit only native ancestry plus declared composer repairs/bookkeeping."""
+    """Admit native ancestry plus the finite composer/retirement slice/bookkeeping."""
+    from imp025_verify import RETIREMENT_CHANGES
+
     head = _resolve_head_commit(repository_root, private_home=private_home)
     commands = (
         ["merge-base", "--is-ancestor", IMP026_NATIVE_ANCESTOR, IMP026_BASE_COMMIT],
@@ -2877,9 +2875,10 @@ def imp026_verified_head(repository_root: Path, *, private_home: Path) -> tuple[
             path = raw_path.decode("utf-8", "strict")
         except UnicodeError:
             raise FixtureError("The native candidate committed scope is invalid.") from None
-        status = {b"A": "added", b"M": "modified"}.get(code)
+        status = {b"A": "added", b"M": "modified", b"D": "deleted"}.get(code)
         if (path in changes or status is None
-                or (path not in IMP026_BOOKKEEPING_PATHS and declared.get(path) != status)):
+                or (path not in IMP026_BOOKKEEPING_PATHS and declared.get(path) != status
+                    and RETIREMENT_CHANGES.get(path) != status)):
             raise FixtureError("The native candidate contains an undeclared committed change.")
         changes[path] = status
     return head, changes

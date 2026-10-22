@@ -183,7 +183,7 @@ def run(directory: Path, lifetime: int, fingerprint: str) -> int:
     from imp005_connection import Connection, OwnedRuntime
     from imp024_verify import reap_children
     from imp025_verify import Receiver
-    from imp017_fixtures import text_pdf
+    from imp025_fixtures import text_pdf
 
     class BoundedReceiver(Receiver):
         def __init__(self):

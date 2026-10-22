@@ -1,18 +1,20 @@
 """COORDINATOR ONLY: exact-input native PDF proof; review BEFORE execution.
 
-Read-only command: --preflight. Execution requires --api-only or --synthetic,
---reviewed-harness and --fingerprint from review of these exact bytes. The latter
+Read-only command: --preflight. Execution requires --api-only, --synthetic or
+--retirement-only, --reviewed-harness and --fingerprint from review of these exact bytes. Synthetic
 mode runs the fixed-path OpenCode -> shim -> broker -> PlanningHTTPSInference.events,
 replacing ONLY its connection callable with an in-memory synthetic receiver.
 No DNS/TLS/provider, extractor, private settings, host installs or live modes.
 
-Both execution modes build the ordinary pinned API development image and use a
+All execution modes build the ordinary pinned API development image and use a
 fresh owned PostgreSQL. Sources are frozen before any Docker/worker operation;
 the child runs entirely from that snapshot. Output is fixed stage/category JSON,
 never bodies, credentials, filenames from uploads, exception text or tracebacks.
 Failed checks stop; there is no formatter diagnostic/rebuild/retry loop. Finally
 reuse label-scoped stack/image/volume/child cleanup, including generated accounts,
 private inputs and broker scratch. Cleanup failure makes the whole check fail.
+Retirement-only runs just the two fresh/populated migration preservation cases,
+without broker/provider/browser startup or API/static/native acceptance suites.
 """
 
 from __future__ import annotations
@@ -53,6 +55,39 @@ REPAIR_PATHS = frozenset({
     "docs/local-development.md", "docs/local-scope-history.md",
     "docs/agent-history.md",
 })
+# Finite approved retirement slice. Historical migration inputs remain immutable;
+# removed parser sources are never read from the worktree or frozen into a build.
+RETIREMENT_CHANGES = {
+    **dict.fromkeys((
+        ".dockerignore", "api/Dockerfile", "api/app/attachments.py", "api/app/chat_references.py",
+        "api/app/config.py", "api/app/main.py", "api/app/models.py",
+        "api/tests/imp025_native_fixture.py", "api/tests/test_attachments.py",
+        "api/tests/test_attachments_migration.py", "api/tests/test_attachments_postgres.py",
+        "api/tests/test_native_pdf_migration.py", "api/tests/test_native_pdf_storage.py",
+        "api/tests/test_imp025_native_integration.py", "scripts/imp025_verify.py",
+        "scripts/test_imp025_verify.py", "scripts/imp026_browser.py",
+        "scripts/local_browser_fixture.py", "scripts/test_imp017_intake.py",
+        "scripts/imp017_intake_verify.py", "scripts/test_imp017_intake_verify.py",
+    ), "modified"),
+    **dict.fromkeys((
+        "scripts/imp025_fixtures.py",
+        "api/migrations/versions/20261022_0013_retire_pdf_extraction.py",
+    ), "added"),
+    **dict.fromkeys((
+        "api/app/pdf_extractor.py", "api/app/pdf_lifecycle.py", "api/app/pdf_lifecycle_policy.py",
+        "api/app/pdf_protocol.py", "api/tests/imp017_lifecycle_joined.py",
+        "api/tests/test_pdf_lifecycle.py", "api/tests/test_pdf_retry_migration.py",
+        "scripts/imp017_fixtures.py", "scripts/imp017_lifecycle_verify.py",
+        "scripts/imp017_mount_probe.py", "scripts/imp017_verify.py",
+        "scripts/test_imp017_lifecycle.py", "scripts/test_imp017_pdf.py",
+        "compose.pdf.yaml", "compose.pdf-app.yaml",
+        "pdf-extractor/Dockerfile", "pdf-extractor/bootstrap.py", "pdf-extractor/bounded_json.py",
+        "pdf-extractor/build.py", "pdf-extractor/dependencies.lock.json", "pdf-extractor/probe.py",
+        "pdf-extractor/process.py", "pdf-extractor/seccomp.json", "pdf-extractor/structure.py",
+        "pdf-extractor/supervisor.py", "pdf-extractor/worker.py",
+    ), "deleted"),
+}
+RETIRED_INPUTS = frozenset(name for name, status in RETIREMENT_CHANGES.items() if status == "deleted")
 MANIFEST = ".imp025-inputs.json"
 # Preserve these superseded IMP-018 files outside native capture/execution.
 SUPERSEDED_INPUTS = frozenset({
@@ -66,6 +101,7 @@ NEW_INPUTS = (
     "api/migrations/versions/20261002_0010_pdf_turn_selections.py",
     "api/migrations/versions/20261014_0011_native_pdf_storage.py",
     "api/migrations/versions/20261014_0012_native_send_authorization.py",
+    "api/migrations/versions/20261022_0013_retire_pdf_extraction.py",
     "api/tests/test_native_pdf_storage.py",
     "api/tests/test_native_pdf_migration.py", "api/tests/test_native_send_authorization.py",
     "api/tests/imp025_native_fixture.py",
@@ -74,6 +110,7 @@ NEW_INPUTS = (
     "scripts/imp025_verify.py", "scripts/test_imp025_verify.py",
     "scripts/test_imp025_storage.py", "scripts/test_imp025_inline.py",
     "scripts/test_imp025_authorization.py", "scripts/test_imp025_wiring.py",
+    "scripts/imp025_fixtures.py",
 )
 API_FILES = (
     "app/attachments.py", "app/attachment_cleanup.py", "app/chat.py", "app/chat_broker.py",
@@ -82,6 +119,7 @@ API_FILES = (
     "migrations/versions/20261002_0010_pdf_turn_selections.py",
     "migrations/versions/20261014_0011_native_pdf_storage.py",
     "migrations/versions/20261014_0012_native_send_authorization.py",
+    "migrations/versions/20261022_0013_retire_pdf_extraction.py",
     "tests/conftest.py", "tests/imp024_http.py", "tests/test_chat.py",
     "tests/test_native_pdf_storage.py", "tests/test_native_pdf_migration.py",
     "tests/test_native_send_authorization.py", "tests/imp025_native_fixture.py",
@@ -98,7 +136,12 @@ API_TESTS = (
 )
 PG_TESTS = (
     "tests/test_imp025_native_integration.py::test_postgres_native_migrations_preservation_and_legacy_fence",
+    "tests/test_imp025_native_integration.py::test_postgres_extractor_retirement_preservation[False]",
+    "tests/test_imp025_native_integration.py::test_postgres_extractor_retirement_preservation[True]",
     "tests/test_imp025_native_integration.py::test_postgres_native_capture_delete_race",
+)
+RETIREMENT_TEST = (
+    "tests/test_imp025_native_integration.py::test_postgres_extractor_retirement_preservation"
 )
 STAGES = frozenset({
     "preflight", "frozen_inputs", "build", "database", "postgres", "migration", "api_tests",
@@ -165,7 +208,9 @@ def source_path(name):
             and not any(part.startswith(".env") or part in {"node_modules", "__pycache__", ".git"}
                         for part in Path(name).parts))
         or name.startswith("scripts/") and name.endswith(".py")
-    ) and not Path(name).is_absolute() and ".." not in Path(name).parts and name not in SUPERSEDED_INPUTS
+    ) and not Path(name).is_absolute() and ".." not in Path(name).parts and name not in (
+        SUPERSEDED_INPUTS | RETIRED_INPUTS
+    )
 
 
 def git(*args):
@@ -226,7 +271,8 @@ def capture():
     git("merge-base", "--is-ancestor", CHECKPOINT, head)
     changed = git("diff", "--no-ext-diff", "--no-textconv", "--no-renames",
                   "--name-only", "-z", CHECKPOINT, head).split(b"\0")
-    require(all(name.decode("utf-8", "strict") in REPAIR_PATHS for name in changed if name))
+    require(all(name.decode("utf-8", "strict") in REPAIR_PATHS | RETIREMENT_CHANGES.keys()
+                for name in changed if name))
     baseline_paths, current_paths = tracked_sources(BASELINE), tracked_sources(head)
     paths = baseline_paths | set(NEW_INPUTS)
     require(baseline_paths <= current_paths <= paths)
@@ -592,7 +638,7 @@ class Product:
         self.base = self.chat + "/" + conv
 
     def main_flow(self):
-        from imp017_fixtures import text_pdf
+        from imp025_fixtures import text_pdf
         self.stage("native_order")
         with native_probe("upload_first"):
             first = self.upload(text_pdf())
@@ -658,9 +704,11 @@ class Product:
 
 
 class NativeVerify(Verify):
-    def __init__(self, synthetic):
+    def __init__(self, synthetic, *, retirement_only=False):
+        require(not (synthetic and retirement_only))
         super().__init__()
         self.synthetic = synthetic
+        self.retirement_only = retirement_only
         self.phase = "frozen_inputs"
         self.connection = self.runtime = self.product = None
         self.receiver = Receiver()
@@ -673,7 +721,7 @@ class NativeVerify(Verify):
     def prepare(self):
         super().prepare()
         # Base synthetic chat overlay is deliberately omitted: no extractor or
-        # fake text transport. API-only does not construct a worker/channel.
+        # fake text transport. API-only/retirement-only never start a worker/channel.
         self.base = self.base[:-2]
         from imp017_intake_verify import postgres_owner_overlay
         overlay = self.inputs / "native-checks.yaml"
@@ -810,7 +858,11 @@ class NativeVerify(Verify):
         try:
             self.prepare()
             self.stage("build")
-            services = ("db", "api", "api-check", "api-integration-check")
+            # The owner check service builds the one required development image
+            # via run --build below; retirement needs no other application images.
+            services = ("db",) if self.retirement_only else (
+                "db", "api", "api-check", "api-integration-check"
+            )
             self.compose("build", *services, *(("frontdoor",) if self.synthetic else ()), seconds=600)
             self.stage("database")
             self.compose("up", "-d", "--wait", "db")
@@ -818,17 +870,19 @@ class NativeVerify(Verify):
             self.compose_used = True
             self.command(self.base + ["-f", str(self.owner_overlay), "run", "--build", "--rm",
                 "api-integration-owner-check", "python", "-m", "pytest", "-p", "no:cacheprovider",
-                "--tb=no", "--show-capture=no", "--color=no", "-s", *PG_TESTS],
-                seconds=360, output=ResultOutput(expected=2))
-            self.stage("migration")
-            self.compose("run", "--rm", "api", "alembic", "upgrade", "head")
-            self.check("api_tests", "python", "-m", "pytest", "-p", "no:cacheprovider",
-                "--tb=no", "--show-capture=no", "--color=no", *API_TESTS, output=ResultOutput())
-            self.check("api_lint", "ruff", "check", "--output-format", "json", *API_FILES,
-                output=RuffJsonOutput(check_files=API_FILES))
-            self.check("api_format", "ruff", "format", "--check", *API_FILES,
-                output=CheckOutput("ruff_format", check_files=API_FILES))
-            self.check("api_types", "mypy", "app", output=CheckOutput("mypy", check_files=API_FILES))
+                "--tb=no", "--show-capture=no", "--color=no", "-s",
+                *((RETIREMENT_TEST,) if self.retirement_only else PG_TESTS)],
+                seconds=360, output=ResultOutput(expected=2 if self.retirement_only else 4))
+            if not self.retirement_only:
+                self.stage("migration")
+                self.compose("run", "--rm", "api", "alembic", "upgrade", "head")
+                self.check("api_tests", "python", "-m", "pytest", "-p", "no:cacheprovider",
+                    "--tb=no", "--show-capture=no", "--color=no", *API_TESTS, output=ResultOutput())
+                self.check("api_lint", "ruff", "check", "--output-format", "json", *API_FILES,
+                    output=RuffJsonOutput(check_files=API_FILES))
+                self.check("api_format", "ruff", "format", "--check", *API_FILES,
+                    output=CheckOutput("ruff_format", check_files=API_FILES))
+                self.check("api_types", "mypy", "app", output=CheckOutput("mypy", check_files=API_FILES))
             if self.synthetic:
                 self.run_native()
             passed = True
@@ -848,6 +902,7 @@ def main(argv=None):
     mode.add_argument("--preflight", action="store_true")
     mode.add_argument("--api-only", action="store_true")
     mode.add_argument("--synthetic", action="store_true")
+    mode.add_argument("--retirement-only", action="store_true")
     parser.add_argument("--reviewed-harness", action="store_true")
     parser.add_argument("--fingerprint")
     parser.add_argument("--frozen", action="store_true", help=argparse.SUPPRESS)
@@ -863,7 +918,7 @@ def main(argv=None):
     try:
         if args.frozen:
             check_frozen(args.fingerprint)
-            return NativeVerify(args.synthetic).run()
+            return NativeVerify(args.synthetic, retirement_only=args.retirement_only).run()
         sources, head = capture()
         actual, metadata = fingerprint(sources, head)
         if args.preflight:
@@ -876,8 +931,10 @@ def main(argv=None):
         snapshot = parent.inputs / "source"
         freeze(snapshot, sources, metadata)
         require(fingerprint(*capture())[0] == actual)  # Concurrent review/source drift rejects.
+        execution_mode = ("--retirement-only" if args.retirement_only else
+                          "--synthetic" if args.synthetic else "--api-only")
         parent.command(["/usr/bin/python3", "-I", "-B", str(snapshot / "scripts/imp025_verify.py"),
-            "--synthetic" if args.synthetic else "--api-only", "--reviewed-harness", "--fingerprint", actual,
+            execution_mode, "--reviewed-harness", "--fingerprint", actual,
             "--frozen"], seconds=1800, output=SafeOutput())
         return 0
     except (Exception, KeyboardInterrupt):

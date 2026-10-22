@@ -6,12 +6,11 @@ An accepted envelope is stored, NOT a structurally validated PDF or a sent file.
 
 from __future__ import annotations
 
-import html
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.requests import ClientDisconnect
@@ -29,15 +28,14 @@ from app.models import (
     ProjectTurnReservation,
 )
 from app.pdf_intake import IntakeError, filename_metadata, original_body
-from app.pdf_protocol import LABEL, PDFError, result
 
 router = APIRouter(
     prefix="/projects/{project_id}/chat/{conversation_id}/attachments", tags=["attachments"]
 )
 
 
-def view(row: ProjectAttachment, processing_available: bool = False) -> dict[str, Any]:
-    # Deliberately excludes both deferred blobs. No implicit parser or ready claim.
+def view(row: ProjectAttachment) -> dict[str, Any]:
+    # Deliberately excludes the deferred original. No parser or provider-ready claim.
     return {
         "id": str(row.id),
         "filename": row.filename,
@@ -49,29 +47,7 @@ def view(row: ProjectAttachment, processing_available: bool = False) -> dict[str
         "native_available": row.status == "stored"
         and row.original_size is not None
         and 0 < row.original_size < NATIVE_PDF_BYTE_LIMIT,
-        "text_size": row.text_size,
-        "text_sha256": row.text_sha256,
-        "page_count": row.page_count,
-        "missing_pages": row.missing_pages,
-        "label": (
-            "Original PDF; not locally parsed. Submission receipts belong to chat turns."
-            if row.status == "stored"
-            else LABEL
-        ),
-        "provenance": (
-            {
-                "policy": row.extraction_policy,
-                "qpdf": row.qpdf_version,
-                "pdftotext": row.pdftotext_version,
-                "build_sha256": row.extractor_build_sha256,
-            }
-            if row.status == "ready"
-            else None
-        ),
-        "processing_available": False,  # Legacy setting cannot enable extraction admission.
-        "attempt_count": row.attempt_count,
-        "last_error_code": row.last_error_code,
-        "next_attempt_at": row.next_attempt_at.isoformat() if row.next_attempt_at else None,
+        "label": "Original PDF; not locally parsed. Submission receipts belong to chat turns.",
         "included_in_model": False,
         "created_at": row.created_at.isoformat(),
     }
@@ -159,8 +135,8 @@ async def upload(
     record_audit(
         db, action="project.attachment.upload", actor_user_id=actor.id, project_id=project_id
     )
-    db.commit()  # Stored is ineligible for every legacy claim/completion CAS.
-    metadata = view(row, request.app.state.settings.pdf_enabled)
+    db.commit()
+    metadata = view(row)
     if failure:
         return JSONResponse({"detail": failure[2], "attachment": metadata}, status_code=failure[0])
     return JSONResponse(metadata, status_code=201)
@@ -170,7 +146,6 @@ async def upload(
 def listing(
     project_id: uuid.UUID,
     conversation_id: uuid.UUID,
-    request: Request,
     db: DbSession,
     actor: CurrentActor,
     after: uuid.UUID | None = None,
@@ -184,7 +159,7 @@ def listing(
     if after is not None:
         statement = statement.where(ProjectAttachment.id > after)
     rows = list(db.scalars(statement.order_by(ProjectAttachment.id).limit(101)))
-    items = [view(row, request.app.state.settings.pdf_enabled) for row in rows[:100]]
+    items = [view(row) for row in rows[:100]]
     audit_access(db, actor, project_id)
     db.commit()
     return {"attachments": items, "next_after": items[-1]["id"] if len(rows) > 100 else None}
@@ -195,15 +170,12 @@ def status(
     project_id: uuid.UUID,
     conversation_id: uuid.UUID,
     attachment_id: uuid.UUID,
-    request: Request,
     db: DbSession,
     actor: CurrentActor,
 ) -> dict[str, Any]:
     authorize(db, actor, project_id, lock=True)
     conversation(db, project_id, conversation_id)
-    metadata = view(
-        load(db, project_id, conversation_id, attachment_id), request.app.state.settings.pdf_enabled
-    )
+    metadata = view(load(db, project_id, conversation_id, attachment_id))
     audit_access(db, actor, project_id)
     db.commit()
     return metadata
@@ -231,49 +203,6 @@ def raw(
         headers={
             "Content-Disposition": f'attachment; filename="attachment-{attachment_id}.pdf"',
             "X-Content-Type-Options": "nosniff",
-        },
-    )
-
-
-@router.get("/{attachment_id}/preview")
-def preview(
-    project_id: uuid.UUID,
-    conversation_id: uuid.UUID,
-    attachment_id: uuid.UUID,
-    db: DbSession,
-    actor: CurrentActor,
-) -> HTMLResponse:
-    authorize(db, actor, project_id, lock=True)
-    conversation(db, project_id, conversation_id)
-    row = load(db, project_id, conversation_id, attachment_id)
-    if row.status != "ready":
-        raise HTTPException(409, "PDF text is not ready; check attachment status")
-    try:
-        validated = result(
-            {
-                "v": 1,
-                "status": "ready",
-                "size": row.original_size,
-                "sha256": row.original_sha256,
-                "text": row.text_content,
-                "text_sha256": row.text_sha256,
-                "pages": row.page_count,
-                "missing_pages": row.missing_pages,
-                "label": LABEL,
-                "provenance": view(row)["provenance"],
-            }
-        )
-    except PDFError as exc:
-        raise HTTPException(409, "Stored PDF derivative is unavailable") from exc
-    content = f"<!doctype html><meta charset=utf-8><p>{html.escape(LABEL)}</p>"
-    content += f"<pre>{html.escape(validated['text'])}</pre>"
-    audit_access(db, actor, project_id)
-    db.commit()
-    return HTMLResponse(
-        content,
-        headers={
-            "X-Content-Type-Options": "nosniff",
-            "Content-Security-Policy": "sandbox; default-src 'none'; frame-ancestors 'none'",
         },
     )
 
@@ -312,7 +241,7 @@ def remove(
                 for reference in references
             ):
                 db.add(AttachmentPurge(attachment_id=attachment_id, turn_id=turn.id))
-        # Original + derivative are the ONLY structured text copies in the DB.
+        # The original is the only structured attachment content in the DB.
         # Metadata/idempotency/proposal captures and user/model quotations survive.
         db.delete(row)
         record_audit(

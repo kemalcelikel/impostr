@@ -29,7 +29,6 @@ from app.chat_protocol import (
     reference_context,
 )
 from app.models import ChatTurn, ChatTurnPdfSelection, ProjectAttachment
-from app.pdf_protocol import LABEL, PDFError, result
 
 
 def selection_request(db: Session, turn: ChatTurn) -> list[dict[str, str]]:
@@ -71,56 +70,6 @@ def reference_metadata(row: ProjectAttachment) -> dict[str, Any]:
         "original_sha256": row.original_sha256,
         "original_size": row.original_size,
     }
-
-
-def legacy_reference_metadata(row: ProjectAttachment) -> dict[str, Any]:
-    """Preserved derivative identity, never converted into native submission proof."""
-    provenance = {
-        "policy": row.extraction_policy,
-        "qpdf": row.qpdf_version,
-        "pdftotext": row.pdftotext_version,
-        "build_sha256": row.extractor_build_sha256,
-    }
-    return {
-        "attachment_id": str(row.id),
-        "filename": row.filename,
-        "original_sha256": row.original_sha256,
-        "original_size": row.original_size,
-        "text_sha256": row.text_sha256,
-        "text_size": row.text_size,
-        "page_count": row.page_count,
-        "missing_pages": deepcopy(row.missing_pages),
-        "label": LABEL,
-        "provenance": provenance,
-    }
-
-
-def derivative(row: ProjectAttachment) -> tuple[dict[str, Any], str]:
-    if row.status != "ready":
-        raise HTTPException(409, "PDF text is not ready; check attachment status before selecting")
-    reference = legacy_reference_metadata(row)
-    try:
-        validated = result(
-            {
-                "v": 1,
-                "status": "ready",
-                "size": row.original_size,
-                "sha256": row.original_sha256,
-                "text": row.text_content,
-                "text_sha256": row.text_sha256,
-                "pages": row.page_count,
-                "missing_pages": row.missing_pages,
-                "label": LABEL,
-                "provenance": reference["provenance"],
-            }
-        )
-        if row.text_size != len(validated["text"].encode("utf-8")):
-            raise PDFError()
-    except PDFError as exc:
-        raise HTTPException(
-            409, "Stored PDF derivative is unavailable; remove or re-upload it"
-        ) from exc
-    return reference, str(validated["text"])
 
 
 def original(row: ProjectAttachment) -> dict[str, Any]:
@@ -235,7 +184,7 @@ def resolve_dispatch_context(
 
 
 def reference_views(db: Session, turn: ChatTurn) -> list[dict[str, Any]]:
-    # Never load either blob for history views or relabel historical text captures.
+    # Never load originals for history views or relabel historical text captures.
     views = []
     for reference in turn.payload.get("references", []):
         row = attachment_row(db, turn.project_id, turn.conversation_id, reference["attachment_id"])

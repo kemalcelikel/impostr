@@ -33,7 +33,7 @@ API_CHECK_FILES = (
     "tests/test_attachments_migration.py",
     "tests/test_attachments_postgres.py",
 )
-EXPECTED_HEAD = "20261002_0009"
+EXPECTED_HEAD = "20261022_0013"
 POSTGRES_STAGES = frozenset(
     {
         "schema_create",
@@ -60,9 +60,7 @@ POSTGRES_STAGES = frozenset(
         "roundtrip_upload",
         "roundtrip_stored_original",
         "roundtrip_raw",
-        "roundtrip_pending_metadata",
-        "roundtrip_derivative_commit",
-        "roundtrip_preview",
+        "roundtrip_stored_metadata",
         "roundtrip_delete",
         "overcap_upload",
         "overcap_discarded_blob",

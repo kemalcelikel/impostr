@@ -16,7 +16,7 @@ from test_projects import _login
 from app import attachments
 from app.main import create_app
 from app.models import AuditEvent, Project, ProjectAttachment, User, WebSession
-from app.pdf_protocol import LABEL, MAX_ORIGINAL, POLICY
+from app.chat_protocol import NATIVE_PDF_BYTE_LIMIT
 
 PDF = b"%PDF-1.7\nSynthetic raw intake only; not structurally validated.\n%%EOF\n"
 
@@ -57,20 +57,6 @@ def intake_setup(client, engine, account_factory):
     return client, engine, project, root, base
 
 
-def ready_derivative(db, attachment_id, text='Literal <script>alert("x")</script> & café\f\f'):
-    row = db.get(ProjectAttachment, uuid.UUID(attachment_id))
-    row.status = "ready"
-    row.text_content = text
-    row.text_size = len(text.encode())
-    row.text_sha256 = hashlib.sha256(text.encode()).hexdigest()
-    row.page_count = 2
-    row.missing_pages = [2]
-    row.extraction_policy = POLICY
-    row.qpdf_version = "11.3.0"
-    row.pdftotext_version = "22.12.0"
-    row.extractor_build_sha256 = "a" * 64
-
-
 def check_roundtrip(client, engine, base, stage=lambda _: None):
     stage("roundtrip_upload")
     response = upload(client, base)
@@ -79,15 +65,14 @@ def check_roundtrip(client, engine, base, stage=lambda _: None):
     attachment_id = metadata["id"]
     uuid.UUID(attachment_id)
     assert metadata["status"] == "stored" and metadata["native_available"] is True
-    assert metadata["processing_available"] is False and metadata["included_in_model"] is False
+    assert metadata["included_in_model"] is False
     assert metadata["original_sha256"] == hashlib.sha256(PDF).hexdigest()
     assert metadata["original_size"] == len(PDF)
-    assert metadata["provenance"] is None
-    assert "original" not in metadata and "text_content" not in metadata
+    assert not {"original", "text_content", "provenance", "processing_available"} & metadata.keys()
     stage("roundtrip_stored_original")
     with Session(engine) as db:
         stored = db.get(ProjectAttachment, uuid.UUID(attachment_id))
-        assert stored.original == PDF and stored.attempt_count == 0 and stored.lease_id is None
+        assert stored.original == PDF
     stage("roundtrip_raw")
     raw = client.get(base + f"/{attachment_id}/raw")
     assert raw.status_code == 200 and raw.content == PDF
@@ -97,20 +82,9 @@ def check_roundtrip(client, engine, base, stage=lambda _: None):
     )
     assert raw.headers["x-content-type-options"] == "nosniff"
     assert raw.headers["cache-control"] == "no-store"
-    stage("roundtrip_pending_metadata")
-    assert client.get(base + f"/{attachment_id}/preview").status_code == 409
+    stage("roundtrip_stored_metadata")
+    assert client.get(base + f"/{attachment_id}/preview").status_code == 404
     assert client.get(base).json()["attachments"] == [metadata]
-    stage("roundtrip_derivative_commit")
-    with Session(engine) as db, db.begin():
-        ready_derivative(db, attachment_id)
-    stage("roundtrip_preview")
-    preview = client.get(base + f"/{attachment_id}/preview")
-    assert preview.status_code == 200
-    assert "<script>" not in preview.text and "&lt;script&gt;" in preview.text
-    assert "&amp; café" in preview.text and LABEL in preview.text
-    assert preview.headers["x-content-type-options"] == "nosniff"
-    assert "sandbox" in preview.headers["content-security-policy"]
-    assert client.get(base + f"/{attachment_id}").json()["missing_pages"] == [2]
     stage("roundtrip_delete")
     assert client.delete(base + f"/{attachment_id}", headers=headers(client)).status_code == 204
     with Session(engine) as db:
@@ -120,7 +94,7 @@ def check_roundtrip(client, engine, base, stage=lambda _: None):
     assert client.get(base).json()["attachments"] == []
 
 
-def test_pending_commit_exact_download_escaped_ready_preview_and_delete(intake_setup):
+def test_stored_commit_exact_download_no_preview_and_delete(intake_setup):
     client, engine, _, _, base = intake_setup
     check_roundtrip(client, engine, base)
 
@@ -134,7 +108,7 @@ def test_real_overcap_stream_rejected_independent_of_content_length(intake_setup
 def check_overcap(client, engine, base, declared, stage=lambda _: None):
     def body():
         yield b"%PDF-"
-        remaining = MAX_ORIGINAL - 5
+        remaining = NATIVE_PDF_BYTE_LIMIT - 5
         while remaining:
             block = b"x" * min(65536, remaining)
             yield block
@@ -153,7 +127,7 @@ def check_overcap(client, engine, base, declared, stage=lambda _: None):
     stage("overcap_discarded_blob")
     with Session(engine) as db:
         row = db.get(ProjectAttachment, uuid.UUID(failed["id"]))
-        assert row.original is None and row.text_content is None
+        assert row.original is None
     stage("overcap_metadata")
     assert client.get(base + f"/{failed['id']}/raw").status_code == 404
     assert client.get(base).json()["attachments"][0]["failure_code"] == "limit"
@@ -184,7 +158,7 @@ def test_envelope_failures_retain_only_safe_metadata(
     assert metadata["failure_code"] == code
     with Session(engine) as db:
         row = db.get(ProjectAttachment, uuid.UUID(metadata["id"]))
-        assert row.original is None and row.text_content is None
+        assert row.original is None
 
 
 def test_scope_revocation_csrf_and_filename_denials(
@@ -224,14 +198,13 @@ def test_scope_revocation_csrf_and_filename_denials(
             "",
             f"/{attachment_id}",
             f"/{attachment_id}/raw",
-            f"/{attachment_id}/preview",
         ):
             assert other.get(base + suffix).status_code == 404
         assert upload(other, base).status_code == 404
         assert other.delete(base + f"/{attachment_id}", headers=headers(other)).status_code == 404
     with Session(engine) as db, db.begin():
         db.execute(update(WebSession).values(revoked_at=datetime.now(UTC)))
-    for suffix in ("", f"/{attachment_id}", f"/{attachment_id}/raw", f"/{attachment_id}/preview"):
+    for suffix in ("", f"/{attachment_id}", f"/{attachment_id}/raw"):
         assert client.get(base + suffix).status_code == 401
     assert upload(client, base).status_code == 401
     assert client.delete(base + f"/{attachment_id}", headers=headers(client)).status_code == 401
