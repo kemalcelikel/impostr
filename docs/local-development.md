@@ -25,6 +25,25 @@ IMP-018 diagnostic/test inputs; those files remain preserved, not product depend
 For a later task's new snapshot, use its actual committed baseline and fresh reviewed
 inputs rather than a historical fingerprint. The helper is anchored to native delivery.
 
+## IMP-026 composer — blocked before rendered acceptance (2026-10-22)
+
+The uncommitted composer and native browser fixture are implemented and reviewed. Focused
+web checks (87 tests, type, lint, format and build) and pure fixture checks (11 tests;
+related suite 22 passed, 1 gated skip) passed. The reviewed profile used baseline
+`bd6454c` and fresh fingerprint
+`2a7aa1240c61c7afbd6bc8871183645cc059361be7762d6575b814929cada9a0`.
+The actual coordinator launch failed before creating Member/accounts, Compose resources
+or images. Sanitized status retained private recovery state; recovery failed. The native
+parent/bind defects were repaired and focused review passed, but the incident cause is
+not established. No rendered/browser/UI acceptance, product commit, live-provider test
+or download acceptance is claimed. IMP-026 is blocked on external cleanup capability,
+not exhausted budget (2/3 repairs used).
+
+Do not relaunch until the existing owned private-state and watchdog cleanup is verified;
+preserve retained state. Latest recovery status does not verify that cleanup or Compose
+resource creation, so operator-assisted diagnosis is required. Do not infer Docker engine
+failure or use alternate private transport, auth bypass, parser or reinstall.
+
 Use the short root AGENTS.md for current execution/Git limits. Old handoffs are in
 docs/agent-history.md; do not turn their old commands or verification matrices into
 current prerequisites. Reuse existing fixtures and unchanged evidence; ordinary

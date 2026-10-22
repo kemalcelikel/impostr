@@ -1538,7 +1538,7 @@ reuse unchanged valid build/static/DB evidence. Review substantial trust/data ch
 and only the affected repair afterward. Keep owned cleanup and honest receipts; no
 parser rebuild, new diagnostic framework, exhaustive matrix or real Azure call.
 
-## [ ] IMP-026 — Select and send native PDFs in the planning chat composer
+## [!] IMP-026 — Select and send native PDFs in the planning chat composer
 
 **Depends on:** IMP-025
 
@@ -1567,6 +1567,23 @@ Member rendered upload→select→send→status→remove/delete, tab/reconnect i
 one access denial and desktop/narrow keyboard spot-check with owned cleanup. Review the
 important rendered flow; reuse unchanged editor/layout evidence. No owner's PDF/account,
 live provider or arbitrary dirty preview; this item is not accepted from backend-only tests.
+
+**2026-10-22 outcome — blocked before rendered acceptance:** Composer and exact native
+browser-profile candidate preserved uncommitted from `bd6454c`; IMP-025 `a966d77` remains
+delivered. Coordinator focused web87 tests/type/lint/format/build passed; fixture11,
+related22/1 gated skip and native verifier34 passed. Independent composer/profile review
+and affected startup-boundary repair review PASS. Repairs2/3 used (archive/selection
+repair, private-parent/bind repair); mechanical formatting/test synchronization excluded.
+Fresh read-only profile fingerprint
+`2a7aa1240c61c7afbd6bc8871183645cc059361be7762d6575b814929cada9a0`.
+Actual launch failed before Member/login/Compose/images were created; sanitized cleanup
+retains private recovery state and reports recovery failed. Existing recover cannot
+verify private-state/watchdog cleanup and requests operator-assisted diagnosis; Docker
+engine failure and actual startup cause are not established. No rendered upload/send,
+desktop/narrow keyboard, browser denial or download acceptance; no product commit or
+live-provider claim. Preserve retained state and every partial file; next requires
+verified owned private/watchdog cleanup before refreshed pinned launch/rendered review.
+Final affected-docs pass done; local outcome bookkeeping only, no push/PR or downstream.
 
 ## [ ] IMP-027 — Retire local PDF extraction and preserve existing project data
 
