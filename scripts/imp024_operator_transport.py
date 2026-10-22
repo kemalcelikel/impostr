@@ -87,15 +87,25 @@ class PlanningHTTPSInference(HTTPSInference):
         self.contract.key = ""
         self.emitted_tail = ""
 
-    def events(self, data, cancelled, deadline):
+    def events(self, data, cancelled, deadline, *, submission=None):
         require(bool(self.contract.key) and self.contract.key != "unacquired-placeholder")
+        native = submission is not None and submission.ledger.native
+        manifest = submission.ledger.original_manifest if native else None
         data = validate("POST", ROUTE, json.dumps(data).encode(), planning=True,
-                        input_text_limit=384 * 1024)
+                        input_text_limit=384 * 1024, pdf_manifest=manifest)
         no_secret(data, self.contract.key)
         body = dict(data, model=self.contract.deployment, stream=True, store=False,
                     max_output_tokens=min(data.get("max_output_tokens", MAX_TOKENS), MAX_TOKENS))
         encoded = json.dumps(body, ensure_ascii=True, separators=(",", ":")).encode()
-        require(len(encoded) <= MAX_REQUEST)
+        if native:
+            from app.chat_protocol import MAX_PDF_FRAME
+            require(len(encoded) <= MAX_PDF_FRAME)
+        else:
+            require(len(encoded) <= MAX_REQUEST)
+        if submission is not None:
+            # Rebind after host validation/model substitution to the actual native
+            # input about to be serialized. No worker-provided receipt assertion.
+            submission.bind(body, encoded, cancelled=cancelled, deadline=deadline)
         connection = self.connection()
         response = None
         finished = threading.Event()
@@ -110,9 +120,13 @@ class PlanningHTTPSInference(HTTPSInference):
         watcher.start()
         try:
             require(not cancelled.is_set() and time.monotonic() < deadline)
+            if submission is not None:
+                submission.attempting()
             connection.request("POST", self.contract.route, encoded, {
                 "api-key": self.contract.key, "Content-Type": "application/json",
                 "Accept": "text/event-stream", "Accept-Encoding": "identity", "Connection": "close"})
+            if submission is not None:
+                submission.sent()  # Full HTTP request returned; NOT provider acceptance.
             response = connection.getresponse()
             require(response.status == 200
                     and response.getheader("Content-Type", "").split(";", 1)[0] == "text/event-stream"

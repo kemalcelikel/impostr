@@ -11,7 +11,19 @@ from sqlalchemy.orm import Session
 from test_projects import _login
 
 from app.chat_dispatch import Dispatcher
-from app.chat_protocol import MAX_PRIOR_TURNS, MAX_TEXT, ChannelError
+from app.chat_protocol import (
+    MAX_PRIOR_TURNS,
+    MAX_TEXT,
+    NATIVE_INLINE_CONTEXT,
+    NATIVE_PDF_REFERENCE,
+    ChannelError,
+    digest,
+    manifest_digest,
+    native_occurrence_manifest,
+    native_prompt_text,
+    original_manifest_digest,
+    resolved_prompt_text,
+)
 from app.config import AppSettings
 from app.main import create_app
 from app.models import (
@@ -37,6 +49,10 @@ class FakeBroker:
         self.fail_start = False
         self.mode = "planning"
         self.admitting = True
+        self.receipts = []
+        self.payload = None
+        self.stopped = False
+        self.purged = False
 
     def call(self, value):
         self.calls.append(value)
@@ -44,14 +60,74 @@ class FakeBroker:
             return {"ok": True, "epoch": self.epoch, "mode": self.mode, "admitting": self.admitting}
         if value["op"] == "start" and self.fail_start:
             raise ChannelError()
+        if value["op"] == "start":
+            self.payload = value["payload"]
+            self.start = value
+            self.receipts = []
+            self.stopped = False
+            self.purged = False
+        if value["op"] in ("abort", "purge"):
+            self.stopped = True
+        if self.events and self.events[-1]["event"]["type"] in ("completed", "failed", "cancelled"):
+            self.stopped = True
+        if self.stopped and self.payload is not None and not self.receipts:
+            self.add_receipt("failed-before-send", request_sha256=None)
         if value["op"] == "poll":
             return {
                 "ok": True,
                 "epoch": self.epoch,
-                "known": self.known,
+                "known": self.known and (self.payload is not None or self.purged),
                 "events": [row for row in self.events if row["sequence"] > value["after"]][:16],
+                "stopped": self.stopped,
+                "receipts": self.receipts if self.known else [],
+            }
+        if value["op"] == "purge":
+            self.payload = None
+            self.events = []
+            self.purged = True
+            return {
+                "ok": True,
+                "epoch": self.epoch,
+                "stopped": True,
+                "purged": True,
+                "known": self.known,
             }
         return {"ok": True, "epoch": self.epoch, "stopped": True}
+
+    def add_receipt(self, status="sent", request_sha256="a" * 64):
+        native = self.payload.get("kind") == NATIVE_INLINE_CONTEXT
+        context = self.payload["context"] if native else self.payload
+        if native:
+            # This fake cannot assert actual native submission. B2 tests separately
+            # inject trusted metadata with a committed per-call capability.
+            assert status == "failed-before-send" and request_sha256 is None
+        self.receipts.append(
+            {
+                **{
+                    key: self.start[key]
+                    for key in ("project_id", "conversation_id", "turn_id", "epoch")
+                },
+                "call": len(self.receipts) + 1,
+                "rendered_sha256": digest(
+                    native_prompt_text(context) if native else resolved_prompt_text(context)
+                ),
+                "manifest_sha256": manifest_digest(context),
+                "request_sha256": request_sha256,
+                "status": status,
+                **(
+                    dict(
+                        reference_kind=NATIVE_PDF_REFERENCE,
+                        request_size=None,
+                        authorization_id=None,
+                        original_manifest_sha256=original_manifest_digest(
+                            native_occurrence_manifest(context)
+                        ),
+                    )
+                    if native
+                    else {}
+                ),
+            }
+        )
 
     def add(self, kind, data):
         if not self.events and kind != "started":
@@ -451,7 +527,11 @@ def test_restarted_pump_waits_for_lease_then_sends_queued_question_once(chat_set
     replacement = Dispatcher(engine, broker)
     calls = len(broker.calls)
     replacement.tick()
-    assert len(broker.calls) == calls  # Running/202 did not mean recovered or sent.
+    # Receipt reconciliation may poll independently of the held pump lease, but
+    # cannot start inference or send the queued answer. Running/202 isn't recovery.
+    assert all(call["op"] == "poll" for call in broker.calls[calls:])
+    assert sum(call["op"] == "start" for call in broker.calls) == 1
+    assert not any(call["op"] == "reply" for call in broker.calls)
     with Session(engine) as db, db.begin():
         assert db.get(ChatInteraction, uuid.UUID(interaction)).state == "replying"
         db.get(ChatTurn, turn_id).pump_until = datetime.now(UTC) - timedelta(seconds=1)

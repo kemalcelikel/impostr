@@ -15,17 +15,31 @@ from typing import Any
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
+from app.attachment_cleanup import cleanup, purge_scope
 from app.chat_admission import TestScope, admission
 from app.chat_broker import Broker
 from app.chat_protocol import (
     MAX_EVENTS,
     MAX_TEXT,
+    NATIVE_INLINE_CONTEXT,
+    SEND_GATE_SECONDS,
     TURN_SECONDS,
     ChannelError,
+    broker_start_payload,
+    digest,
     escaped_size,
+    manifest_digest,
+    native_occurrence_manifest,
+    native_prompt_text,
+    original_manifest_digest,
+    reference_manifest,
     require,
+    resolved_prompt_text,
+    send_authorization,
 )
 from app.chat_protocol import event as validate_event
+from app.chat_receipts import reconcile
+from app.chat_references import resolve_context, resolve_dispatch_context
 from app.chat_state import (
     TERMINAL,
     authorize,
@@ -36,7 +50,15 @@ from app.chat_state import (
     utc,
 )
 from app.dependencies import AuthenticatedActor, load_active_actor
-from app.models import ChatInteraction, ChatTurn, ProjectTurnReservation, WebSession
+from app.models import (
+    AttachmentDeletion,
+    ChatInteraction,
+    ChatSendAuthorization,
+    ChatTurn,
+    Conversation,
+    ProjectTurnReservation,
+    WebSession,
+)
 
 PUMP_LEASE_SECONDS = 20
 
@@ -85,15 +107,60 @@ class Dispatcher:
                 if claim is None:
                     continue
                 try:
-                    self.advance(turn_id)
-                except Exception:
-                    self.interrupt(turn_id)
+                    failed = False
+                    try:
+                        self.advance(turn_id)
+                    except Exception:
+                        failed = True
+                    # Leave the exception context (and its channel traceback/text
+                    # frames) BEFORE confirming stop and releasing deletion locks.
+                    if failed:
+                        self.interrupt(turn_id)
                 finally:
                     self.release_claim(turn_id, claim)
+            # Submission facts outlive worker-event delivery, cancellation, revoked
+            # initiators and the active project reservation. Never send from here.
+            with Session(self.engine) as db:
+                receipt_ids = list(
+                    db.scalars(
+                        select(ChatTurn.id).where(ChatTurn.receipt_pending.is_(True)).limit(8)
+                    )
+                )
+                cleanup_ids = list(
+                    db.scalars(
+                        select(AttachmentDeletion.attachment_id)
+                        .where(AttachmentDeletion.pending.is_(True))
+                        .limit(8)
+                    )
+                )
+            for turn_id in receipt_ids:
+                try:
+                    self.poll_receipts(turn_id)
+                except Exception:
+                    with Session(self.engine) as db:
+                        current = db.get(ChatTurn, turn_id)
+                        terminal = current is not None and current.state in TERMINAL
+                    if terminal:
+                        try:
+                            # A terminal ledger lost to epoch replacement remains
+                            # uncertain, but can close after exact-scope cleanup.
+                            purge_scope(self.engine, self.broker, turn_id)
+                        except Exception:
+                            pass
+            for attachment_id in cleanup_ids:
+                try:
+                    cleanup(self.engine, self.broker, attachment_id)
+                except Exception:
+                    pass  # Durable fence remains for a later bounded tick.
 
     def claim(self, turn_id: uuid.UUID) -> datetime | None:
         with Session(self.engine) as db, db.begin():
-            turn = db.scalar(select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update())
+            turn = db.scalar(
+                select(ChatTurn)
+                .where(ChatTurn.id == turn_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
             if turn is None or (
                 turn.pump_until is not None and utc(turn.pump_until) > datetime.now(UTC)
             ):
@@ -113,29 +180,171 @@ class Dispatcher:
             if turn is None:
                 return
             abort = command(turn, "abort") if turn.broker_epoch else None
-            deadline = turn.dispatch_deadline
+            never_dispatched = turn.broker_epoch is None
         stopped = False
         if abort:
             try:
-                result = self.broker.call(abort)
-                stopped = result.get("stopped") is True
+                self.poll_receipts(turn_id)
             except Exception:
                 pass
-        # No new agent writes until stop is confirmed or the mandatory worker
-        # total lifetime has expired. Retain the reservation during a broker outage.
-        expired = deadline is None or datetime.now(UTC) >= utc(deadline) + timedelta(seconds=5)
+            try:
+                result = self.broker.call(abort)
+                stopped = result.get("stopped") is True and result.get("epoch") == abort["epoch"]
+                try:
+                    self.poll_receipts(turn_id)
+                except Exception:
+                    pass
+            except Exception:
+                # Replacement epoch needs an exact-scope tombstone plus old worker
+                # lifetime proof, not merely a hello from a different listener.
+                try:
+                    purge_scope(self.engine, self.broker, turn_id)
+                    stopped = True
+                except Exception:
+                    pass
         with Session(self.engine) as db, db.begin():
             turn = db.scalar(select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update())
             if turn is None:
                 return
+            turn.stop_confirmed = turn.stop_confirmed or stopped or never_dispatched
             if turn.state not in TERMINAL:
-                finish(db, turn, "interrupted", release=stopped or expired)
-            elif stopped or expired:
+                finish(db, turn, "interrupted", release=turn.stop_confirmed)
+            elif turn.stop_confirmed:
                 reservation = db.get(ProjectTurnReservation, turn.project_id)
                 if reservation is not None and reservation.turn_id == turn.id:
                     db.delete(reservation)
 
+    def persist_receipts(self, turn_id: uuid.UUID, result: dict[str, Any]) -> None:
+        # Deliberately separate commit from authorization/event validation/import.
+        with Session(self.engine) as db, db.begin():
+            current = db.scalar(select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update())
+            if current is None:
+                raise ChannelError()
+            reconcile(db, current, result)
+
+    def poll_receipts(self, turn_id: uuid.UUID) -> None:
+        with Session(self.engine) as db:
+            turn = db.get(ChatTurn, turn_id)
+            if turn is None or turn.broker_epoch is None:
+                return
+            poll = dict(command(turn, "poll"), after=turn.broker_cursor)
+        result = self.broker.call(poll)
+        self.persist_receipts(turn_id, result)
+        if result.get("known") is False:
+            with Session(self.engine) as db, db.begin():
+                current = db.scalar(
+                    select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update()
+                )
+                if current is not None and current.stop_confirmed:
+                    current.receipt_pending = False
+
+    def authorize_send(self, turn_id: uuid.UUID, result: dict[str, Any]) -> None:
+        """Fresh locked authorization is the revocation linearization point.
+
+        Only advance() invokes this, never the receipt-only reconciler after stop.
+        Commit a single-use scoped grant before channel I/O. A lost grant ACK/crash
+        interrupts rather than renewing it. Already authorized input is not retractable.
+        """
+        pending = result.get("send_authorization")
+        if pending is None:
+            return
+        pending = send_authorization(pending)
+        require(result.get("known") is True and result.get("stopped") is False)
+        require(pending["turn_id"] == str(turn_id) and result.get("epoch") == pending["epoch"])
+        with Session(self.engine) as db, db.begin():
+            initial = db.get(ChatTurn, turn_id)
+            if initial is None:
+                raise ChannelError()
+            # Existing actor -> web session -> project -> turn -> attachment order.
+            authorize(db, initiating_actor(db, initial), initial.project_id, lock=True)
+            turn = db.scalar(
+                select(ChatTurn)
+                .where(ChatTurn.id == turn_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if turn is None or turn.broker_epoch is None:
+                raise ChannelError()
+            require(turn.state in ("dispatching", "running") and not turn.stop_confirmed)
+            if turn.dispatch_deadline is None or utc(turn.dispatch_deadline) <= datetime.now(UTC):
+                raise ChannelError()
+            require(
+                pending["project_id"] == str(turn.project_id)
+                and pending["conversation_id"] == str(turn.conversation_id)
+                and pending["epoch"] == str(turn.broker_epoch)
+            )
+            require(
+                db.scalar(
+                    select(Conversation.id).where(
+                        Conversation.id == turn.conversation_id,
+                        Conversation.project_id == turn.project_id,
+                    )
+                )
+                is not None
+            )
+            reservation = db.get(ProjectTurnReservation, turn.project_id)
+            require(reservation is not None and reservation.turn_id == turn.id)
+            require(
+                db.scalar(
+                    select(AttachmentDeletion.attachment_id).where(
+                        AttachmentDeletion.project_id == turn.project_id,
+                        AttachmentDeletion.pending.is_(True),
+                    )
+                )
+                is None
+            )
+            resolved = resolve_context(db, turn.project_id, turn.conversation_id, turn.payload)
+            # original() rechecks actual bytes/hash under attachment locks. History
+            # cannot silently become unavailable or available after dispatch capture.
+            require(reference_manifest(resolved) == turn.dispatch_manifest)
+            require(native_occurrence_manifest(resolved) == pending["original_manifest"])
+            require(
+                digest(native_prompt_text(resolved))
+                == pending["rendered_sha256"]
+                == turn.dispatch_rendered_sha256
+            )
+            require(
+                manifest_digest(resolved)
+                == pending["manifest_sha256"]
+                == turn.dispatch_manifest_sha256
+            )
+            grants = list(
+                db.scalars(
+                    select(ChatSendAuthorization)
+                    .where(ChatSendAuthorization.turn_id == turn_id)
+                    .order_by(ChatSendAuthorization.call)
+                )
+            )
+            require(pending["call"] == len(grants) + 1)
+            capability = uuid.uuid4()
+            db.add(
+                ChatSendAuthorization(
+                    turn_id=turn_id,
+                    call=pending["call"],
+                    epoch=turn.broker_epoch,
+                    authorization_id=capability,
+                    request_sha256=pending["request_sha256"],
+                    request_size=pending["request_size"],
+                    original_manifest_sha256=original_manifest_digest(pending["original_manifest"]),
+                    expires_at=datetime.now(UTC) + timedelta(seconds=SEND_GATE_SECONDS),
+                )
+            )
+            grant = dict(
+                command(turn, "authorize-send"),
+                authorization=dict(pending, authorization_id=str(capability)),
+            )
+        # No database/browser credentials cross this existing authenticated Unix seam.
+        self.broker.call(grant)  # NEVER retry/renew a committed grant.
+
     def advance(self, turn_id: uuid.UUID) -> None:
+        with Session(self.engine) as db:
+            initial = db.get(ChatTurn, turn_id)
+            if initial is None:
+                return
+            terminal = initial.state in TERMINAL
+        if terminal:
+            self.interrupt(turn_id)
+            return
         hello = self.broker.call({"op": "hello"})
         start = None
         with Session(self.engine, expire_on_commit=False) as db:
@@ -151,15 +360,46 @@ class Dispatcher:
             )
             # Match application actor -> web-session -> project -> turn lock order.
             authorize(db, initiating_actor(db, initial), initial.project_id, lock=True)
-            turn = db.scalar(select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update())
+            turn = db.scalar(
+                select(ChatTurn)
+                .where(ChatTurn.id == turn_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
             if turn is None:
                 return
             require(turn.state not in TERMINAL)
             if turn.state == "queued":
+                reservation = db.get(ProjectTurnReservation, turn.project_id)
+                require(reservation is not None and reservation.turn_id == turn.id)
+                require(
+                    db.scalar(
+                        select(AttachmentDeletion.attachment_id).where(
+                            AttachmentDeletion.project_id == turn.project_id,
+                            AttachmentDeletion.pending.is_(True),
+                        )
+                    )
+                    is None
+                )
+                payload = resolve_dispatch_context(
+                    db, turn.project_id, turn.conversation_id, turn.payload
+                )
+                native = payload.get("kind") == NATIVE_INLINE_CONTEXT
+                resolved = payload["context"] if native else payload
+                if not native:
+                    broker_start_payload(resolved)
                 turn.broker_epoch = epoch
                 turn.dispatch_deadline = datetime.now(UTC) + timedelta(seconds=TURN_SECONDS)
                 turn.state = "dispatching"
-                start = dict(command(turn, "start"), payload=turn.payload)
+                turn.submission_state = "uncertain"
+                turn.receipt_pending = True
+                turn.dispatch_rendered_sha256 = digest(resolved_prompt_text(resolved))
+                turn.dispatch_manifest_sha256 = manifest_digest(resolved)
+                turn.dispatch_manifest = reference_manifest(resolved)
+                start = dict(command(turn, "start"), payload=payload)
+                if native:
+                    start["deadline"] = turn.dispatch_deadline.timestamp()
+                del resolved, payload  # No binary/context aliases survive channel I/O.
             else:
                 require(turn.broker_epoch == epoch)
                 if turn.state == "dispatching":
@@ -171,7 +411,9 @@ class Dispatcher:
                         seconds=TURN_SECONDS - 5
                     ):
                         return
-                    require(False)  # unresolved dispatch is interrupted, not resubmitted
+                    # Same-epoch retained scope can recover from a lost ACK, but
+                    # ONLY by polling. Never start again, even with exact identity.
+                    require(turn.dispatch_rendered_sha256 is not None)
                 if turn.dispatch_deadline is None:
                     raise ChannelError()
                 require(datetime.now(UTC) < utc(turn.dispatch_deadline))
@@ -179,7 +421,10 @@ class Dispatcher:
             poll = dict(command(turn, "poll"), after=turn.broker_cursor)
             db.commit()
         if start is not None:
-            self.broker.call(start)  # COMMITTED dispatch marker; never retry on failure.
+            try:
+                self.broker.call(start)  # COMMITTED marker; never retry on failure.
+            finally:
+                start = None  # Release API text before stop/release/delete can complete.
             with Session(self.engine) as db, db.begin():
                 turn = db.scalar(select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update())
                 if turn is None:
@@ -187,7 +432,18 @@ class Dispatcher:
                 if turn.state == "dispatching":
                     turn.state = "running"
         elif cancelling:
-            require(self.broker.call(command(turn, "abort")).get("stopped") is True)
+            try:
+                self.poll_receipts(turn_id)
+            except Exception:
+                pass  # Receipt outage must not prevent stopping the worker.
+            stopped_result = self.broker.call(command(turn, "abort"))
+            require(
+                stopped_result.get("stopped") is True and stopped_result.get("epoch") == str(epoch)
+            )
+            try:
+                self.poll_receipts(turn_id)
+            except Exception:
+                pass  # Independent reconciler will recover after cancellation.
             with Session(self.engine) as db, db.begin():
                 current = db.scalar(
                     select(ChatTurn).where(ChatTurn.id == turn_id).with_for_update()
@@ -195,12 +451,15 @@ class Dispatcher:
                 if current is None:
                     raise ChannelError()
                 if current.state not in TERMINAL:
+                    current.stop_confirmed = True
                     finish(db, current, "cancelled")
             return
-        else:
+        elif turn.state == "running":
             self.send_reply(turn_id)
         result = self.broker.call(poll)
+        self.persist_receipts(turn_id, result)
         require(result.get("known") is True and result.get("epoch") == str(epoch))
+        self.authorize_send(turn_id, result)
         events = result.get("events")
         if not isinstance(events, list) or len(events) > 16:
             raise ChannelError()
@@ -220,6 +479,8 @@ class Dispatcher:
                 raise ChannelError()
             if current.state in TERMINAL or current.state == "cancelling":
                 return
+            if current.state == "dispatching":
+                current.state = "running"
             for envelope in events:
                 require(isinstance(envelope, dict) and set(envelope) == {"sequence", "event"})
                 sequence = envelope["sequence"]
@@ -277,9 +538,17 @@ class Dispatcher:
                     imported = import_proposals(db, current, data["proposals"])
                     if imported:
                         event(db, current, "proposals", {"items": imported})
-                    finish(db, current, "completed")
+                    current.stop_confirmed = result.get("stopped") is True
+                    finish(db, current, "completed", release=current.stop_confirmed)
                 else:
-                    finish(db, current, "failed" if kind == "failed" else "cancelled", data=data)
+                    current.stop_confirmed = result.get("stopped") is True
+                    finish(
+                        db,
+                        current,
+                        "failed" if kind == "failed" else "cancelled",
+                        data=data,
+                        release=current.stop_confirmed,
+                    )
                 current.broker_cursor = sequence
                 require(current.state not in TERMINAL or envelope is events[-1])
             db.commit()  # only committed DB events are ever visible to browser streams

@@ -71,7 +71,7 @@ def route(method, operation, target=None):
     return previous.route(method, operation, target)
 
 
-def generated_config(port):
+def generated_config(port, *, native_pdf=False):
     config = previous.generated_config(port)
     policy = permission_policy()
     config["permission"] = policy
@@ -81,6 +81,12 @@ def generated_config(port):
     model["toolcall"] = True
     model["limit"]["output"] = MAX_TOKENS
     model["options"]["maxOutputTokens"] = MAX_TOKENS
+    if native_pdf:
+        # Pinned OpenCode filters unsupported prompt media from model modalities.
+        # This declaration preserves PDF input; it is not provider/live proof and
+        # does not widen the canonical read/edit policy or enable dispatch.
+        model["modalities"] = {"input": ["text", "pdf"], "output": ["text"]}
+        config["provider"]["azure"]["options"].update(timeout=30000, headerTimeout=30000)
     return config
 
 
@@ -157,14 +163,7 @@ class Driver(previous.Driver):
         if not authenticated:
             require(operation == "health")
         if operation == "prompt":
-            require(isinstance(body, dict) and set(body) == {"model", "agent", "parts", "tools"}
-                    and body["model"] == previous.MODEL and body["agent"] == "tech-lead"
-                    and body["tools"] == TOOL_DENIALS
-                    and isinstance(body["parts"], list) and len(body["parts"]) == 1
-                    and isinstance(body["parts"][0], dict) and set(body["parts"][0]) == {"type", "text"}
-                    and body["parts"][0]["type"] == "text" and self.active_session == session
-                    and session not in self.cancelled_sessions)
-            bounded_text(body["parts"][0]["text"], self.max_prompt, empty=False)
+            self.validate_prompt(body, session)
         elif operation == "create":
             require(isinstance(body, dict) and set(body) == {"title"})
             bounded_text(body["title"], 256, empty=False)
@@ -190,6 +189,16 @@ class Driver(previous.Driver):
         if operation == "abort":
             require(self.active_session == session and session in self.cancelled_sessions)
         return super().open(method, operation, session, body, authenticated)
+
+    def validate_prompt(self, body, session):
+        require(isinstance(body, dict) and set(body) == {"model", "agent", "parts", "tools"}
+                and body["model"] == previous.MODEL and body["agent"] == "tech-lead"
+                and body["tools"] == TOOL_DENIALS
+                and isinstance(body["parts"], list) and len(body["parts"]) == 1
+                and isinstance(body["parts"][0], dict) and set(body["parts"][0]) == {"type", "text"}
+                and body["parts"][0]["type"] == "text" and self.active_session == session
+                and session not in self.cancelled_sessions)
+        bounded_text(body["parts"][0]["text"], self.max_prompt, empty=False)
 
     def request(self, method, operation, session=None, body=None, authenticated=True):
         # Generic inherited API is intentionally unavailable for mutations/bodies.

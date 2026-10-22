@@ -11,41 +11,74 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from imp002_relay import CALL_TIMEOUT, IO_TIMEOUT, MAX_REQUEST, MAX_RESPONSE, ROUTE, respond
+from imp002_relay import (CALL_TIMEOUT, IO_TIMEOUT, MAX_REQUEST, MAX_RESPONSE, ROUTE,
+                         content_length, respond, validate)
 from imp024_protocol import terminal_error
 
 
 class Shim(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    @staticmethod
+    def request_shape(body, manifest):
+        """Shape validation only; the trusted host ALWAYS gates every PDF call."""
+        return validate("POST", ROUTE, body, planning=True,
+                        input_text_limit=384 * 1024, pdf_manifest=manifest)
+
+    request_length = staticmethod(content_length)
+
     def log_message(self, *_):
         pass
 
     def do_POST(self):
-        self.connection.settimeout(IO_TIMEOUT)
+        manifest = getattr(self.server, "pdf_manifest", None)
+        pdf = manifest is not None
+        if pdf:
+            from imp002_relay import pdf_contract
+            transfer_timeout = pdf_contract().PDF_TRANSFER_SECONDS
+        else:
+            transfer_timeout = IO_TIMEOUT
+        self.connection.settimeout(transfer_timeout)
         started = False
+        body = request = data = None
+        upstream = None
+        timer = None
         try:
+            if pdf:
+                def close_transfer():
+                    for peer in (self.connection, upstream):
+                        if peer is not None:
+                            try:
+                                peer.shutdown(socket.SHUT_RDWR)
+                            except OSError:
+                                pass
+                timer = threading.Timer(transfer_timeout, close_transfer)
+                timer.start()
             lengths = self.headers.get_all("Content-Length", [])
             if self.path != ROUTE or len(lengths) != 1 or self.headers.get("Transfer-Encoding"):
                 raise ValueError("framing")
-            if not lengths[0].isascii() or not lengths[0].isdecimal() or len(lengths[0]) > 7:
-                raise ValueError("length")
-            length = int(lengths[0])
-            if not 1 <= length <= getattr(self.server, "max_request", MAX_REQUEST):
-                raise ValueError("bound")
+            length = self.request_length(lengths[0], getattr(self.server, "max_request", MAX_REQUEST), pdf_mode=pdf)
             body = self.rfile.read(length)
             if len(body) != length:
                 raise ValueError("truncated")
+            if pdf:
+                data = self.request_shape(body, manifest)  # No arbitrary files, URLs or tool grants.
+                data = None
             with socket.socket(socket.AF_UNIX) as upstream:
-                upstream.settimeout(CALL_TIMEOUT)
+                call_timeout = transfer_timeout + CALL_TIMEOUT if pdf else CALL_TIMEOUT
+                upstream.settimeout(call_timeout)
                 upstream.connect("/relay/inference.sock")
                 # No worker-supplied host, auth, cookies, query, or proxy headers.
                 request = (f"POST {ROUTE} HTTP/1.1\r\nHost: synthetic\r\n"
                            f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
                            "Connection: close\r\n\r\n").encode() + body
                 upstream.sendall(request)
+                body = request = None
+                if timer is not None:
+                    timer.cancel()
+                self.connection.settimeout(IO_TIMEOUT)
                 finished = threading.Event()
-                deadline = time.monotonic() + CALL_TIMEOUT
+                deadline = time.monotonic() + call_timeout
 
                 def guard():
                     while not finished.wait(0.025):
@@ -98,7 +131,11 @@ class Shim(BaseHTTPRequestHandler):
                     self.connection.sendall(f"{len(error):x}\r\n".encode() + error + b"\r\n0\r\n\r\n")
             except OSError:
                 pass
-        self.close_connection = True
+        finally:
+            if timer is not None:
+                timer.cancel()
+            body = request = data = None  # No held binary body survives request/teardown.
+            self.close_connection = True
 
     def do_GET(self):
         respond(self.connection, "403 Forbidden", b'{"error":"inference only"}')

@@ -6,6 +6,7 @@ Namespace integration is an explicit operator command, not an automatic test gat
 
 import copy
 import errno
+import hashlib
 import http.client
 import io
 import json
@@ -143,6 +144,73 @@ class LauncherTests(unittest.TestCase):
             ["/usr/bin/python3", "-I", "-B", "-c", "import time; time.sleep(2)"], timeout=0.1)
         self.assertEqual(reason, "timeout")
         self.assertNotEqual(code, 0)
+
+
+class RuntimeTests(unittest.TestCase):
+    def test_opencode_updates_are_observed_without_version_or_hash_admission_pin(self):
+        self.assertNotIn(prototype.OPENCODE, prototype.PINS)
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-runtime-") as directory:
+            executable = Path(directory) / "opencode"
+            with patch.object(prototype, "OPENCODE", str(executable)), \
+                    patch.object(prototype.os, "getuid", return_value=1000), \
+                    patch.object(prototype.os, "getgid", return_value=1000), \
+                    patch.object(prototype, "digest", side_effect=prototype.PINS.__getitem__), \
+                    patch.object(prototype.subprocess, "Popen") as launch, \
+                    patch.object(prototype.subprocess, "run") as inspect:
+                observed = []
+                for body in (b"synthetic executable version one", b"synthetic executable version two"):
+                    executable.write_bytes(body)
+                    executable.chmod(0o700)
+                    mapping = prototype.check_runtime()
+                    self.assertEqual(mapping, {**prototype.PINS,
+                        str(executable): hashlib.sha256(body).hexdigest()})
+                    observed.append(mapping[str(executable)])
+                self.assertNotEqual(*observed)
+                launch.assert_not_called()
+                inspect.assert_not_called()
+
+    def test_missing_unusable_or_unsafe_opencode_rejected(self):
+        with tempfile.TemporaryDirectory(dir="/tmp/opencode", prefix="imp002-runtime-") as directory:
+            executable = Path(directory) / "opencode"
+            with patch.object(prototype, "OPENCODE", str(executable)):
+                with self.assertRaises(FileNotFoundError):
+                    prototype.opencode_digest()
+                for mode, body in ((0o600, b"not executable"), (0o700, b""), (0o722, b"writable")):
+                    executable.write_bytes(body)
+                    executable.chmod(mode)
+                    with self.subTest(mode=mode, body=body), self.assertRaises(prototype.CapabilityError):
+                        prototype.opencode_digest()
+                executable.unlink()
+                executable.mkdir()
+                with self.assertRaises(prototype.CapabilityError):
+                    prototype.opencode_digest()
+                executable.rmdir()
+                os.mkfifo(executable, 0o700)
+                with self.assertRaises(prototype.CapabilityError):
+                    prototype.opencode_digest()
+                executable.unlink()
+                executable.symlink_to(Path(directory))
+                with self.assertRaises(OSError):
+                    prototype.opencode_digest()
+
+    def test_other_runtime_pins_and_uid_gid_still_fail_closed(self):
+        for path in (prototype.BWRAP, "/usr/bin/python3.10", "/lib/x86_64-linux-gnu/libc.so.6"):
+            with self.subTest(path=path), \
+                    patch.object(prototype.os, "getuid", return_value=1000), \
+                    patch.object(prototype.os, "getgid", return_value=1000), \
+                    patch.object(prototype, "digest", side_effect=lambda name: "changed" if name == path
+                                 else prototype.PINS[name]), \
+                    patch.object(prototype, "opencode_digest") as executable:
+                with self.assertRaises(prototype.CapabilityError):
+                    prototype.check_runtime()
+                executable.assert_not_called()
+        for uid, gid in ((0, 1000), (1000, 0)):
+            with patch.object(prototype.os, "getuid", return_value=uid), \
+                    patch.object(prototype.os, "getgid", return_value=gid), \
+                    patch.object(prototype, "digest") as read:
+                with self.assertRaises(prototype.CapabilityError):
+                    prototype.check_runtime()
+                read.assert_not_called()
 
 
 class InspectionTests(unittest.TestCase):

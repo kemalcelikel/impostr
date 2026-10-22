@@ -128,7 +128,7 @@ class BoundaryTests(unittest.TestCase):
     def test_server_runtime_auth_health_and_bounded_shutdown_without_host_child(self):
         driver = MagicMock()
         driver.port = 1234
-        driver.request.return_value = {"healthy": True, "version": worker.VERSION}
+        driver.request.return_value = {"healthy": True, "version": "synthetic-updated-version"}
         process = MagicMock()
         process.poll.side_effect = [None, None, 0]
         process.wait.side_effect = [subprocess.TimeoutExpired("synthetic", 2), 0]
@@ -146,6 +146,32 @@ class BoundaryTests(unittest.TestCase):
         self.assertEqual(child.call_args.kwargs["stdout"], subprocess.DEVNULL)
         self.assertEqual([call.args[1] for call in kill.call_args_list], [15, 9])
         self.assertIsNone(server.process)
+
+    def test_health_accepts_updated_versions_but_rejects_unhealthy_or_incompatible_schema(self):
+        for version in ("1.18.34", "1.19.0", "future-build"):
+            driver = MagicMock(port=1234)
+            driver.request.return_value = {"healthy": True, "version": version}
+            with self.subTest(version=version), \
+                    patch.object(worker.os, "environ", {"HOME": "/home/worker"}), \
+                    patch.object(worker.subprocess, "Popen") as child:
+                child.return_value.poll.return_value = None
+                worker.Server(driver, "synthetic").start()
+                driver.request.assert_called_once_with("GET", "health")
+        for health in (None, {"healthy": False, "version": "1.19.0"},
+                       {"healthy": 1, "version": "1.19.0"}, {"healthy": True},
+                       {"healthy": True, "version": 119}, {"healthy": True, "version": ""},
+                       {"healthy": True, "version": "x" * 65},
+                       {"healthy": True, "version": "unsafe\nvalue"},
+                       {"healthy": True, "version": "1.19.0", "extra": True}):
+            driver = MagicMock(port=1234)
+            driver.request.return_value = health
+            with self.subTest(health=health), \
+                    patch.object(worker.os, "environ", {"HOME": "/home/worker"}), \
+                    patch.object(worker.subprocess, "Popen") as child:
+                child.return_value.poll.return_value = None
+                with self.assertRaises(worker.Failed):
+                    worker.Server(driver, "synthetic").start()
+                driver.request.assert_called_once_with("GET", "health")
 
 
 class FixtureTests(unittest.TestCase):

@@ -6,7 +6,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -16,14 +16,25 @@ from sqlalchemy.orm import Session
 
 from app.audit import record_audit
 from app.chat_admission import admission
-from app.chat_protocol import ChannelError, answer, encode, message_text
+from app.chat_protocol import (
+    MAX_NATIVE_PDF_FILES,
+    ChannelError,
+    answer,
+    encode,
+    message_text,
+    sha256_hex,
+)
+from app.chat_receipts import receipt_view
+from app.chat_references import reference_views, selection_request
 from app.chat_state import TERMINAL, authorize, context, conversation, event, finish
 from app.dependencies import CurrentActor, DbSession, SettingsDependency
 from app.models import (
     AgentDocumentProposal,
+    AttachmentDeletion,
     ChatEvent,
     ChatInteraction,
     ChatTurn,
+    ChatTurnPdfSelection,
     Conversation,
     ConversationPreference,
     ProjectTurnReservation,
@@ -38,10 +49,36 @@ class ConversationRequest(BaseModel):
     title: Annotated[str, Field(min_length=1, max_length=120)]
 
 
+class PdfSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    attachment_id: uuid.UUID
+    expected_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    # Legacy is accepted for exact idempotent replay only, never new capture.
+    reference_kind: Literal["native-original-v1", "legacy-text-v1"] = "native-original-v1"
+
+    @field_validator("expected_sha256")
+    @classmethod
+    def exact_hash(cls, value: str) -> str:
+        return sha256_hex(value)
+
+
 class TurnRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: uuid.UUID
     prompt: str
+    selections: Annotated[list[PdfSelectionRequest], Field(max_length=MAX_NATIVE_PDF_FILES)] = (
+        Field(default_factory=list)
+    )
+
+    def selection_identity(self) -> list[dict[str, str]]:
+        return [
+            {
+                "attachment_id": str(item.attachment_id),
+                "expected_sha256": item.expected_sha256,
+                "reference_kind": item.reference_kind,
+            }
+            for item in self.selections
+        ]
 
     @field_validator("prompt")
     @classmethod
@@ -61,14 +98,18 @@ class ReplyRequest(BaseModel):
         return value
 
 
-def turn_view(turn: ChatTurn) -> dict[str, Any]:
-    return {
+def turn_view(turn: ChatTurn, db: Session) -> dict[str, Any]:
+    value = {
         "id": str(turn.id),
         "request_id": str(turn.request_id),
         "prompt": turn.prompt,
         "state": turn.state,
         "created_at": turn.created_at.isoformat(),
+        "selections": selection_request(db, turn),
+        "references": reference_views(db, turn),
+        "submission": receipt_view(db, turn),
     }
+    return value
 
 
 def audit_admin(db: Session, actor: CurrentActor, project_id: uuid.UUID) -> None:
@@ -155,10 +196,10 @@ def last_used(
 def history(
     project_id: uuid.UUID, conversation_id: uuid.UUID, db: DbSession, actor: CurrentActor
 ) -> dict[str, Any]:
-    authorize(db, actor, project_id)
+    authorize(db, actor, project_id, lock=True)
     conversation(db, project_id, conversation_id)
     turns = [
-        turn_view(row)
+        turn_view(row, db)
         for row in db.scalars(
             select(ChatTurn)
             .where(ChatTurn.conversation_id == conversation_id)
@@ -202,13 +243,39 @@ def submit(
         )
     )
     if existing:
-        if existing.prompt != payload.prompt or existing.actor_user_id != actor.id:
+        if (
+            existing.prompt != payload.prompt
+            or existing.actor_user_id != actor.id
+            or selection_request(db, existing) != payload.selection_identity()
+        ):
             raise HTTPException(409, "Idempotency key already used")
-        return turn_view(existing)
+        return turn_view(existing, db)
     if not settings.chat_enabled or request.app.state.chat_dispatcher is None:
         raise HTTPException(503, "Chat is disabled or broker unavailable")
     if db.get(ProjectTurnReservation, project_id) is not None:
         raise HTTPException(409, "Another project turn is active; retry after it finishes")
+    if (
+        db.scalar(
+            select(AttachmentDeletion.attachment_id).where(
+                AttachmentDeletion.project_id == project_id, AttachmentDeletion.pending.is_(True)
+            )
+        )
+        is not None
+    ):
+        raise HTTPException(409, "Attachment cleanup is pending; retry after broker cleanup")
+    try:
+        captured = context(
+            db, project_id, conversation_id, payload.prompt, payload.selection_identity()
+        )
+    except ChannelError as exc:
+        raise HTTPException(
+            422,
+            "Chat context does not fit: each original and all included PDF occurrences "
+            "including history must be less than 50,000,000 bytes, at most 32 files; "
+            "text context 384 KiB and metadata frame 512 KiB. "
+            "At most 12 prior turns fit. Remove selections or start a new conversation; "
+            "nothing was truncated or dispatched",
+        ) from exc
     dispatcher = request.app.state.chat_dispatcher
     try:
         admission(
@@ -231,12 +298,6 @@ def submit(
         raise HTTPException(
             429, "Too many chat turns", headers={"Retry-After": str(decision.retry_after_seconds)}
         )
-    try:
-        captured = context(db, project_id, conversation_id, payload.prompt)
-    except ChannelError as exc:
-        raise HTTPException(
-            422, "Chat context exceeds supported bounds; no turn dispatched"
-        ) from exc
     turn = ChatTurn(
         project_id=project_id,
         conversation_id=conversation_id,
@@ -249,10 +310,22 @@ def submit(
     )
     db.add(turn)
     db.flush()
+    for position, item in enumerate(payload.selections):
+        db.add(
+            ChatTurnPdfSelection(
+                turn_id=turn.id,
+                position=position,
+                attachment_id=item.attachment_id,
+                expected_sha256=item.expected_sha256,
+                reference_kind=item.reference_kind,
+            )
+        )
     db.add(ProjectTurnReservation(project_id=project_id, turn_id=turn.id))
     event(db, turn, "queued", {})
+    db.flush()
+    result = turn_view(turn, db)
     db.commit()
-    return turn_view(turn)
+    return result
 
 
 @router.post("/{conversation_id}/turns/{turn_id}/abort")
@@ -276,8 +349,9 @@ def abort(
             )
         ):
             row.state = "interrupted"
+    result = turn_view(turn, db)
     db.commit()
-    return turn_view(turn)
+    return result
 
 
 @router.post(

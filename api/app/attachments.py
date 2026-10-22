@@ -1,7 +1,7 @@
-"""Private durable PDF intake/status/preview. No parser or model inclusion here.
+"""Private durable original PDF intake/status. No parser or model inclusion here.
 
 POST .../attachments/upload?filename=reference.pdf with a raw application/pdf body.
-An accepted envelope is durably pending, NOT a validated PDF or ready to send.
+An accepted envelope is stored, NOT a structurally validated PDF or a sent file.
 """
 
 from __future__ import annotations
@@ -16,10 +16,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.requests import ClientDisconnect
 
+from app.attachment_cleanup import cleanup
 from app.audit import record_audit
+from app.chat_protocol import NATIVE_PDF_BYTE_LIMIT, NATIVE_PDF_REFERENCE, reference_lists
 from app.chat_state import authorize, conversation
 from app.dependencies import CurrentActor, DbSession
-from app.models import ProjectAttachment
+from app.models import (
+    AttachmentDeletion,
+    AttachmentPurge,
+    ChatTurn,
+    ProjectAttachment,
+    ProjectTurnReservation,
+)
 from app.pdf_intake import IntakeError, filename_metadata, original_body
 from app.pdf_protocol import LABEL, PDFError, result
 
@@ -37,11 +45,19 @@ def view(row: ProjectAttachment, processing_available: bool = False) -> dict[str
         "failure_code": row.failure_code,
         "original_size": row.original_size,
         "original_sha256": row.original_sha256,
+        "reference_kind": NATIVE_PDF_REFERENCE,
+        "native_available": row.status == "stored"
+        and row.original_size is not None
+        and 0 < row.original_size < NATIVE_PDF_BYTE_LIMIT,
         "text_size": row.text_size,
         "text_sha256": row.text_sha256,
         "page_count": row.page_count,
         "missing_pages": row.missing_pages,
-        "label": LABEL,
+        "label": (
+            "Original PDF; not locally parsed. Submission receipts belong to chat turns."
+            if row.status == "stored"
+            else LABEL
+        ),
         "provenance": (
             {
                 "policy": row.extraction_policy,
@@ -52,7 +68,7 @@ def view(row: ProjectAttachment, processing_available: bool = False) -> dict[str
             if row.status == "ready"
             else None
         ),
-        "processing_available": processing_available,
+        "processing_available": False,  # Legacy setting cannot enable extraction admission.
         "attempt_count": row.attempt_count,
         "last_error_code": row.last_error_code,
         "next_attempt_at": row.next_attempt_at.isoformat() if row.next_attempt_at else None,
@@ -119,7 +135,7 @@ async def upload(
             data, digest = await original_body(request.stream())
         except IntakeError as exc:
             failure = (
-                (413, "limit", "PDF original exceeds 50,000,000 bytes")
+                (413, "limit", "PDF original must be less than 50,000,000 bytes")
                 if exc.code == "limit"
                 else (422, "invalid", "Body does not have a PDF envelope")
             )
@@ -133,7 +149,7 @@ async def upload(
         conversation_id=conversation_id,
         uploader_user_id=actor.id,
         filename=filename,
-        status="failed" if failure else "pending",
+        status="failed" if failure else "stored",
         failure_code=failure[1] if failure else None,
         original=data,
         original_size=len(data) if data is not None else None,
@@ -143,7 +159,7 @@ async def upload(
     record_audit(
         db, action="project.attachment.upload", actor_user_id=actor.id, project_id=project_id
     )
-    db.commit()  # Before the background worker can claim this upload.
+    db.commit()  # Stored is ineligible for every legacy claim/completion CAS.
     metadata = view(row, request.app.state.settings.pdf_enabled)
     if failure:
         return JSONResponse({"detail": failure[2], "attachment": metadata}, status_code=failure[0])
@@ -267,14 +283,67 @@ def remove(
     project_id: uuid.UUID,
     conversation_id: uuid.UUID,
     attachment_id: uuid.UUID,
+    request: Request,
     db: DbSession,
     actor: CurrentActor,
 ) -> Response:
     authorize(db, actor, project_id, lock=True)
     conversation(db, project_id, conversation_id)
-    db.delete(load(db, project_id, conversation_id, attachment_id))
-    record_audit(
-        db, action="project.attachment.delete", actor_user_id=actor.id, project_id=project_id
-    )
+    deletion = db.get(AttachmentDeletion, attachment_id)
+    if deletion is not None and (
+        deletion.project_id != project_id or deletion.conversation_id != conversation_id
+    ):
+        raise HTTPException(404, "Attachment not found")
+    if deletion is None:
+        row = load(db, project_id, conversation_id, attachment_id)
+        # Conservative project-level exclusion includes queued and inherited refs.
+        # A cancelled/interrupted lifecycle is not proof that its worker stopped.
+        if db.get(ProjectTurnReservation, project_id) is not None:
+            raise HTTPException(409, "A project turn is using attachments; stop it before deletion")
+        deletion = AttachmentDeletion(
+            attachment_id=attachment_id, project_id=project_id, conversation_id=conversation_id
+        )
+        db.add(deletion)
+        db.flush()
+        for turn in db.scalars(select(ChatTurn).where(ChatTurn.project_id == project_id)):
+            if turn.broker_epoch is not None and any(
+                reference["attachment_id"] == str(attachment_id)
+                for references in reference_lists(turn.payload)
+                for reference in references
+            ):
+                db.add(AttachmentPurge(attachment_id=attachment_id, turn_id=turn.id))
+        # Original + derivative are the ONLY structured text copies in the DB.
+        # Metadata/idempotency/proposal captures and user/model quotations survive.
+        db.delete(row)
+        record_audit(
+            db, action="project.attachment.delete", actor_user_id=actor.id, project_id=project_id
+        )
     db.commit()
-    return Response(status_code=204)
+    dispatcher = request.app.state.chat_dispatcher
+    if dispatcher is not None:
+        complete = cleanup(dispatcher.engine, dispatcher.broker, attachment_id)
+    else:
+        complete = not deletion.pending
+        # No dispatched scope needs no broker proof.
+        if (
+            db.scalar(
+                select(AttachmentPurge.turn_id).where(
+                    AttachmentPurge.attachment_id == attachment_id
+                )
+            )
+            is None
+        ):
+            deletion.pending = False
+            db.commit()
+            complete = True
+    if complete:
+        return Response(status_code=204)
+    return JSONResponse(
+        {
+            "status": "cleanup-pending",
+            "attachment_id": str(attachment_id),
+            "detail": "Unavailable for future sends; broker cleanup pending. "
+            "Prior sends cannot be retracted",
+        },
+        status_code=202,
+    )

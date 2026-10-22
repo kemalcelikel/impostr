@@ -81,6 +81,7 @@ class InferenceTests(unittest.TestCase):
         synthetic.calls = 1
         instance = relay.SyntheticRelay.__new__(relay.SyntheticRelay)
         instance.transport = synthetic
+        instance.pdf_manifest = None
         instance.planning = True
         instance.max_response = protocol.MAX_RESPONSE
         instance.denied = 0
@@ -166,6 +167,7 @@ class InferenceTests(unittest.TestCase):
             raise ValueError("synthetic-private-detail")
         instance = relay.SyntheticRelay.__new__(relay.SyntheticRelay)
         instance.transport = MagicMock()
+        instance.pdf_manifest = None
         instance.transport.events.side_effect = broken
         instance.planning = False
         instance.max_response = relay.MAX_RESPONSE
@@ -190,6 +192,7 @@ class InferenceTests(unittest.TestCase):
                 closed.append(True)
         instance = relay.SyntheticRelay.__new__(relay.SyntheticRelay)
         instance.transport = MagicMock()
+        instance.pdf_manifest = None
         instance.transport.events.side_effect = malicious
         instance.planning = True
         instance.max_response = protocol.MAX_RESPONSE

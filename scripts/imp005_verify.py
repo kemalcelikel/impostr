@@ -54,9 +54,10 @@ class SyntheticTransport:
                                                     "/openai/v1/responses", "none", "synthetic")
         self.normalizer.acquire("generated-synthetic-key-not-real")
 
-    def events(self, data, cancelled, deadline):
+    def events(self, data, cancelled, deadline, *, submission=None):
         yield from self.normalizer.normalize_planning(
-            EarlyResponse(self.source.events(data, cancelled, deadline)), data, cancelled, deadline)
+            EarlyResponse(self.source.events(data, cancelled, deadline, submission=submission)),
+            data, cancelled, deadline)
 
 
 class NormalVerify(Verify):

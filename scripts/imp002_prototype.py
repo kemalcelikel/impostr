@@ -4,7 +4,7 @@ Run: /usr/bin/python3 -I -B scripts/imp002_prototype.py synthetic
 Optional failure checks: replace synthetic with probes, outage, or timeout.
 No aggregate quotas are claimed (owner deferred them). operator-inspect/live MUST
 NOT run before independent review + synthetic checks; never use real project data.
-Pins are this host's measured binaries, not a portable deployment promise.
+Other runtime pins are host-specific; OpenCode's hash is observational only.
 """
 
 import argparse
@@ -15,6 +15,7 @@ from pathlib import Path
 import selectors
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -27,7 +28,6 @@ from imp002_relay import SyntheticRelay
 BWRAP = "/usr/bin/bwrap"
 OPENCODE = "/home/kemal/.opencode/bin/opencode"
 PINS = {BWRAP: "bf6cf3d4456665f5d80c14eb79a76e0ce87b39a0883e614a161658b4ec33492c",
-        OPENCODE: "9ca0b9953d49997601655e54f846a3efa464f237e47c6f1b04716d0f2e64c4c2",
         "/usr/bin/python3.10": "a2f33a6e006989270f4340528eb61f8f97366e00a5d1b602ac8672ea44fc56ae",
         "/usr/bin/dash": "4f291296e89b784cd35479fca606f228126e3641f5bcaee68dee36583d7c9483"}
 PINS.update({
@@ -66,13 +66,32 @@ def _digest(stream):
     return value.hexdigest()
 
 
+def opencode_digest():
+    """Validate the fixed public executable without running it or pinning updates.
+
+    This fingerprint describes observed bytes, not API compatibility or a frozen
+    launch inode. Actual confined behavior checks remain mandatory.
+    """
+    fd = os.open(OPENCODE, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_size == 0
+                or info.st_uid not in (0, 1000) or info.st_mode & 0o022
+                or not os.access(OPENCODE, os.X_OK)):
+            raise CapabilityError("OpenCode executable unavailable or unsafe")
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            return _digest(stream)
+    finally:
+        os.close(fd)
+
+
 def check_runtime():
     if os.getuid() != 1000 or os.getgid() != 1000:
         raise CapabilityError("requires measured non-root UID/GID 1000:1000")
     for path, pin in PINS.items():
         if digest(path) != pin:
             raise CapabilityError("runtime binary changed; remeasure and review")
-    return {path: digest(path) for path in PINS}
+    return {**{path: digest(path) for path in PINS}, OPENCODE: opencode_digest()}
 
 
 def command(root, mode, port):

@@ -179,7 +179,7 @@ class OperatorTests(unittest.TestCase):
 
     def test_only_host_injection_selects_transport_and_worker_inventory_excludes_secrets(self):
         source = Path(broker.__file__).read_text()
-        self.assertIn("transport=self.transport_factory(self.payload)", source)
+        self.assertIn("transport=self.transport_factory(metadata)", source)
         self.assertNotIn("imp024_operator_transport.py", broker.WORKER_CODE_FILES)
         self.assertNotIn("imp002_transport.py", broker.WORKER_CODE_FILES)
         tree = ast.parse(Path(operator.__file__).read_text())

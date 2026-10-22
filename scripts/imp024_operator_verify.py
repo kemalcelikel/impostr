@@ -11,6 +11,7 @@ from pathlib import Path
 import signal
 import sys
 import threading
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from imp024_broker import Broker, SyntheticProduct, SYNTHETIC_AGENTS, SYNTHETIC_BACKLOG, SYNTHETIC_PROJECT
@@ -45,11 +46,14 @@ class SyntheticRejectedBacklog(SyntheticAcceptance):
     No error details, host transport or operator input. The worker still receives
     a native terminal error and the product must visibly refuse completion/import.
     """
-    def events(self, data, cancelled, deadline):
+    def events(self, data, cancelled, deadline, *, submission=None):
         if self.plan[0][1]["filePath"] == "/project/BACKLOG.md":
+            if submission is not None:
+                require(not cancelled.is_set() and time.monotonic() < deadline)
+                submission.consumed(data)
             yield terminal_error(0)
             return
-        yield from super().events(data, cancelled, deadline)
+        yield from super().events(data, cancelled, deadline, submission=submission)
 
 
 def verify_rejected_product(product):

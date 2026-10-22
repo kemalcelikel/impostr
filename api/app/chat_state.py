@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.audit import record_audit
 from app.backlog_markdown import BacklogValidationError, parse_backlog, validate_backlog_write
-from app.chat_protocol import MAX_EVENTS, MAX_PRIOR_TURNS, digest, require, start_payload
+from app.chat_protocol import MAX_EVENTS, MAX_PRIOR_TURNS, digest, require
+from app.chat_references import capture_references, resolve_context
 from app.dependencies import AuthenticatedActor, load_active_actor
 from app.document_contract import DOCUMENT_FILENAMES, MAX_REVISION_NUMBER, DocumentKind
 from app.models import (
@@ -96,6 +97,8 @@ def finish(
     data: dict[str, Any] | None = None,
 ) -> None:
     turn.state = state
+    if turn.broker_epoch is None:
+        turn.submission_state = "failed-before-send"
     for interaction in db.scalars(
         select(ChatInteraction).where(
             ChatInteraction.turn_id == turn.id,
@@ -109,8 +112,13 @@ def finish(
 
 
 def context(
-    db: Session, project_id: uuid.UUID, conversation_id: uuid.UUID, prompt: str
+    db: Session,
+    project_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    prompt: str,
+    selections: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
+    references = capture_references(db, project_id, conversation_id, selections or [])
     documents = list(
         db.scalars(
             select(ProjectDocument)
@@ -161,7 +169,10 @@ def context(
         ]
         if tools:
             user_text += "\nRecorded planning tool states (data):\n" + json.dumps(tools)
-        history.append({"role": "user", "text": user_text})
+        user_entry: dict[str, Any] = {"role": "user", "text": user_text}
+        if turn.payload.get("references"):
+            user_entry["references"] = turn.payload["references"]
+        history.append(user_entry)
         pieces = db.scalars(
             select(ChatEvent)
             .where(ChatEvent.turn_id == turn.id, ChatEvent.kind == "delta")
@@ -171,7 +182,13 @@ def context(
         history.append(
             {"role": "assistant", "text": output + "\nRecorded turn state: " + turn.state}
         )
-    return start_payload({"prompt": prompt, "documents": captured, "history": history})
+    payload: dict[str, Any] = {"prompt": prompt, "documents": captured, "history": history}
+    if references:
+        payload["references"] = references
+    # Revalidate original bytes and charge ALL included historical occurrences.
+    # Persist ONLY versioned metadata, never original/base64 or derivative copies.
+    resolve_context(db, project_id, conversation_id, payload)
+    return payload
 
 
 def import_proposals(

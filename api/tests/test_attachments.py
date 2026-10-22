@@ -78,7 +78,7 @@ def check_roundtrip(client, engine, base, stage=lambda _: None):
     metadata = response.json()
     attachment_id = metadata["id"]
     uuid.UUID(attachment_id)
-    assert metadata["status"] == "pending"
+    assert metadata["status"] == "stored" and metadata["native_available"] is True
     assert metadata["processing_available"] is False and metadata["included_in_model"] is False
     assert metadata["original_sha256"] == hashlib.sha256(PDF).hexdigest()
     assert metadata["original_size"] == len(PDF)

@@ -45,14 +45,39 @@ def decode(body):
         raise Denied("invalid JSON") from exc
 
 
-def validate(method, route, body, *, planning=False, input_text_limit=64000):
+def pdf_contract():
+    # The delivered product launcher copies the SAME pure module under this name;
+    # trusted host product callers already import app from the fixed API source.
+    # No file discovery/config loader, and missing support fails closed.
+    try:
+        import imp024_channel as contract
+    except ModuleNotFoundError as exc:
+        if exc.name != "imp024_channel":
+            raise
+        from app import chat_protocol as contract
+    return contract
+
+
+def validate(method, route, body, *, planning=False, input_text_limit=64000, pdf_manifest=None):
     from imp024_protocol import (MAX_REQUEST as PLANNING_REQUEST, MAX_ITEMS, MAX_TOKENS,
                                 Invalid, arguments, bounded_text, definitions, identifier)
     # Product text-history reconstruction is explicit; all prototype/phase-one
     # callers keep the original bound. No arbitrary or unbounded caller setting.
     if input_text_limit != 64000 and not (planning and input_text_limit == 384 * 1024):
         raise Denied("input bound")
-    if method != "POST" or route != ROUTE or len(body) > (PLANNING_REQUEST if planning else MAX_REQUEST):
+    pdf = None
+    if pdf_manifest is not None:
+        if not planning or input_text_limit != 384 * 1024:
+            raise Denied("PDF mode")
+        try:
+            pdf = pdf_contract()
+            pdf_manifest = pdf.native_manifest(pdf_manifest)
+            if not pdf_manifest:
+                raise Denied("PDF manifest")
+        except (ImportError, ValueError) as exc:
+            raise Denied("PDF manifest") from exc
+    request_limit = pdf.MAX_PDF_FRAME if pdf else (PLANNING_REQUEST if planning else MAX_REQUEST)
+    if method != "POST" or route != ROUTE or not 0 < len(body) <= request_limit:
         raise Denied("not inference")
     data = decode(body)
     allowed = {"model", "input", "stream", "store", "max_output_tokens", "tools",
@@ -100,6 +125,7 @@ def validate(method, route, body, *, planning=False, input_text_limit=64000):
     if not isinstance(messages, list) or not 1 <= len(messages) <= (MAX_ITEMS if planning else 32):
         raise Denied("input")
     pending, seen = {}, set()
+    file_parts = []
     for message_index, message in enumerate(messages):
         if planning and isinstance(message, dict) and message.get("type") in ("function_call", "function_call_output"):
             try:
@@ -144,9 +170,22 @@ def validate(method, route, body, *, planning=False, input_text_limit=64000):
             if len(content.encode()) > input_text_limit:
                 raise Denied("text bound")
             continue
-        if not isinstance(content, list) or not 1 <= len(content) <= 16:
+        # Reconstructed product history becomes one native user prompt; up to
+        # 416 ordered file occurrences plus text. Text-only messages retain 16.
+        has_files = isinstance(content, list) and any(
+            isinstance(part, dict) and part.get("type") == "input_file" for part in content)
+        content_limit = pdf.MAX_NATIVE_PDF_OCCURRENCES + 16 if pdf and has_files else 16
+        if not isinstance(content, list) or not 1 <= len(content) <= content_limit:
             raise Denied("content")
+        if has_files and sum(not isinstance(part, dict) or part.get("type") != "input_file"
+                             for part in content) > 16:
+            raise Denied("text parts")
         for part in content:
+            if pdf and isinstance(part, dict) and part.get("type") == "input_file":
+                if message["role"] != "user":
+                    raise Denied("PDF role")
+                file_parts.append(part)
+                continue
             if not isinstance(part, dict) or set(part) != {"type", "text"}:
                 raise Denied("text only")
             if part["type"] not in ("input_text", "output_text"):
@@ -155,6 +194,17 @@ def validate(method, route, body, *, planning=False, input_text_limit=64000):
                 raise Denied("text bound")
     if pending:
         raise Denied("unpaired function result")
+    if pdf:
+        try:
+            pdf.native_file_parts(file_parts, pdf_manifest, responses=True)
+            # Count the received (not reserialized) stripped nonbinary envelope,
+            # including whitespace/escaping. Only canonical validated data URLs
+            # are removable; encoded JSON escapes cannot buy extra text room.
+            binary_size = sum(len(part["file_data"]) for part in file_parts)
+            if len(body) - binary_size > PLANNING_REQUEST:
+                raise Denied("PDF envelope")
+        except ValueError as exc:
+            raise Denied("PDF input") from exc
     return data
 
 
@@ -184,7 +234,23 @@ def stub_response():
                    for i, (name, fields) in enumerate(events)).encode()
 
 
-def read_request(stream, max_request=MAX_REQUEST):
+def content_length(value, maximum=MAX_REQUEST, *, pdf_mode=False):
+    """Shared bounded framing shape. Eight digits ONLY in explicit PDF mode."""
+    if pdf_mode:
+        if maximum != pdf_contract().MAX_PDF_FRAME:
+            raise Denied("PDF length mode")
+    elif not 1 <= maximum <= 512 * 1024:
+        raise Denied("length mode")
+    if (not isinstance(value, str) or not value.isascii() or not value.isdecimal()
+            or len(value) > (8 if pdf_mode else 7)):
+        raise Denied("length")
+    length = int(value)
+    if not 1 <= length <= maximum:
+        raise Denied("length bound")
+    return length
+
+
+def read_request(stream, max_request=MAX_REQUEST, *, pdf_mode=False):
     # Deliberately no chunked encoding, redirects, CONNECT, upgrades or general
     # proxy semantics. The shim constructs a new request; worker auth is discarded.
     line = stream.readline(4097)
@@ -217,12 +283,7 @@ def read_request(stream, max_request=MAX_REQUEST):
         raise Denied("headers")
     if headers.get("content-type") != "application/json":
         raise Denied("content type")
-    length = headers.get("content-length", "")
-    if not length.isascii() or not length.isdecimal() or len(length) > 7:
-        raise Denied("length")
-    length = int(length)
-    if not 1 <= length <= max_request:
-        raise Denied("length bound")
+    length = content_length(headers.get("content-length", ""), max_request, pdf_mode=pdf_mode)
     body = stream.read(length)
     if len(body) != length:
         raise Denied("truncated")
@@ -244,7 +305,8 @@ class SyntheticRelay:
     is copied into the worker; this relay's default is still entirely synthetic.
     """
 
-    def __init__(self, path: Path, lifetime=30, transport=None, *, planning=False, input_text_limit=64000):
+    def __init__(self, path: Path, lifetime=30, transport=None, *, planning=False, input_text_limit=64000,
+                 receipts=None):
         if not 1 <= lifetime <= 60:
             raise ValueError("lifetime")
         self.path = path
@@ -255,6 +317,12 @@ class SyntheticRelay:
         self.denied = 0
         self.observed = []  # Only protocol shape/errors; never prompt/body/header values.
         self.transport = transport
+        self.receipts = receipts  # Host construction only; never a worker field.
+        self.pdf_manifest = None
+        if receipts is not None and receipts.native:
+            if not planning or input_text_limit != 384 * 1024 or transport is None:
+                raise ValueError("PDF transport absent")
+            self.pdf_manifest = pdf_contract().native_manifest(receipts.original_manifest)
         self.planning = planning
         if input_text_limit != 64000 and not (planning and input_text_limit == 384 * 1024):
             raise ValueError("input bound")
@@ -264,6 +332,8 @@ class SyntheticRelay:
             self.max_request, self.max_response, self.max_calls = request_bound, response_bound, call_bound
         else:
             self.max_request, self.max_response, self.max_calls = MAX_REQUEST, MAX_RESPONSE, MAX_CALLS
+        if self.pdf_manifest is not None:
+            self.max_request = pdf_contract().MAX_PDF_FRAME
         self.active = None
         self.listener = socket.socket(socket.AF_UNIX)
         self.listener.bind(str(path))
@@ -288,6 +358,8 @@ class SyntheticRelay:
         self.path.unlink(missing_ok=True)
         if self.thread.is_alive():
             raise RuntimeError("relay did not stop")
+        self.transport = None
+        self.pdf_manifest = None
 
     def run(self):
         while not self.stop.is_set() and time.monotonic() < self.deadline:
@@ -297,10 +369,12 @@ class SyntheticRelay:
                 continue
             with connection:
                 self.active = connection
-                connection.settimeout(IO_TIMEOUT)
+                transfer_timeout = pdf_contract().PDF_TRANSFER_SECONDS if self.pdf_manifest is not None else IO_TIMEOUT
+                connection.settimeout(transfer_timeout)
                 finished = threading.Event()
                 cancelled = threading.Event()
-                deadline = min(self.deadline, time.monotonic() + CALL_TIMEOUT)
+                deadline = min(self.deadline, time.monotonic() + (
+                    transfer_timeout + CALL_TIMEOUT if self.pdf_manifest is not None else CALL_TIMEOUT))
 
                 def guard():
                     # A total bound also covers a request trickled below the
@@ -316,6 +390,8 @@ class SyntheticRelay:
 
                 watcher = threading.Thread(target=guard, daemon=True)
                 watcher.start()
+                submission = None
+                body = data = None
                 try:
                     self.connections += 1
                     if self.connections > self.max_calls:
@@ -324,27 +400,39 @@ class SyntheticRelay:
                     if uid != os.geteuid():
                         raise Denied("peer")
                     with connection.makefile("rb") as stream:
-                        method, route, body = read_request(stream, self.max_request)
+                        method, route, body = read_request(stream, self.max_request,
+                                                           pdf_mode=self.pdf_manifest is not None)
                     self.calls += 1
                     if self.calls > self.max_calls:
                         raise Denied("call bound")
                     # Never retain attacker-controlled route or JSON key values.
                     self.observed.append({"inference_route": route == ROUTE})
+                    if self.receipts is not None:
+                        submission = self.receipts.begin(body)
                     try:
                         if self.input_text_limit == 64000:
                             data = validate(method, route, body, planning=self.planning)
                         else:
                             data = validate(method, route, body, planning=self.planning,
-                                            input_text_limit=self.input_text_limit)
+                                            input_text_limit=self.input_text_limit, pdf_manifest=self.pdf_manifest)
                     except Denied as exc:
                         self.observed[-1]["denial"] = str(exc)
                         raise
+                    connection.settimeout(IO_TIMEOUT)  # Response/control writes retain their small idle bound.
+                    if submission is not None:
+                        # Native binding/gating MUST occur after the trusted transport
+                        # substitutes its model and serializes the final body. This
+                        # pre-transport seam validates only, never grants a send.
+                        if submission.ledger.native:
+                            submission.check(data)
+                        else:
+                            submission.bind(data)
                     if self.transport is None and self.planning:
                         raise Denied("planning transport absent")
                     if self.transport is None:
                         respond(connection, "200 OK", stub_response(), "text/event-stream")
                     else:
-                        self.stream(connection, data, cancelled, deadline)
+                        self.stream(connection, data, cancelled, deadline, submission=submission)
                 except (Denied, OSError, ValueError, RecursionError):
                     self.denied += 1
                     try:
@@ -352,11 +440,14 @@ class SyntheticRelay:
                     except OSError:
                         pass
                 finally:
+                    if submission is not None:
+                        submission.finish()
+                    body = data = submission = None
                     finished.set()
                     watcher.join(1)
                     self.active = None
 
-    def stream(self, connection, data, cancelled, deadline):
+    def stream(self, connection, data, cancelled, deadline, *, submission=None):
         # Only fixed sanitized errors cross this boundary. Exceptions/headers/
         # provider bodies must never be logged or forwarded.
         finished = threading.Event()
@@ -379,11 +470,21 @@ class SyntheticRelay:
         started = False
         size = 0
         try:
-            events = self.transport.events(data, cancelled, deadline)
+            if submission is None:
+                events = self.transport.events(data, cancelled, deadline)
+            else:
+                # Pass capability only to the injected TRUSTED HOST transport.
+                # Worker ACK/events cannot reach or mutate this ledger.
+                events = self.transport.events(data, cancelled, deadline, submission=submission)
             if self.planning:
                 from imp024_inference import normalized_events
                 events = normalized_events(events, data)
             for event in events:
+                if self.pdf_manifest is not None:
+                    # Even a mistakenly injected fixture cannot project successful
+                    # native output without the actual gated transport submission.
+                    if submission is None or not submission.consumed_gate or submission.row["status"] != "sent":
+                        raise Denied("PDF submission absent")
                 size += len(event)
                 if size > self.max_response or cancelled.is_set() or time.monotonic() >= deadline:
                     raise Denied("stream bound")

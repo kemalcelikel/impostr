@@ -28,7 +28,6 @@ from app.dependencies import require_browser_mutation
 from app.document_contract import DocumentKind
 from app.document_pair_approvals import router as document_pair_approvals_router
 from app.passwords import dummy_password_hash
-from app.pdf_lifecycle import PDFProcessor
 from app.project_approval_manifests import router as project_approval_manifests_router
 from app.project_documents import (
     router as project_documents_router,
@@ -70,10 +69,8 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         dispatcher = Dispatcher(database_engine, UnixBroker())
         application.state.chat_dispatcher = dispatcher
         dispatcher.thread.start()
-    if application.state.settings.pdf_enabled:
-        processor = PDFProcessor(database_engine)
-        application.state.pdf_processor = processor
-        processor.thread.start()
+    # Legacy extraction admission is disabled even if an old deployment sets
+    # pdf_enabled. Migration 0011 fences outstanding claims before native storage.
     try:
         yield
     finally:

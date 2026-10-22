@@ -19,6 +19,10 @@ from app.passwords import hash_password, normalize_username
 
 PUBLIC_ORIGIN = "http://127.0.0.1:8080"
 
+# Register the existing shared fixture centrally, including when only the PDF
+# reference/receipt modules are selected. No test module imports need to shadow it.
+pytest_plugins = ("test_chat",)
+
 
 @pytest.fixture
 def settings() -> AppSettings:

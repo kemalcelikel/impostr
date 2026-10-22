@@ -6,7 +6,7 @@ import hashlib
 import unicodedata
 from collections.abc import AsyncIterable
 
-from app.pdf_protocol import MAX_ORIGINAL
+from app.chat_protocol import NATIVE_PDF_BYTE_LIMIT
 
 
 class IntakeError(Exception):
@@ -35,12 +35,12 @@ async def original_body(chunks: AsyncIterable[bytes]) -> tuple[bytes, str]:
     digest = hashlib.sha256()
     try:
         async for chunk in chunks:
-            if len(data) + len(chunk) > MAX_ORIGINAL:
+            if len(data) + len(chunk) >= NATIVE_PDF_BYTE_LIMIT:
                 raise IntakeError("limit")
             data.extend(chunk)
             digest.update(chunk)
         if not data or not data.startswith(b"%PDF-"):
-            # Envelope only; malformed/encrypted/active PDFs remain pending for phase three.
+            # Envelope only; provider validity/acceptance is not claimed locally.
             raise IntakeError("invalid")
         return bytes(data), digest.hexdigest()
     finally:

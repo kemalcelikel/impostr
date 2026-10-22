@@ -24,7 +24,6 @@ import time
 from imp002_relay import MAX_CALLS, MAX_REQUEST, MAX_RESPONSE, ROUTE, stub_response, validate
 from imp002_worker import probes
 
-VERSION = "1.18.34"
 MODEL = {"providerID": "azure", "modelID": "synthetic-deployment"}
 PROMPTS = {"seed": "IMP023_SEED", "recall": "IMP023_RECALL", "fresh": "IMP023_FRESH",
            "abort": "IMP023_ABORT", "failure": "IMP023_FAILURE"}
@@ -238,16 +237,25 @@ class Driver:
         self.requests = 0
         self.prompts = 0
 
+    def request_limit(self, operation):
+        return self.max_request
+
+    def response_limit(self, operation):
+        return self.max_body
+
+    def request_timeout(self, operation):
+        return 2
+
     def open(self, method, operation, session=None, body=None, authenticated=True):
         path = self.route(method, operation, session)
         self.requests += 1
         require(self.requests <= 200)
-        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=2)
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=self.request_timeout(operation))
         headers = {"x-opencode-directory": "/project", "Accept-Encoding": "identity"}
         if authenticated:
             headers["Authorization"] = self.auth
         payload = None if body is None else json.dumps(body).encode()
-        require(payload is None or len(payload) <= self.max_request)
+        require(payload is None or len(payload) <= self.request_limit(operation))
         if payload is not None:
             headers["Content-Type"] = "application/json"
         try:
@@ -263,8 +271,9 @@ class Driver:
     def request(self, method, operation, session=None, body=None, authenticated=True):
         connection, response = self.open(method, operation, session, body, authenticated)
         try:
-            raw = response.read(self.max_body + 1)
-            require(len(raw) <= self.max_body)
+            maximum = self.response_limit(operation)
+            raw = response.read(maximum + 1)
+            require(len(raw) <= maximum)
             if not authenticated:
                 return response.status
             require(response.status == (204 if operation == "prompt" else 200))
@@ -443,7 +452,12 @@ class Server:
             require(self.process.poll() is None)
             try:
                 value = self.driver.request("GET", "health")
-                require(value == {"healthy": True, "version": VERSION})
+                # Health proves readiness/schema, not compatibility with a
+                # hardcoded release. Real session/transport checks prove behavior.
+                require(isinstance(value, dict) and set(value) == {"healthy", "version"}
+                        and value["healthy"] is True and isinstance(value["version"], str)
+                        and 0 < len(value["version"]) <= 64
+                        and all(32 < ord(char) < 127 for char in value["version"]))
                 return
             except (OSError, http.client.HTTPException):
                 time.sleep(0.05)

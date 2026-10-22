@@ -101,11 +101,14 @@ class Client:
     def put(self, path, **kwargs):
         return self.request("PUT", path, **kwargs)
 
+    def delete(self, path, **kwargs):
+        return self.request("DELETE", path, **kwargs)
+
     @contextmanager
     def _open(self, method, path, *, json=None, headers=None, lifetime=None):
         parsed = urlsplit(path)
         if (
-            method not in ("GET", "POST", "PUT")
+            method not in ("GET", "POST", "PUT", "DELETE")
             or not path.startswith("/")
             or path.startswith("//")
             or parsed.scheme

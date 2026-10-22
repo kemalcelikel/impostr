@@ -26,10 +26,12 @@ import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from app.chat_protocol import (MAX_CONTEXT, MAX_EVENTS, MAX_FRAME, TURN_SECONDS, encode, event,
-                               receive, request, require, scope)
+                               receive_request, request, require, scope, NATIVE_INLINE_CONTEXT,
+                               PDF_TRANSFER_SECONDS, STOP_SECONDS, encode_native_context)
 from imp002_prototype import check_runtime, command
 from imp002_relay import SyntheticRelay
 from imp024_inference import native_response
+from imp018_receipts import ReceiptLedger
 
 WORKER_CODE_FILES = (
     "imp002_worker.py", "imp002_relay.py", "imp023_worker.py", "imp024_protocol.py",
@@ -178,9 +180,15 @@ class SyntheticProduct:
         self.calls = 0
         self.plan = synthetic_plan(payload)
 
-    def events(self, data, cancelled, deadline):
+    def events(self, data, cancelled, deadline, *, submission=None):
         self.calls += 1
         require(self.calls <= 8)
+        if submission is not None:
+            require(not cancelled.is_set() and time.monotonic() < deadline)
+            require(not submission.ledger.native)  # Native sent proof requires a receiving transport, not this ACK.
+            # This is the synthetic inference boundary consuming the full native
+            # request, not a worker's started event or prompt acknowledgement.
+            submission.consumed(data, cancelled=cancelled, deadline=deadline)
         results = [item for item in data["input"] if item.get("type") == "function_call_output"]
         stage = len(results)
         if self.plan is not None:
@@ -219,22 +227,29 @@ def worker_command(root):
     return args
 
 
-def send_pipe(process, value):
-    value = encode(value)
+def send_pipe(process, value, *, native=False, cancelled=None, turn_deadline=None):
+    value = encode_native_context(value) if native else encode(value)
     fd = process.stdin.fileno()
     os.set_blocking(fd, False)
-    deadline = time.monotonic() + 3
-    while value:
-        require(time.monotonic() < deadline and process.poll() is None)
+    deadline = time.monotonic() + (PDF_TRANSFER_SECONDS if native else 3)
+    if turn_deadline is not None:
+        deadline = min(deadline, turn_deadline)
+    view = memoryview(value)
+    while view:
+        require(time.monotonic() < deadline and process.poll() is None
+                and (cancelled is None or not cancelled.is_set()))
         if select.select([], [fd], [], 0.05)[1]:
-            count = os.write(fd, value)
+            count = os.write(fd, view)
             require(count > 0)
-            value = value[count:]
+            view = view[count:]
 
 
 class Turn:
-    def __init__(self, key, payload, *, transport_factory=SyntheticProduct, scratch_parent="/tmp/opencode"):
+    def __init__(self, key, payload, *, epoch, transport_factory=SyntheticProduct, scratch_parent="/tmp/opencode",
+                 deadline=None):
         self.key, self.payload = key, payload
+        self.receipts = ReceiptLedger(key, epoch, payload)
+        self.purged = False
         self.transport_factory = transport_factory
         self.scratch_parent = scratch_parent
         self.events = []
@@ -243,7 +258,9 @@ class Turn:
         self.lock = threading.Lock()
         self.stopped = threading.Event()
         self.abort_requested = threading.Event()
-        self.deadline = time.monotonic() + TURN_SECONDS
+        self.teardown_lock = threading.Lock()
+        self.process = self.relay = self.scratch = None
+        self.deadline = time.monotonic() + TURN_SECONDS if deadline is None else deadline
         self.thread = threading.Thread(target=self.run, daemon=True)
 
     def add(self, value):
@@ -254,73 +271,70 @@ class Turn:
             self.events.append({"sequence": len(self.events) + 1, "event": value})
 
     def run(self):
-        process = None
         terminal = False
         try:
-            with tempfile.TemporaryDirectory(prefix="imp024-turn-", dir=self.scratch_parent) as name:
-                root = Path(name)
-                root.chmod(0o700)
-                for directory in ("project", "code", "empty", "config"):
-                    (root / directory).mkdir(mode=0o700)
-                (root / "config" / "opencode").mkdir(mode=0o700)
-                (root / "config" / "opencode" / ".gitignore").write_text("node_modules\n")
-                copy_worker_code(root / "code")
-                for filename, document in self.payload["documents"].items():
-                    (root / "project" / filename).write_bytes(document["content"].encode("utf-8"))
-                    (root / "project" / filename).chmod(0o600)
-                with SyntheticRelay(root / "relay.sock", lifetime=60,
-                                    transport=self.transport_factory(self.payload), planning=True,
-                                    input_text_limit=MAX_CONTEXT):
-                    process = subprocess.Popen(worker_command(root), stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                        env={"PATH": "/usr/bin:/bin"}, close_fds=True, start_new_session=True)
-                    send_pipe(process, self.payload)
-                    # Incremental bounded framing; no unbounded readline or process
-                    # wait before draining. Abort/control never exposes host sockets.
-                    selector = selectors.DefaultSelector()
-                    selector.register(process.stdout, selectors.EVENT_READ)
-                    buffer = bytearray()
-                    try:
-                        while time.monotonic() < self.deadline:
-                            if self.abort_requested.is_set():
+            if self.abort_requested.is_set():
+                return
+            self.scratch = tempfile.TemporaryDirectory(prefix="imp024-turn-", dir=self.scratch_parent)
+            root = Path(self.scratch.name)
+            root.chmod(0o700)
+            for directory in ("project", "code", "empty", "config"):
+                (root / directory).mkdir(mode=0o700)
+            (root / "config" / "opencode").mkdir(mode=0o700)
+            (root / "config" / "opencode" / ".gitignore").write_text("node_modules\n")
+            copy_worker_code(root / "code")
+            native = self.payload.get("kind") == NATIVE_INLINE_CONTEXT
+            metadata = self.payload["context"] if native else self.payload
+            for filename, document in metadata["documents"].items():
+                (root / "project" / filename).write_bytes(document["content"].encode("utf-8"))
+                (root / "project" / filename).chmod(0o600)
+            # Transport factories receive metadata ONLY, never another inline copy.
+            self.relay = SyntheticRelay(root / "relay.sock", lifetime=60,
+                                        transport=self.transport_factory(metadata), planning=True,
+                                        input_text_limit=MAX_CONTEXT, receipts=self.receipts)
+            self.relay.deadline = min(self.relay.deadline, self.deadline)
+            self.relay.__enter__()
+            self.process = subprocess.Popen(worker_command(root), stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                env={"PATH": "/usr/bin:/bin"}, close_fds=True, start_new_session=True)
+            send_pipe(self.process, self.payload, native=native, cancelled=self.abort_requested,
+                      turn_deadline=self.deadline)
+            self.release_payload()  # Worker owns input; host retains only manifests/receipts.
+            selector = selectors.DefaultSelector()
+            selector.register(self.process.stdout, selectors.EVENT_READ)
+            buffer = bytearray()
+            try:
+                while time.monotonic() < self.deadline:
+                    if self.abort_requested.is_set():
+                        break
+                    with self.lock:
+                        controls, self.controls = self.controls, []
+                    for control in controls:
+                        send_pipe(self.process, control)
+                    for _, _ in selector.select(0.05):
+                        block = os.read(self.process.stdout.fileno(), 8192)
+                        if not block:
+                            require(not buffer)
+                            return
+                        buffer.extend(block)
+                        require(len(buffer) <= MAX_FRAME + 4)
+                        while len(buffer) >= 4:
+                            size = struct.unpack("!I", buffer[:4])[0]
+                            require(0 < size <= MAX_FRAME)
+                            if len(buffer) < size + 4:
                                 break
-                            with self.lock:
-                                controls, self.controls = self.controls, []
-                            for control in controls:
-                                send_pipe(process, control)
-                            for _, _ in selector.select(0.05):
-                                block = os.read(process.stdout.fileno(), 8192)
-                                if not block:
-                                    require(not buffer)
-                                    return
-                                buffer.extend(block)
-                                require(len(buffer) <= MAX_FRAME + 4)
-                                while len(buffer) >= 4:
-                                    size = struct.unpack("!I", buffer[:4])[0]
-                                    require(0 < size <= MAX_FRAME)
-                                    if len(buffer) < size + 4:
-                                        break
-                                    from app.chat_protocol import decode
-                                    value = decode(bytes(buffer[4:size + 4]))
-                                    del buffer[:size + 4]
-                                    self.add(value)
-                                    terminal = value["type"] in ("completed", "failed", "cancelled")
-                                    if terminal:
-                                        return
-                    finally:
-                        selector.close()
-                        if process.poll() is None:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        process.wait(timeout=3)
+                            from app.chat_protocol import decode
+                            value = decode(bytes(buffer[4:size + 4]))
+                            del buffer[:size + 4]
+                            self.add(value)
+                            terminal = value["type"] in ("completed", "failed", "cancelled")
+                            if terminal:
+                                return
+            finally:
+                selector.close()
         except Exception:
             pass
         finally:
-            if process is not None:
-                if process.poll() is None:
-                    os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=3)
-                process.stdin.close()
-                process.stdout.close()
             if not terminal:
                 try:
                     cancelled = self.abort_requested.is_set()
@@ -328,7 +342,55 @@ class Turn:
                               "data": {} if cancelled else {"reason": "broker_worker_error"}})
                 except Exception:
                     pass
-            self.stopped.set()
+            metadata = document = None
+            self.confirm_stop()
+
+    def confirm_stop(self):
+        """Retry cleanup ONLY, never prompt/reply/send. Failure retains a visible fence.
+
+        Called by run's finalizer, or after that thread exits on a later abort.
+        Reaping bwrap kills the PID namespace (including native server descendants);
+        joining relay releases held request generators; scratch cleanup removes surfaces.
+        """
+        with self.teardown_lock:
+            if self.stopped.is_set():
+                return True
+            self.receipts.close()  # Wake held-body gates and reject every new call.
+            self.release_payload()
+            try:
+                if self.process is not None:
+                    if self.process.poll() is None:
+                        os.killpg(self.process.pid, signal.SIGKILL)
+                    self.process.wait(timeout=3)
+                    self.process.stdin.close()
+                    self.process.stdout.close()
+                    self.process = None
+                if self.relay is not None:
+                    self.relay.__exit__(None, None, None)
+                    require(not self.relay.thread.is_alive())
+                    self.relay = None
+                if self.scratch is not None:
+                    self.scratch.cleanup()
+                    self.scratch = None
+            except Exception:
+                return False
+            self.stopped.set()  # No stop/reservation release before ALL three proofs.
+            return True
+
+    def release_payload(self):
+        with self.lock:
+            self.payload = None
+            self.transport_factory = None
+            self.controls.clear()
+
+    def purge(self):
+        require(self.stopped.is_set())
+        self.release_payload()
+        with self.lock:
+            self.events.clear()
+            self.bytes = 0
+            self.replied = set()
+            self.purged = True
 
 
 class Broker:
@@ -388,24 +450,41 @@ class Broker:
             require(sum(not item.stopped.is_set() for item in self.turns.values()) < 8)
             require(not any(item.key[0] == key[0] and not item.stopped.is_set()
                             for item in self.turns.values()))
-            turn = Turn(key, value["payload"], transport_factory=self.transport_factory,
-                        scratch_parent=self.scratch_parent)
+            deadline = None
+            if value["payload"].get("kind") == NATIVE_INLINE_CONTEXT:
+                remaining = value["deadline"] - time.time()
+                require(0 < remaining <= TURN_SECONDS)
+                require(self.transport_factory is not SyntheticProduct)  # No fake ACK relabeled as PDF send.
+                deadline = time.monotonic() + remaining
+            turn = Turn(key, value["payload"], epoch=self.epoch, transport_factory=self.transport_factory,
+                        scratch_parent=self.scratch_parent, deadline=deadline)
             self.turns[key[2]] = turn
             turn.thread.start()
             return {"ok": True, "epoch": self.epoch}
         if turn is None:
-            if value["op"] == "abort":
+            if value["op"] in ("abort", "purge"):
                 existing = self.aborted_unknown.get(key[2])
                 require(existing is None or existing == key)
                 require(existing is not None or len(self.turns) + len(self.aborted_unknown) < 256)
                 # Abort can precede a delayed first start from a crashed API
                 # pump. Preserve a tombstone so that start cannot execute later.
                 self.aborted_unknown[key[2]] = key
-            return {"ok": True, "epoch": self.epoch, "known": False, "stopped": True, "events": []}
+            return {"ok": True, "epoch": self.epoch, "known": False, "stopped": True,
+                    "events": [], "receipts": []}
         require(turn.key == key)
+        if value["op"] == "authorize-send":
+            require(not turn.stopped.is_set() and not turn.abort_requested.is_set())
+            turn.receipts.grant(value["authorization"])
+            return {"ok": True, "epoch": self.epoch}
+        if value["op"] == "purge":
+            turn.purge()  # Active/queued turns require explicit abort + confirmed stop first.
+            return {"ok": True, "epoch": self.epoch, "known": True, "stopped": True,
+                    "purged": True, "receipts": turn.receipts.snapshot()}
         if value["op"] == "abort":
             turn.abort_requested.set()
-            require(turn.stopped.wait(4))
+            if not turn.thread.is_alive() and not turn.stopped.is_set():
+                require(turn.confirm_stop())
+            require(turn.stopped.wait(STOP_SECONDS))
             return {"ok": True, "epoch": self.epoch, "stopped": True}
         if value["op"] == "poll":
             with turn.lock:
@@ -413,7 +492,22 @@ class Broker:
                 if not turn.stopped.is_set():
                     page = [item for item in page if item["event"]["type"] not in
                             ("completed", "failed", "cancelled")]
-            return {"ok": True, "epoch": self.epoch, "known": True, "events": page}
+            response = {"ok": True, "epoch": self.epoch, "known": True, "events": [],
+                        "stopped": turn.stopped.is_set(), "receipts": turn.receipts.snapshot()}
+            pending = turn.receipts.pending_authorization()
+            if pending is not None:
+                response["send_authorization"] = pending
+            # Receipt overhead counts toward the unchanged final frame bound.
+            # Shorten this PAGE only; the next cursor still retrieves every event.
+            for item in page:
+                response["events"].append(item)
+                try:
+                    encode(response)
+                except ValueError:
+                    response["events"].pop()
+                    require(response["events"])
+                    break
+            return response
         require(not turn.stopped.is_set() and not turn.abort_requested.is_set())
         from app.chat_protocol import answer
         with turn.lock:
@@ -446,20 +540,35 @@ class Broker:
                             peer.shutdown(socket.SHUT_RDWR)
                         except OSError:
                             pass
-                    guard = threading.Timer(8, close_request)
+                    guard = threading.Timer(4, close_request)
                     guard.start()
                     try:
                         _, uid, _ = struct.unpack("3i", connection.getsockopt(
                             socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                         require(uid == 10001)
-                        value = receive(connection)
-                        connection.sendall(encode(self.handle(value)))
+                        def frame_timeout(size):
+                            nonlocal guard
+                            if size > MAX_FRAME:
+                                guard.cancel()
+                                connection.settimeout(PDF_TRANSFER_SECONDS)
+                                guard = threading.Timer(PDF_TRANSFER_SECONDS, close_request)
+                                guard.start()
+                        value = receive_request(connection, on_size=frame_timeout)
+                        if value["op"] == "abort":
+                            guard.cancel()
+                            guard = threading.Timer(STOP_SECONDS + 1, close_request)
+                            guard.start()
+                        result = self.handle(value)
+                        value = None  # Release start bytes BEFORE accepting stop/purge/control.
+                        connection.settimeout(3)
+                        connection.sendall(encode(result))
                     except Exception:
                         try:
                             connection.sendall(encode({"ok": False}))
                         except OSError:
                             pass
                     finally:
+                        value = None  # Do not retain the last start body while accept waits.
                         guard.cancel()
         finally:
             for turn in self.turns.values():
@@ -468,6 +577,7 @@ class Broker:
             for turn in self.turns.values():
                 turn.thread.join(max(0, deadline - time.monotonic()))
             require(all(not turn.thread.is_alive() for turn in self.turns.values()))
+            require(all(turn.stopped.is_set() for turn in self.turns.values()))
             self.listener.close()
             self.path.unlink()
             if not self.persistent_directory:

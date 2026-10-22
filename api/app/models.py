@@ -377,7 +377,8 @@ class ProjectAttachment(Base):
         ),
         CheckConstraint("length(filename) BETWEEN 1 AND 180", name="ck_attachment_filename"),
         CheckConstraint(
-            "status IN ('pending','processing','ready','failed')", name="ck_attachment_status"
+            "status IN ('pending','processing','ready','failed','stored')",
+            name="ck_attachment_status",
         ),
         CheckConstraint(
             "original_size IS NULL OR original_size BETWEEN 1 AND 50000000",
@@ -408,7 +409,7 @@ class ProjectAttachment(Base):
             name="ck_attachment_lease",
         ),
         CheckConstraint(
-            "(status = 'ready' AND text_content IS NOT NULL AND text_size IS NOT NULL "
+            "(status IN ('ready','stored') AND text_content IS NOT NULL AND text_size IS NOT NULL "
             "AND text_size BETWEEN 1 AND 131072 AND text_sha256 IS NOT NULL "
             "AND length(text_sha256) = 64 AND page_count IS NOT NULL "
             "AND page_count BETWEEN 1 AND 500 AND missing_pages IS NOT NULL "
@@ -440,6 +441,11 @@ class ProjectAttachment(Base):
             "last_error_code IN ('busy','unavailable')))",
             name="ck_attachment_retry",
         ),
+        CheckConstraint(
+            "status <> 'stored' OR (attempt_count = 0 AND lease_id IS NULL "
+            "AND lease_until IS NULL AND next_attempt_at IS NULL AND last_error_code IS NULL)",
+            name="ck_attachment_native_fence",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -449,7 +455,7 @@ class ProjectAttachment(Base):
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     filename: Mapped[str] = mapped_column(String(180), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="stored")
     failure_code: Mapped[str | None] = mapped_column(String(32))
     original: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
     original_size: Mapped[int | None] = mapped_column(Integer)
@@ -491,6 +497,10 @@ class ChatTurn(Base):
             name="ck_turn_state",
         ),
         CheckConstraint("event_count BETWEEN 0 AND 256", name="ck_turn_event_count"),
+        CheckConstraint(
+            "submission_state IN ('queued','sent','failed-before-send','uncertain')",
+            name="ck_turn_submission_state",
+        ),
         Index("ix_turn_state_created", "state", "created_at"),
     )
 
@@ -513,6 +523,137 @@ class ChatTurn(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     dispatch_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     pump_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    submission_state: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    dispatch_rendered_sha256: Mapped[str | None] = mapped_column(String(64))
+    dispatch_manifest_sha256: Mapped[str | None] = mapped_column(String(64))
+    dispatch_manifest: Mapped[list[Any] | None] = mapped_column(JSON)
+    receipt_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stop_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class ChatSubmissionReceipt(Base):
+    """Trusted host facts only; scope, epoch and manifest are inherited from the turn."""
+
+    __tablename__ = "chat_submission_receipts"
+    __table_args__ = (
+        CheckConstraint("call BETWEEN 1 AND 8", name="ck_receipt_call"),
+        CheckConstraint(
+            "status IN ('sent','uncertain','failed-before-send')", name="ck_receipt_status"
+        ),
+        CheckConstraint(
+            "request_sha256 IS NULL OR length(request_sha256) = 64", name="ck_receipt_hash"
+        ),
+        CheckConstraint(
+            "status = 'failed-before-send' OR request_sha256 IS NOT NULL",
+            name="ck_receipt_sent_hash",
+        ),
+        CheckConstraint(
+            "reference_kind IN ('legacy-text-v1','native-original-v1')",
+            name="ck_receipt_reference_kind",
+        ),
+        CheckConstraint(
+            "request_size IS NULL OR request_size BETWEEN 1 AND 71303168",
+            name="ck_receipt_request_size",
+        ),
+        CheckConstraint(
+            "reference_kind <> 'native-original-v1' OR status = 'failed-before-send' OR "
+            "(request_size IS NOT NULL AND authorization_id IS NOT NULL)",
+            name="ck_receipt_native_authorized",
+        ),
+    )
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("chat_turns.id", ondelete="CASCADE"), primary_key=True
+    )
+    call: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    request_sha256: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    reference_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="legacy-text-v1"
+    )
+    request_size: Mapped[int | None] = mapped_column(Integer)
+    authorization_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+
+
+class ChatSendAuthorization(Base):
+    """One committed native call grant; metadata only, never replayed after lost ACK."""
+
+    __tablename__ = "chat_send_authorizations"
+    __table_args__ = (
+        CheckConstraint("call BETWEEN 1 AND 8", name="ck_send_call"),
+        CheckConstraint("request_size BETWEEN 1 AND 71303168", name="ck_send_request_size"),
+        CheckConstraint("length(request_sha256) = 64", name="ck_send_request_hash"),
+        CheckConstraint("length(original_manifest_sha256) = 64", name="ck_send_manifest_hash"),
+        UniqueConstraint("authorization_id", name="uq_send_authorization_id"),
+    )
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("chat_turns.id", ondelete="CASCADE"), primary_key=True
+    )
+    call: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    epoch: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    authorization_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AttachmentDeletion(Base):
+    """Durable removal fence/tombstone; no attachment FK or content copies."""
+
+    __tablename__ = "attachment_deletions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "project_id"],
+            ["conversations.id", "conversations.project_id"],
+            ondelete="CASCADE",
+        ),
+    )
+    attachment_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class AttachmentPurge(Base):
+    """Per-turn cleanup proof survives an API crash/lost purge ACK."""
+
+    __tablename__ = "attachment_purges"
+    attachment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("attachment_deletions.attachment_id", ondelete="CASCADE"), primary_key=True
+    )
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("chat_turns.id", ondelete="CASCADE"), primary_key=True
+    )
+    confirmed_epoch: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+
+
+class ChatTurnPdfSelection(Base):
+    """Ordered request identity survives attachment deletion; never stores text.
+
+    Deliberately no attachment FK: deleting a PDF must not erase turn idempotency.
+    Versioned identity snapshots live in ChatTurn.payload references. Legacy hashes
+    remain derivative hashes; migration never converts them into original hashes.
+    """
+
+    __tablename__ = "chat_turn_pdf_selections"
+    __table_args__ = (
+        CheckConstraint("position BETWEEN 0 AND 31", name="ck_turn_pdf_position"),
+        CheckConstraint("length(expected_sha256) = 64", name="ck_turn_pdf_hash"),
+        CheckConstraint(
+            "reference_kind IN ('legacy-text-v1','native-original-v1')",
+            name="ck_turn_pdf_kind",
+        ),
+    )
+
+    turn_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("chat_turns.id", ondelete="CASCADE"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    attachment_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    expected_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    reference_kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="native-original-v1"
+    )
 
 
 class ProjectTurnReservation(Base):

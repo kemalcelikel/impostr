@@ -1,4 +1,4 @@
-"""0007 -> current PDF schema preservation/guards, using the SQLite test seam."""
+"""0007 -> 0009 PDF schema preservation/guards, using the SQLite test seam."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import MetaData, Table, create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from test_migrations import _alembic_config
@@ -23,6 +23,8 @@ from app.models import (
     ProjectDocumentRevision,
     User,
 )
+
+INTAKE_HEAD = "20261002_0009"
 
 
 def seed_history(engine):
@@ -83,22 +85,34 @@ def seed_history(engine):
             )
         )
         db.flush()
-        turn = ChatTurn(
-            project_id=project_id,
-            conversation_id=conversation_id,
-            request_id=uuid.uuid4(),
-            actor_user_id=owner_id,
-            web_session_hash=b"a" * 32,
-            prompt="Preserved chat",
-            payload={"synthetic": "preserved"},
-            state="completed",
+        # Seed the actual pre-0010 schema, not an ORM INSERT containing future
+        # submission columns. This helper deliberately runs before upgrade.
+        turn_id = uuid.uuid4()
+        turns = Table("chat_turns", MetaData(), autoload_with=db.connection())
+
+        def identity(value):
+            return value.hex if engine.dialect.name == "sqlite" else value
+
+        db.execute(
+            turns.insert().values(
+                id=identity(turn_id),
+                project_id=identity(project_id),
+                conversation_id=identity(conversation_id),
+                request_id=identity(uuid.uuid4()),
+                actor_user_id=identity(owner_id),
+                web_session_hash=b"a" * 32,
+                prompt="Preserved chat",
+                payload={"synthetic": "preserved"},
+                state="completed",
+                event_count=0,
+                broker_cursor=0,
+                output_bytes=0,
+            )
         )
-        db.add(turn)
-        db.flush()
         db.add(
             ChatEvent(
                 conversation_id=conversation_id,
-                turn_id=turn.id,
+                turn_id=turn_id,
                 sequence=1,
                 kind="completed",
                 data={"preserved": True},
@@ -120,9 +134,23 @@ def history(engine):
         ChatEvent,
     )
     with engine.connect() as connection:
+        added_turn_columns = {
+            "submission_state",
+            "dispatch_rendered_sha256",
+            "dispatch_manifest_sha256",
+            "dispatch_manifest",
+            "receipt_pending",
+            "stop_confirmed",
+        }
         return {
             model.__tablename__: connection.execute(
-                select(model.__table__).order_by(model.id)
+                select(
+                    *[
+                        column
+                        for column in model.__table__.columns
+                        if model is not ChatTurn or column.name not in added_turn_columns
+                    ]
+                ).order_by(model.id)
             ).all()
             for model in tables
         }
@@ -143,7 +171,11 @@ def check_preservation(engine, stage=lambda _: None):
     stage("preservation_snapshot")
     before = history(engine)
     stage("preservation_upgrade")
-    migrate(engine, "head")
+    # This historical attachment-only fixture stops at its actual schema slice.
+    # Following head would first downgrade 0010 before 0009 rejects attachment
+    # loss; SQLite's nontransactional DDL can then leave a partially downgraded
+    # schema. The dedicated selection migration test exercises 0010 separately.
+    migrate(engine, INTAKE_HEAD)
     stage("preservation_history")
     assert history(engine) == before
     with engine.connect() as connection:
@@ -159,6 +191,7 @@ def check_preservation(engine, stage=lambda _: None):
             original=b"%PDF-test",
             original_size=9,
             original_sha256="a" * 64,
+            status="pending",  # Historical 0009 schema precedes native storage.
         )
         db.add(row)
         db.flush()
@@ -189,6 +222,8 @@ def check_preservation(engine, stage=lambda _: None):
     migrate(engine, "20261001_0007", downgrade=True)
     assert history(engine) == before
     stage("preservation_reupgrade")
+    # Joined PostgreSQL/API callers need the current schema after the historical
+    # downgrade guards have finished, with no retained attachment to discard.
     migrate(engine, "head")
     return ids
 
