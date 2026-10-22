@@ -75,3 +75,9 @@ Composer and fixture recovery delivered in 34dbcb0; old empty runtime/private st
 new startup/normal Member UI/complete cleanup worked. Owner stopped extra automated browser
 testing; remaining browser/full-app acceptance is manual-deferred, not passed. New repair2/3,
 old budgets preserved. Next027→011; no live-provider claim, installs, auto runner start or push/PR.
+Extractor retired in d05233f; original-preserving forward migration0013 passed two owned
+PG cases/cleanup. Private backup/fresh-target restore implemented in756a3c8. Transport/
+app-role ownership succeeded; full automated constraint comparison remains unresolved.
+Owner stopped all further tests/verification/comparator work and will manually accept.
+Queue through011 complete under that deferral; current runbook replaces archived setup
+history. No live/full-app/restore acceptance claim, runner start, installation or push/PR.

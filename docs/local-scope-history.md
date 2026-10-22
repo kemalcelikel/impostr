@@ -97,6 +97,20 @@ of denied staging files or broader tool permissions was authorized. Continue app
 extractor retirement/local workflow-restore implementation; retain data/privacy
 requirements and later owner/provider acceptance. No automatic runner start or push/PR.
 
+## Final packaging and stop instruction (2026-10-22)
+
+Owner explicitly requested finishing without more testing, verification, loops or
+comparator refinements. Extractor retirement is committed in `d05233f`; private human
+backup/fresh-target restore in `756a3c8`. Original PDFs/history are preserved; no local
+parser or host PostgreSQL install remains. The implementation queue through IMP-011
+is complete under owner-deferred manual acceptance, not claimed automated completion.
+
+Actual synthetic backup/restore transport and app-role ownership succeeded. Full
+constraint comparison remains unresolved; populated-target refusal/rollback and full
+restored-read acceptance were not completed by the halted drill. Existing guarded
+implementation/review and all attempts remain recorded. No further check/review loop,
+provider test, runner/application start, installation or publication follows.
+
 ## IMP-025 native stream outcome (latest session)
 
 The actual 209-input synthetic candidate fingerprint

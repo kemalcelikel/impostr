@@ -28,7 +28,17 @@ new push or merge is authorized by this document edit.
 
 ## Current position
 
-**Latest owner instruction (2026-10-22):** Stop extra automated/browser testing;
+**Final owner instruction (2026-10-22):** Finish packaging; stop testing, verifying,
+looping and comparator refinements. Native backend/composer, extractor retirement
+(`d05233f`) and private backup/fresh-target restore (`756a3c8`) are implemented and
+committed. The approved implementation queue through IMP-011 is complete with manual
+acceptance deferred. Actual synthetic dump/restore transport and app-role ownership
+succeeded; automated full constraint equivalence remains unresolved. This is not a
+passed restore/browser/provider acceptance claim. No further check/review loop, runner
+start, live test or publication is authorized. Preserve prior outcomes and attempts.
+The current runbook is docs/local-development.md; old setup history is archived.
+
+**Earlier owner instruction (2026-10-22):** Stop extra automated/browser testing;
 owner will manually test the completed application. Composer/fixture repair is
 implemented and committed in `34dbcb0` using existing passing web/static/review
 evidence and observed startup/owned cleanup. Remaining rendered/full-app acceptance
@@ -50,7 +60,7 @@ dependency-eligible. IMP-017 stays delivered; IMP-018 is superseded without acce
 Keep the full dirty candidate and old attempt histories at `58bee09`. No application
 change, task commit, runner start or publication is authorized by this planning edit.
 
-**Owner-approved continuous future batch:** All four outcomes are approved, not disabled.
+**Earlier owner-approved continuous batch (now implementation-complete):** All four outcomes were approved, not disabled.
 Dependencies order execution, not approval. On the owner's next root-runner launch,
 continue the remaining IMP-027→IMP-011; IMP-025/026 are already delivered. The original
 sequence was IMP-025→026→027→011 as each prerequisite became locally verified/committed;
@@ -1182,9 +1192,32 @@ Both browser runs stopped exit 0 with sanitized owned account/login/resource/ima
 private-state cleanup verified. Stage navigation resets file selection/scroll (documented
 optional polish); switching files retains position. No push/PR, chat or release claim.
 
-## [ ] IMP-011 — Verify same-PC PDF workflow and data restore
+## [x] IMP-011 — Verify same-PC PDF workflow and data restore
 
 **Depends on:** IMP-003, IMP-005, IMP-008, IMP-021, IMP-010, IMP-027
+
+**Implementation delivered; final acceptance owner-deferred (2026-10-22): `756a3c8`.**
+Final owner instruction stops additional tests/verification and comparator edits.
+The human CLI `scripts/local_data.py` implements private custom-format backup and
+transactional app-role restore to a fresh target, with explicit private env, no
+overwrite, populated/running-target refusal and no destructive volume reset.
+Current instructions are in docs/local-development.md; older text is preserved in
+docs/local-development-history.md. No provider auth discovery or host PG install.
+
+Implementation4/5 used; prior budgets unchanged. Actual owned synthetic backup/restore
+transport and app-role ownership completed, with all resources cleaned after each run.
+The exact constraint comparison failed on PostgreSQL enum-CHECK representation.
+Comparator refinements remain, but the final model-derived version was not executed.
+Full automated schema/data equivalence, restored-read/denial, populated-target refusal
+and rollback acceptance did not complete; do not label them passed. Owner explicitly
+chose manual acceptance and stopped further verification. `[x]` records committed
+implementation under that revised scope, not completed automated acceptance.
+No remaining-attempt drain/check loop is authorized by this completion. Implementation
+and guarded restore behavior were independently reviewed; focused pure/syntax checks
+passed before the owner stop. No real DB, owner archive or live provider was used.
+No automatic app/runner start, installation, push/PR or merge.
+
+### Earlier verification plan (superseded by final manual-acceptance instruction)
 **Scope:** Concrete same-PC PDF workflow and restorable data; no private HTTPS,
 phone/device, image/DOCX, shared-server qualification or live-provider gate.
 
@@ -1614,9 +1647,23 @@ live-provider claim. Preserve retained state and every partial file; next requir
 verified owned private/watchdog cleanup before refreshed pinned launch/rendered review.
 Final affected-docs pass done; local outcome bookkeeping only, no push/PR or downstream.
 
-## [ ] IMP-027 — Retire local PDF extraction and preserve existing project data
+## [x] IMP-027 — Retire local PDF extraction and preserve existing project data
 
 **Depends on:** IMP-025, IMP-026
+
+**Delivered (2026-10-22): `d05233f`.** Removed extractor container/overlays,
+API parsing/lifecycle/protocol/config/preview and parser-only fixtures/verifiers.
+Native originals/sending, authorization, receipts, deletion and agent isolation remain.
+Forward migration0013 drops fourteen extraction/provenance/scheduling fields, maps
+originals present→stored and absent→failed, and preserves raw bytes/hashes, project/
+draft/approval/chat history and legacy-vs-native receipt metadata. Old migrations and
+IMP-017 history are unchanged. Public PDF fixture generation is now imp025_fixtures.py,
+not a parser dependency. Unrelated dirty/private work remains preserved.
+Attempt1/3 used. Independent data/removal and focused-selector review passed.
+The exact194-input retirement check at fingerprint
+`506ad3566218ee598b4593423c7c2ecb2d680b6038af25d0033dc1db8bebdeaa`
+passed both fresh/populated PG preservation cases and owned cleanup. No browser/
+full-app/provider rerun or deletion of shared host images/containers/volumes.
 
 Remove obsolete parsing machinery after native backend/composer delivery. Preserve
 IMP-017 commits and all prior outcomes; do not reinstall or rebuild a parser for this

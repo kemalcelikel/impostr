@@ -20,10 +20,13 @@ of this decision. Implementation outcomes are IMP-025/026/027, then local-use IM
 **Current capability, not the whole target:** IMP-017 delivered private raw intake and
 confined extraction/lifecycle in `ca09dc3`, `269710f`, `8925dfa`. Native PDF backend proof
 is locally delivered in `a966d77` after the small event-format repair.
-Composer and fixture cleanup are locally delivered in `34dbcb0`; extractor retirement
-and local workflow/restore remain IMP-027/011. Owner will manually accept the completed
+Composer/fixture cleanup is delivered in `34dbcb0`, extractor retirement in `d05233f`,
+and private backup/fresh-target restore in `756a3c8`. The implementation queue through
+IMP-011 is complete. Owner will manually accept the completed
 application; remaining browser/full-app tests are deferred, not passed or an immediate
-implementation gate. Reuse existing valid evidence rather than more automated suites.
+implementation gate. Final owner instruction stops further testing, verification and
+comparator refinements. Actual dump/restore transport and app-role ownership succeeded;
+automated full constraint equivalence remains unresolved—not an acceptance pass.
 IMP-018's unaccepted text-only candidate and all earlier attempts remain history, not
 a reason to finish or rebuild that design. No actual-provider success is claimed.
 
@@ -199,7 +202,9 @@ owner continues to prepare application repositories and launch the runner manual
 Accounts, private projects, versioned editors, human approvals/downloads, template
 integration and synthetic text chat are delivered. Native PDF backend and composer are
 delivered; BACKLOG.md records the evidence and owner-deferred browser acceptance.
-Extractor retirement and restored local workflow remain the approved next outcomes.
+Extractor retirement and the guarded local backup/restore workflow are delivered.
+Remaining browser/provider and full restore acceptance is the owner's manual work;
+the automated constraint comparison remains unresolved.
 Actual provider use remains owner-deferred. Earlier implementation narratives are
 preserved in docs/agent-history.md, not mixed into current product requirements.
 
@@ -417,9 +422,9 @@ successful mock integration test with an isolated, working OpenCode deployment.
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
 | UI/backend/deployment stack | Implemented local baseline | Vite/React/TypeScript/Tailwind, Python/FastAPI/SQLAlchemy/PostgreSQL/Alembic/Nginx; manifests/locks pin actual dependencies and container runtimes. |
 | Safe OpenCode integration | Synthetic product integration delivered; live owner-deferred | IMP-024/005 deliver confined native worker/server/shim, private broker, model-only host relay, durable API/proposals and ordinary foreground connection. Keep credentials outside workers. Native PDF transport is IMP-025; no host-auth discovery or sandbox migration. Personal text-chat aggregate quota work remains cancelled. |
-| Deployment environment, exact app commands and secrets provision | Local-only setup verified / workflow-restore pending | Docker/Compose setup, migrations, local account bootstrap/recovery, API health and database recovery are documented in `docs/local-development.md`. Confined synthetic product isolation is verified, not shared-server qualification. No host PostgreSQL install or current LAN/TLS gate; integrated backup/restore remains IMP-011. |
+| Deployment environment, exact app commands and secrets provision | Local implementation delivered; manual acceptance pending | Docker/Compose startup, migrations, human connection and private backup/fresh-target restore are documented in `docs/local-development.md`. No host PostgreSQL install or current LAN/TLS gate. Restore transport/role ownership succeeded; full automated constraint comparison remains unresolved. No shared-server or live-provider qualification. |
 | Automated local browser-review credentials | Verified local fixture / residual host risk accepted | Prior exact-input reviews are delivered; native PDF composer needs its own refreshed profile/rendering. Shared Playwright is **not OS-confined**. Use owned synthetic stack/generated short-lived Member, revoke and clean up after review; never use owner's accounts/private data or claim host-secret/Docker denial or product isolation from browser proof. |
-| First-release attachments | Backend/composer delivered; removal/manual acceptance pending | IMP-025/026 supply native PDF input and composer; IMP-027 removes extractor. Conservative decimal file/aggregate limits; browser and actual-provider acceptance remain owner-deferred. Preserve delivered IMP-017 and superseded IMP-018 history. |
+| First-release attachments | Native backend/composer delivered; extractor removed | IMP-025/026 supply native PDF input and composer; IMP-027 retired the extractor. Conservative decimal file/aggregate limits; browser and actual-provider acceptance remain owner-deferred. Preserve delivered IMP-017 and superseded IMP-018 history. |
 | Phone/LAN access | Cancelled for this version | Same-PC loopback only. Any later private HTTPS/device setup requires a new owner request; no raw LAN shortcut. |
 | This repository's execution/delivery policy | Single-branch local delivery; publication deferred | Preserve `feature/impostr-v1` commits, dirty candidate and task history. No concurrent/automatic runner, pushes/PRs or merges for this planning request/native local-use batch. IMP-012 retains later final PR specification for owner approval. Candidate evidence applies only to exact inputs; broad coordinator tools are not product isolation. |
 

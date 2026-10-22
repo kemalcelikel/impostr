@@ -10,13 +10,16 @@
 
 ## Current work
 
-Native backend is delivered in `a966d77`; composer and owned fixture cleanup are
-delivered in `34dbcb0`. Owner requested stopping extra automated/browser testing and
-will manually accept the completed application. Preserve residual IMP-018 work and
-all attempt history; BACKLOG.md owns outcomes/budgets. Do not restart the runner.
+Native backend is delivered in `a966d77`, composer/fixture cleanup in `34dbcb0`,
+extractor retirement in `d05233f`, and private backup/fresh-target restore in `756a3c8`.
+Owner explicitly stopped tests, verification and comparator refinements and will
+manually accept the application. Preserve residual work/history; do not restart the runner.
 
-Next owner-started sequence is IMP-027 extractor retirement → IMP-011 local workflow/
-restore. Keep Bubblewrap; no Podman/sbx migration.
+The implementation queue through IMP-011 is complete under owner-deferred acceptance.
+Automated full restore-constraint comparison remains unresolved—not passed. Do not
+start another check/review loop, activate deferred/live scope or discard attempt history.
+Setup/backup/restore: docs/local-development.md; BACKLOG.md owns caveats and outcomes.
+Keep Bubblewrap; no Podman/sbx migration.
 OpenCode has no exact version or executable-hash admission lock; retain fixed-path safe
 availability, observational digest, other runtime pins and actual compatibility checks.
 Original PDFs use native OpenCode/Azure input, not local parsing/OCR/text preview.
@@ -31,6 +34,8 @@ Real-provider acceptance is owner-deferred, not passed or an immediate execution
 - Owner defers remaining browser/full-app walkthroughs to manual testing after
   implementation. Do not launch more browser suites, create test-placement/permission
   work, or block delivery solely on that deferred evidence. Never label it passed.
+- Final owner instruction also stops additional restore verification/comparator work.
+  Package the existing implementation; report its unresolved comparison honestly.
 - Review substantial/security/data-sensitive changes independently; re-review only the
   affected repair. Concrete important defects block, optional polish/coverage does not.
 - Ordinary formatting, focused tests and a distinct in-scope repair need no extra owner
