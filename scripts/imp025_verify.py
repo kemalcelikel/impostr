@@ -39,10 +39,10 @@ sys.path.insert(0, str(ROOT / "api/tests"))
 from imp024_verify import CheckOutput, RuffJsonOutput, Unavailable, Verify, report, require
 from app.chat_protocol import FAILURE_REASONS
 
-BASELINE = "58bee0944e64ab6f17007a5366c59aa1a5114d32"
-CHECKPOINT = "cd13cbf0cc590c239b55c09194f64c05358b0b7d"
+BASELINE = "a966d7775567860fb5943fb9db080f241aadc27d"
+CHECKPOINT = "a966d7775567860fb5943fb9db080f241aadc27d"
 # Only owner-approved runtime/stream repair and history bookkeeping may be committed.
-# Candidate-only: a native delivery commit needs a separately reviewed checkpoint.
+# Future profile anchors advance only after verified delivery, never arbitrary commits.
 REPAIR_PATHS = frozenset({
     "scripts/imp002_prototype.py", "scripts/test_imp002_prototype.py",
     "scripts/imp023_worker.py", "scripts/test_imp023_session.py",

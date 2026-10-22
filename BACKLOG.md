@@ -28,15 +28,46 @@ new push or merge is authorized by this document edit.
 
 ## Current position
 
-**Latest owner scope:** Prepare one batch for local PDF use, not more chat prototypes.
-IMP-005 delivered at978eedd/2bfb5e4; don't rebuild it. Private HTTPS is cancelled for
-this version, broader attachment formats removed; archive docs/local-scope-history.md.
-Owner approved decimal50MB text-readable PDF intake/model inclusion and pinned parser
-installation/fetches in dedicated extractor image ONLY. IMP-017→018→011 are approved
-executable local outcomes; live-provider testing remains deferred. No push/PR or
-multi-user/remote work in this batch. Older conflicting broad scope below is history.
+**Current owner request (2026-10-22):** Keep implementation and execution simple, and
+fix the identified PDF event-format defect. Interactive repair has passed the real
+synthetic native flow and delivered IMP-025 in `a966d77`; IMP-026 is next eligible. New focused
+repair1/3 used, old native3/3 and runtime-only1/3 unchanged. Ordinary formatting,
+fixture packaging and focused checks need no extra owner approval or whole-suite loop.
+AGENTS.md is now a short operating guide; old instructions/checkpoints are preserved
+in docs/agent-history.md. Product/privacy/data requirements and task IDs stay intact.
 
-**Latest complete-chat preparation:** IMP-023 succeeded, but the runner stopped
+**Native PDF scope (2026-10-13):** Native PDFs through OpenCode/Azure, not local text
+extraction. Owner requested the necessary backlog/contract updates so this can be
+implemented. IMP-025→026→027→011 are approved outcomes; only IMP-025 is initially
+dependency-eligible. IMP-017 stays delivered; IMP-018 is superseded without acceptance.
+Keep the full dirty candidate and old attempt histories at `58bee09`. No application
+change, task commit, runner start or publication is authorized by this planning edit.
+
+**Owner-approved continuous future batch:** All four outcomes are approved, not disabled.
+Dependencies order execution, not approval. On the owner's next root-runner launch,
+continue IMP-025→026→027→011 as each prerequisite becomes locally verified/committed;
+do not stop after the first successful task. The root single-branch helper already
+rechecks eligibility between sessions. Preserve practical checks and finite limits;
+an actual blocker/exhaustion stops with a checkpoint. After IMP-011 stop without
+enabling deferred scope, live-provider tests, push/PR or automatic application start.
+
+The model's documented PDF support and pinned OpenCode file-input implementation are
+enough to plan synthetic implementation; the owner's real deployment remains untested
+and its live test deferred. Product contract/limits: PROJECT.md, Native PDF contract.
+New finite planning allocation (assumption for bounded unattended implementation):
+**three substantive attempts per new native outcome**, initially0/3 each. This is new
+scope, not a reset of IMP-018/017 or permission to continue their exhausted repairs.
+Preserve counts across sessions, no borrowing/automatic renewal. Ordinary formatting,
+focused reruns and documentation are not substantive attempts. IMP-011 retains0/5.
+
+Reuse delivered chat/editors/ordinary connection (IMP-005 at978eedd/2bfb5e4). Same-PC
+loopback, PDF-only uploads, no private HTTPS/remote/multi-user scope, host auth discovery,
+new sandbox technology, installs or pushes/PRs. Future owner-started root helper uses
+`RUNNER_USE_SBX=0`; planning does not launch it. Older conflicting next-run directions
+below are history. Removed extraction requirements: docs/local-scope-history.md.
+
+**Historical complete-chat preparation (next-run direction superseded above):**
+IMP-023 succeeded, but the runner stopped
 normally because remaining ready tasks depend on blocked IMP-002. Owner now approved
 the complete independent IMP-024 job, including a separate operator-owned relay
 connection, rather than further host-config diagnostics. Personal-PC quota item 4 is
@@ -1145,15 +1176,15 @@ optional polish); switching files retains position. No push/PR, chat or release 
 
 ## [ ] IMP-011 — Verify same-PC PDF workflow and data restore
 
-**Depends on:** IMP-003, IMP-005, IMP-008, IMP-021, IMP-010, IMP-018
+**Depends on:** IMP-003, IMP-005, IMP-008, IMP-021, IMP-010, IMP-027
 **Scope:** Concrete same-PC PDF workflow and restorable data; no private HTTPS,
 phone/device, image/DOCX, shared-server qualification or live-provider gate.
 
 Owner authorized five focused verification/repair attempts, initially0/5. Reuse valid
 delivered chat/review evidence; inspect full assigned final branch without exhaustive
-suite repetition. Verify loopback ordinary-stack synthetic PDF upload→text preview→
+suite repetition. Verify loopback ordinary-stack synthetic PDF upload→file selection→
 selected turn→question/proposal/conflict→human approval→three exact downloads. Perform
-owned synthetic DB backup/restore including original/derived PDF hashes, conversations,
+owned synthetic DB backup/restore including original PDF bytes/hashes/metadata, conversations,
 document revisions/approvals; actual restored app reads and private access must work.
 Backup artifacts stay private disposable fixture data, never Git. Review new restore
 helper/credential/data handling before executing; no live DB/dumps or owner's PDFs.
@@ -1162,6 +1193,11 @@ errors/deletion, backup/restore, existing chat epoch/context limits and the late
 human live test. Missing optional audits are reported, not claimed passing or made
 new scope. Concrete failed workflow/security/data checks block local-use outcome.
 Local commits only then stop; no auto-start, operator/live execution, push/PR or deploy.
+Verify this workflow without extractor services/tools/config and with a restored PDF
+actually present at the synthetic native inference boundary. Do not rerun historical
+parser containment/rejection gates or claim that synthetic receipt proves comprehension.
+The later human live test covers the owner's actual deployment reading a PDF; it is
+documented, not executed by agents or made an immediate queue gate.
 
 ### Preserved earlier wider release acceptance (superseded scope)
 
@@ -1367,7 +1403,7 @@ already state this gate; no setup/revocation procedure is invented. No applicati
 network or credential changes, live tests or substantive attempts; local outcome
 bookkeeping only. Preserve all existing code/logs; no push/PR or runner restart.
 
-## [!] IMP-025 — Send authorized original PDFs through OpenCode and the model relay
+## [x] IMP-025 — Send authorized original PDFs through OpenCode and the model relay
 
 **Depends on:** IMP-005, IMP-017
 
@@ -1376,7 +1412,43 @@ PROJECT.md's Native PDF contract. Reuse the preserved IMP-018 candidate, not a n
 chat implementation. This outcome delivers backend/API/worker/transport behavior;
 composer is IMP-026 and physical extractor removal is IMP-027. Attempts initially0/3.
 
-**Runner outcome (2026-10-22): blocked; native repairs3/3 exhausted.** Refreshed
+**Delivered simplicity/event repair (2026-10-22): `a966d77`.**
+Owner asked to simplify the documents/process and fix the concrete event mismatch.
+New finite allocation3 attempts, 1/3 used; preserve old native3/3, runtime-only1/3 and
+all earlier budgets. Accept standard OpenCode PDF event ID/session/timestamp metadata
+with relevant bounded identity/time validation; keep original hash/base64, unknown
+field rejection, binary stripping, session authorization and existing transport limits.
+No new parser, service, compatibility layer or diagnostic framework was introduced.
+
+Independent affected reviews passed. Exact209-source full synthetic verifier passed
+at HEADfe75755, fingerprint
+`73fde7fdab4e628ea933a5ae84684285edad010dc7d432687f6370b445de10e3`:
+real native order/exact decoded bytes/tool follow-up/receipts, retained history,
+outage/deletion purge/recovery, authorization/integrity rejections and near-bound input,
+plus build/fresh PostgreSQL/migrations/API/Ruff/format/mypy; all owned cleanup passed.
+Native tests now use their existing native fixture instead of importing the superseded
+API test module. Test-only packaging verification at fingerprint
+`7fd236bbd0c7bf352264f0be7260304beb5c59afff8a1776b00ae4ec6fab191b`
+passed the existing API-only verifier and cleanup; production code is unchanged from
+the successful full flow. The final standalone native inventory omits eight unused
+IMP-018 diagnostic/test files without deleting them. Exact201-source full synthetic
+verification at fingerprint
+`3899574e02df8b2a9496731ee730c52e8d761487885431f45034cd16928c3116`
+again passed all native/backend checks and owned cleanup; the delivered native tests
+do not depend on the superseded API suite or formatter framework. Coordinator78 native
+helper tests, final34 verifier tests and7 reused legacy-negative-fixture tests passed.
+Only normal shared fixture registration was staged from conftest; old diagnostic hooks,
+legacy PostgreSQL/test/verifier work, planning artifacts and private logs remain preserved.
+The native verifier now anchors this verified code commit, preserving ancestry, declared
+repair paths, exact source/frozen checks and fresh fingerprints for later profiles.
+After the anchor refresh, all80 native helper tests passed; it changes checkpoint
+metadata, not product/runtime behavior.
+The discovered mismatch is fixed; the historical generic error did not preserve its
+exact trigger. No real-provider success, composer, extractor retirement or restore
+delivery is inferred. Backend code/migrations/native regressions are locally committed
+and `[x]`; owner runner can continue IMP-026→027→011. Do not restart it automatically.
+
+**Historical runner outcome (2026-10-22), before the event repair: blocked; native repairs3/3 exhausted.** Refreshed
 209-input preflight and actual synthetic run passed build, fresh PostgreSQL preservation,
 legacy fencing/send constraints/capture-delete, migration0012, focused API and Ruff/
 format/mypy. The final reviewed repair fixed receiver list-iterator cleanup and added
@@ -1390,7 +1462,27 @@ cleanup passed twice. Full candidate and repair remain uncommitted. Further gene
 native repair needs owner-approved finite scope; downstream026/027/011 cannot proceed.
 OpenCode version/hash unlock remains valid; no install/private inputs/live/push/PR.
 
-**Current outcome (2026-10-14): blocked on pinned runtime capability.** Original-file
+**Earlier owner-requested runtime repair/handoff (2026-10-22): ready to resume, not yet delivered at that checkpoint.**
+Owner removed the exact OpenCode version requirement and explicitly requested runner
+readiness. Exact executable-hash/version gates are removed without relaxing fixed-path
+executable safety, other runtime pins, identity/isolation/config masks, model credential
+separation or exact-source capture. Do not repin 1.19.0 or require approval of each future
+OpenCode update; incompatible actual protocol/behavior remains a concrete failure.
+
+Independent affected review approved the repair and checkpoint reconciliation. Coordinator
+54 IMP-002, 22 IMP-023 and 68 IMP-025 tests passed; actual confined synthetic/probes,
+authenticated native startup and planning read/question/once-only edit passed on installed
+1.19.0, with all owned state/listeners/children removed. No full native-PDF, Docker/DB,
+composer or live-provider acceptance is claimed by this focused preparation.
+New runtime-only recovery budget1/3 used; original native2/3 preserved, one native attempt
+remains. Unused runtime attempts cannot renew the general native task or older IMP-018.
+The original dirty native candidate remains uncommitted. Requeue is authorized here;
+future owner-started root batch resumes its real acceptance, then IMP-026→027→011.
+Fresh preflight binds actual current HEAD/source bytes with known ancestor/repair-path
+constraints rather than demanding the obsolete58bee09 HEAD. Never reuse the historical
+fingerprint below for changed inputs. No auto-start/install/private inputs/push/PR.
+
+**Historical outcome (2026-10-14): blocked on pinned runtime capability.** Original-file
 capture/inline transport, per-call authorization, exact receipts and forward migrations
 0011/0012 are implemented but unaccepted; full dirty IMP-018/025 candidate is preserved.
 Independent boundary/harness reviews and affected repairs passed. Coordinator exact-input
@@ -1400,7 +1492,7 @@ passed. Native execution stopped at broker startup: only the public OpenCode exe
 hash differs from the required1.18.34 pin; installed version is1.19.0. No receiver/PDF
 byte, tool-follow-up/history, near-bound or native outage/purge runtime proof passed.
 Repairs **2/3 used**, one remains; old budgets unchanged. All owned cleanup passed.
-Owner must provide the approved pinned capability or authorize a bounded reviewed
+At that stop the owner needed to provide the approved pinned capability or authorize a bounded reviewed
 compatibility decision; no agent installation, pin waiver or automatic requeue.
 Verifier candidate fingerprint over58bee09:
 `4ad667f43837325cbe40f64693a5bd025adf7d0c45f06e28f6000f0e057c7ad4`.
@@ -1439,19 +1531,86 @@ live/provider test or downstream-task acceptance; affected docs record this stop
 
 ### Focused verification
 
-Independent review of changed binary/relay/deletion/migration boundaries before owned
-synthetic execution. Pass the actual pinned OpenCode→shim→host-transport path with a
-synthetic receiver inspecting exact decoded PDF bytes/hash, not just worker ACK or
-"PDF read successfully". Exercise one native planning tool follow-up and reconstruct
-history with the file; reject altered/foreign/deleted inputs and byte/aggregate overflow.
-Check admission near the selected native bound through actual transport, not only constants.
-Focused API/static and fresh PostgreSQL migration/preservation plus capture/delete race;
-legacy rejection completion cannot overwrite/delete a transitioned original; one
-outage/restart receipt/purge regression. Reuse unchanged chat evidence and owned
-fixtures/cleanup; no real Azure call or parser rebuild. Existing text-only verifiers
-and fingerprints must be adapted to actual inputs, never relabeled as PDF proof.
+Use the existing exact-input native verifier for actual OpenCode→relay→synthetic
+receiver bytes, tool follow-up/history, meaningful access/integrity/limit failures and
+deletion/outage recovery. Check changed API/schema/storage behavior and preservation;
+reuse unchanged valid build/static/DB evidence. Review substantial trust/data changes
+and only the affected repair afterward. Keep owned cleanup and honest receipts; no
+parser rebuild, new diagnostic framework, exhaustive matrix or real Azure call.
+
+## [ ] IMP-026 — Select and send native PDFs in the planning chat composer
+
+**Depends on:** IMP-025
+
+Add the missing composer on delivered chat/editor UI; no new PDF viewer or local text
+preview. Attempts initially0/3. Follow PROJECT.md's native attachment states/disclosures.
+
+### Acceptance
+
+- Upload/list filename and size, explicitly attach/remove selections, authorized download
+  and delete. No local processing spinner, extracted text/coverage or parser retry UI.
+  Show stored/selected/sending, exact sent/not-sent/uncertain and useful upload/provider
+  errors. Removing a selection is distinct from deleting its stored PDF.
+- Preserve unsent text and conversation-scoped selections across tabs/reconnect; do not
+  duplicate a submitted turn. Handle deletion conflict/cleanup pending, unavailable old
+  references and total allowance errors without losing input. Explain original PDF
+  transmission to Azure, page-image/context costs and irreversible prior sends.
+- Existing questions, permissions, proposal/conflict review, approvals and downloads
+  stay usable. Accessible filename-specific keyboard/screen-reader controls and narrow
+  layout; no attachment content in approved Markdown downloads.
+
+### Focused verification
+
+Web checks for changed composer/state/error/navigation behavior. Fresh reviewed exact-input
+candidate profile and pinned preflight using ordinary synthetic connection; normal generated
+Member rendered upload→select→send→status→remove/delete, tab/reconnect input retention,
+one access denial and desktop/narrow keyboard spot-check with owned cleanup. Review the
+important rendered flow; reuse unchanged editor/layout evidence. No owner's PDF/account,
+live provider or arbitrary dirty preview; this item is not accepted from backend-only tests.
+
+## [ ] IMP-027 — Retire local PDF extraction and preserve existing project data
+
+**Depends on:** IMP-025, IMP-026
+
+Remove obsolete parsing machinery after native backend/composer delivery. Preserve
+IMP-017 commits and all prior outcomes; do not reinstall or rebuild a parser for this
+task. Attempts initially0/3. Do not delete application attachment/receipt functionality.
+
+### Acceptance
+
+- Remove `pdf-extractor/`, extractor-only Compose overlays, API extractor/lifecycle/
+  protocol wiring and configuration, old extraction-preview endpoint, parser-specific
+  fixtures/verifiers/tests and obsolete dependency requirements. Retain/adapt useful
+  intake, native receipt and authorization regressions; no dangling normal-stack build,
+  startup or fixture references to deleted inputs. Keep unrelated chat overlays/tools.
+- Forward migration removes or retires derivative/provenance/lease fields and retained
+  extracted text consistently, preserving original bytes/hashes, opaque IDs, conversations,
+  revisions, approvals and receipt/idempotency data. Define legacy status mapping;
+  unavailable originals are not fabricated or backfilled. Reconcile preserved dirty
+  migration0010 with the actual committed chain before adding native migration(s).
+  Preserve historical derivative-based receipts as historical text submissions; do not
+  relabel them as original-file receipts or lose their observed sent/uncertain fact.
+- Ordinary local startup and native PDF use need no converter image, socket, dependency
+  or background process. Update existing local-development instructions for the actual
+  replacement, removing active extractor commands but keeping useful historical links.
+  Do not touch unrelated or currently running owner containers/images/volumes. Removing
+  shared host artifacts or live DB data is not authorized by deleting repository machinery.
+
+### Focused verification
+
+Inspect removed-input references, ordinary runtime/development packaging and startup
+without extractor, plus one native PDF turn. Fresh/populated legacy PostgreSQL upgrade
+checks original/download hashes and project/chat/approval preservation with no derivative
+use. Independently review consequential data deletion/mapping; owned synthetic resources
+only, cleanup verified. Full restored application workflow remains IMP-011, not duplicated
+here; no historical parser-suite requirement or host engine migration.
 
 ## [x] IMP-017 — Privately upload and extract text-readable PDFs up to 50 MB
+
+**Native replacement decision (2026-10-13):** This delivered outcome stays `[x]` with
+its commits/tests/budgets intact. Its extraction/text-only specification and next-run
+directions below are historical; IMP-025 reuses private originals, IMP-027 retires the
+extractor and derivatives safely. Do not reimplement or reaccept the delivered parser.
 
 **Latest delivery:** Extractor `ca09dc3`, intake `269710f`, lifecycle `8925dfa` complete
 this outcome. Phase two2/5 and phase three4/5 used; original extractor and extra-repair
@@ -1669,7 +1828,17 @@ boundary; no caps, parser, storage or recovery procedure is invented. No applica
 dependency or live-test changes or substantive implementation attempts; preserve all
 existing code/logs. Local outcome bookkeeping only, no push/PR or runner restart.
 
-## [!] IMP-018 — Attach verified media to planning chat
+## [-] IMP-018 — Attach verified media to planning chat
+
+**Superseded by native PDF scope (2026-10-13), not delivered:** Owner chose original
+PDF file input through OpenCode/Azure instead of extracted text. IMP-025/026/027 own
+the replacement and removal. Preserve full uncommitted backend/receipt/delete/verifier
+candidate and all histories below; reuse sound parts where useful. Old phase-four5/5,
+phase-five2/5 and additional repair3/3 remain consumed. No renewal or formatter-only
+repair assignment is implied. The historical blocker is not a native-plan prerequisite;
+IMP-011 now depends on verified IMP-027 instead of this superseded outcome.
+
+### Historical text-reference candidate and acceptance (superseded)
 
 **Latest interactive outcome:** Additional repair **3/3 consumed**, historical
 phase-four5/5 and phase-five2/5 preserved. Attempt1 added exact failure-line projection

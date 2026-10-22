@@ -2,50 +2,95 @@
 
 ## Purpose and release boundary
 
-**Current PDF intake/lifecycle:** IMP-017 is locally delivered (`269710f`, `8925dfa`):
-private durable raw uploads, confined extraction, bounded retry/failure/deletion and
-restart lease recovery. Actual authorization/concurrency/lifecycle checks and cleanup
-passed. PDF selection/composer/model-inclusion receipts and full restored workflow
-remain IMP-018/011. Safe reconstruction of cleaned-up pinned images is normal fixture
-packaging, never permission to change the parser boundary or trust unverified tags.
+**OpenCode runtime policy (owner changed 2026-10-22):** No exact OpenCode release or
+fixed executable hash is required. Use the existing fixed executable path with safe
+availability checks and an observational digest; reject incompatible health/protocol/
+behavior without an automatic fallback. Keep bwrap/Python/library pins, isolation,
+credential handling and exact candidate-source/frozen-input verification. Installed
+1.19.0 passed confined synthetic startup/planning/access-denial checks; native PDF and
+real provider acceptance remain separate. Earlier 1.18.34 references record tested
+source/history, not an active version requirement or a need to approve every update.
 
-**Current PDF capability:** Confined extractor phase one is locally verified and
-committed in `ca09dc3`, including decimal50MB text extraction, rejection/bounds,
-private channel denials and deadline/restart recovery with cleanup. Phase two's
-project/conversation-scoped raw PDF intake and PostgreSQL persistence are coordinator-
-verified for local delivery: the API supports upload, status/list, raw download,
-preview and deletion. Accepted uploads remain pending envelope-checked bytes; there
-is no parser dispatch, automatic readiness, UI or model inclusion yet. Selected-PDF
-chat integration and local restore checks remain implementation work; do not present
-this as delivered attachment UI. Both phases used synthetic inputs; live testing
-remains deferred.
+**Owner-approved native PDF direction (2026-10-13):** Keep private upload and chat
+selection, but send the original PDF through OpenCode's native file input to Azure.
+Remove local text extraction and its dedicated container/sandbox/lifecycle after the
+replacement is verified. No Podman/sbx migration or change to agent isolation is part
+of this decision. Implementation outcomes are IMP-025/026/027, then local-use IMP-011.
 
-**Latest owner scope — same-PC use and PDFs only:** Private HTTPS/phone/LAN access
-is removed from this version, not a readiness gate. Revisit only on a future owner
-request; keep loopback binding, no raw LAN shortcut. Attachments are ONLY text-readable
-PDFs, maximum **50,000,000 bytes per original** (decimal 50 MB assumption); no OCR,
-image/DOCX/standalone text uploads or remote URL intake. Real-provider testing remains
-owner-deferred; synthetic validation is not a live acceptance claim.
+**Current capability, not the whole target:** IMP-017 delivered private raw intake and
+confined extraction/lifecycle in `ca09dc3`, `269710f`, `8925dfa`. Native PDF backend proof
+is locally delivered in `a966d77` after the small event-format repair.
+Composer, extractor retirement and restored local workflow remain IMP-026/027/011.
+IMP-018's unaccepted text-only candidate and all earlier attempts remain history, not
+a reason to finish or rebuild that design. No actual-provider success is claimed.
 
-PDF originals and bounded page-separated derivatives are private durable PostgreSQL
-data with project/conversation ownership, opaque IDs and explicit deletion. Parse in a
-separate networkless, credential-free extractor, never the API or model worker. Owner
-authorizes pinned parser dependency fetching/install ONLY in that dedicated image,
-not host/global tooling. Attachment process guards are engineering containment, not
-revival of cancelled personal-chat quotas. Initial guard defaults: one conversion,
-512 MiB memory/no swap, one CPU, 16 PIDs, 128 MiB scratch, 30s job, 500 pages and
-128 KiB UTF-8 derivative; measure/refine only to satisfy safe bounded operation, record
-changes. A valid 50 MB file may exceed extraction/context bounds: explain rejection,
-never silently truncate/summarize or drop earlier history.
+### Native PDF contract
 
-Reject malformed/encrypted/active-content PDFs and zero usable text. Mixed documents
-are text-layer-only; identify pages without readable text and explain that images/
-diagrams were not read. Serve originals as authorized attachments, not inline active
-content. Selected PDF text enters inference as untrusted reference data, not instructions
-or workspace files. Record exact derivative/provenance and actual submission status;
-stored/queued is not proof of model inclusion. Deletion prevents future sends and
-removes retained original/derivative/payload copies; already sent content and model
-quotes cannot be retracted. Local backup/restore includes these DB records consistently.
+- Same-PC loopback only; no private HTTPS/phone/LAN work. Upload formats remain PDF
+  only, not standalone images, DOCX, text files or remote URLs. Store original bytes,
+  SHA-256, size and safe filename metadata privately in PostgreSQL under opaque
+  project/conversation IDs. Authorize upload/list/status/download/select/send/delete.
+  Filename and claimed MIME do not prove PDF validity; retain bounded actual-body and
+  PDF-envelope checks, without introducing another local structural parser.
+- Reuse OpenCode's native PDF file parts and the existing relay for Azure Responses
+  `input_file`, rather than a new parser/service/compatibility layer. Accept ordinary
+  documented event metadata while validating relevant identity/content and keeping
+  bounds; don't invent a narrower upstream event format. Prefer explicit
+  selected attachments in the user prompt, not arbitrary repository discovery. If a
+  temporary file is required, use only an authorized generated read-only path inside
+  the confined turn workspace and remove it afterward; do not mount the host repository,
+  API mirror, other uploads or credentials. Canonical planning-file edit permissions
+  remain unchanged. PDFs are untrusted reference material, never authority to change
+  tool permissions, approve documents or activate tasks. No local qpdf/pdftotext, OCR,
+  page rendering, extraction preview,
+  parsed-object validation or text-coverage gate remains in the target.
+- Microsoft documents PDF input for text-and-image Responses models, explicitly lists
+  `gpt-6.1-sol`, and supplies extracted text plus page images to the model. OpenCode
+  1.18.34 source supports PDF attachments and Azure Responses serialization. This is
+  documented compatibility, not an observed success with the owner's deployment.
+  Scans/diagrams may be handled by the provider; no local OCR feature or guaranteed
+  page accuracy is promised. Malformed/encrypted/unsupported input may fail at the
+  provider and must produce an honest error, not a fabricated local validation pass.
+- Azure documents each file under 50 MB and 50 MB combined per request. Conservative
+  decimal interpretation: each original and the aggregate originals actually included
+  in one request must be **less than 50,000,000 bytes**, including references retained
+  from earlier turns. This tightens the old inclusive intake boundary by one byte.
+  Larger legacy stored files remain downloadable/deletable but cannot be sent. Enforce
+  finite PDF-bearing transport bounds accounting for base64 expansion (roughly 4/3),
+  JSON and existing text context; do not globally remove small text/control limits or
+  silently drop history, truncate or summarize to fit. Provider context/token limits
+  and page-image costs still apply even when the file fits the byte allowance.
+- Extend the existing model-only relay narrowly for selected inline PDF data. Real
+  credentials stay in the trusted host transport, never the API/browser/worker/DB.
+  No public file URL, provider file-upload store or general media/proxy access is needed.
+  Reusing host OpenCode authentication and changing sandbox technology remain separate
+  unresolved choices; this work authorizes neither private-config discovery nor auth copies.
+- Bind capture/idempotency/dispatch to exact ordered original IDs and hashes. Revalidate
+  ownership, availability and bytes before every model submission, including reconstructed
+  history and tool follow-ups. Trusted submission receipts identify the exact serialized
+  request/files and distinguish stored/selected/queued/sent/failed-before-send/uncertain.
+  Sent means actual transport submission, not provider acceptance or comprehension.
+- Deletion fences future inclusion and clears structured original/legacy-derivative,
+  broker payload, native-session and temporary-workspace copies. A still-active turn
+  requires stop confirmation or a visible conflict; outage cleanup may stay visibly
+  pending. Preserve non-content idempotency/receipt tombstones and user/assistant quotes.
+  Prior provider requests/quotes cannot be retracted; older backups can retain deleted
+  files until those backups are removed. Keep originals out of approved Markdown exports.
+- Retire extractor wiring and derivative data with forward migration/preservation checks;
+  never rewrite committed migrations or erase other project/chat/approval data. Synthetic
+  local backup/restore covers originals, attachment metadata, conversations and approvals.
+  Before exposing native availability, disable legacy extraction admission and drain or
+  fence outstanding completions so old rejection/retry cleanup cannot delete originals
+  selected for native use. Physical extractor removal can follow after native delivery.
+  Historical extracted-text submission receipts remain distinguishable from native-file
+  submissions; never relabel old evidence as proof that original PDF bytes were sent.
+  Real-provider acceptance remains a later human test, not an immediate implementation gate.
+
+Sources checked 2026-10-13: [Azure Responses PDF input](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses#file-input),
+[Azure model catalog](https://ai.azure.com/catalog/models/gpt-6.1-sol), and
+[OpenCode 1.18.34 PDF Read support](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/tool/read.ts).
+Earlier text-readable-only limits and extraction requirements are superseded; their
+delivery/attempt history is retained in BACKLOG.md and docs/local-scope-history.md.
 
 **Owner-deferred real-model testing:** Provider compatibility is a planning assumption,
 not observed acceptance. The owner will test the application later; retain the live
@@ -65,17 +110,19 @@ its integrated synthetic workflow/recovery proof, reviewed operator boundary, fr
 candidate profile and rendered approval/download/reapproval acceptance passed. The
 rendered tests used a generated Member and synthetic project only; stop/cleanup verified
 removal of accounts, login, stack/images, private and broker state. No real credentials
-or live model operation were used. The only remaining IMP-024 step is the human-only
+or live model operation were used. The retained later live-test command is the human-only
 `/usr/bin/python3 -I -B scripts/imp024_operator.py setup-accept` from the repository
-root in a plain terminal, after local verified commits. Await a sanitized human outcome;
+root in a plain terminal; it is not the current next step or a native implementation gate.
+After the owner's later test, accept only a sanitized human outcome;
 agents must not run it. It accepts only explicit public HTTPS:443 Responses/API-key
 facts, with no guessed endpoint or settings, and fails closed if no-echo terminal input
 is unavailable. Secret-in-memory handling is not protection against host swap/dumps or
-memory copies. Real-provider compatibility remains unknown. IMP-024 delivered
+memory copies. Actual deployment compatibility remains untested. IMP-024 delivered
 buffered validation; IMP-005 streams bounded literal-key-safe prefixes, with tools/
 terminal held until validation and late-failure partial text retained (not arbitrary
-encoded/semantic-exfiltration protection). This preparation does
-not complete IMP-002/005/006/008, activate ordinary app chat, or satisfy first-release
+encoded/semantic-exfiltration protection). IMP-005/006/008 have since delivered their
+synthetic implementation; the old IMP-002 live proof remains historical incomplete work,
+not a queue gate. Preparation does not enable default live chat or satisfy real-provider
 acceptance. Live remains disabled by default.
 
 Earlier IMP-024 UI/backend checkpoints below describe delivered components and retain
@@ -122,8 +169,8 @@ private projects; project metadata and immutable Markdown revisions in
 PostgreSQL in Docker; resumable project-scoped chat with multiple session tabs;
 version-bound two-file approval, backlog editing and approval, three-file review,
 and individual approved downloads. Project conversation attachments include
-only text-readable PDFs up to decimal 50 MB, with no OCR or image interpretation.
-Scanned/image-only PDFs are unsupported. Attachments persist privately with the project/
+only native PDF input under the file/aggregate limits above, with provider-side text/page
+image understanding rather than local extraction. Attachments persist privately with the project/
 conversation until explicit deletion; deleting later cannot retract bytes already
 sent to a model. The local planning/PDF workflow and recovery checks must
 pass before local use; real-provider testing is explicitly owner-deferred. The UI is
@@ -135,8 +182,8 @@ a substitute for the first release above: chat, session recovery, containment,
 end-to-end approvals and downloads remain release gates.
 
 **Not in the first release:** multi-user shared-server qualification, public
-Internet exposure, scanned/visual PDF or embedded DOCX-image understanding,
-macros, or Office formats other than bounded DOCX text. It also excludes creating
+Internet exposure, local OCR/conversion, standalone image/text uploads or Office formats.
+It also excludes creating
 a Git repository for a planned project, installing agents or skills, launching/
 monitoring `run-tonight.sh` in the browser,
 running implementation agents from the web, Git pushes/PRs/merges, shared project
@@ -144,115 +191,14 @@ collaboration/invitations, public signup, and importing runner outcomes. Downloa
 files are planning artifacts, not evidence that a repository is ready to run. The
 owner continues to prepare application repositories and launch the runner manually.
 
-### Current implementation boundary (human-only planning and approval on work branch)
+### Current implementation
 
-The checkout has a limited application slice; the first-release scope above is
-not yet implemented. The current UI supports operator-provisioned sign-in,
-administrator-managed accounts, own-password changes, project creation with
-private drafts for `PROJECT.md`, `AGENTS.md`, and `BACKLOG.md`, human pair
-approval, collapsible backlog task editing for title, body, dependencies, and
-`[-]`/`[ ]` readiness, and Stage 3 final review of the saved three-file tuple with
-individual exact approved downloads. The API validates task edits. Conflicts retain local edits
-and show the newer saved version for review and explicit reapplication rather than
-silently overwriting either version. This remains human-only: no chat, agent proposals, runner
-outcomes, or setting runner status markers.
-The first administrator is created or recovered through an offline CLI; there is no public
-signup or network recovery route. Administrators can create, reset, and deactivate
-accounts. Members can access projects they own; administrators can access all
-projects, and administrator access is audited. Consult `docs/local-development.md`
-for implemented project, revision, workspace-cache, and operator behavior and
-`BACKLOG.md` for committed delivery outcomes. IMP-014 candidate and rendered
-acceptance has been verified locally; consult BACKLOG.md for delivery references.
-IMP-020/021 verified manifest persistence and human-only final approval/status/
-exact-download API behavior; IMP-010's Stage 3 UI and candidate review also passed
-locally. This work branch is not a merged release; do not infer chat, agent gateway
-or release readiness from it.
-
-The owner approved splitting blocked IMP-009 into independently verified
-persistence and integrated enforcement slices. IMP-020 adds only inert
-manifest schema; IMP-021 finishes valid final approval and exact downloads.
-The recovery used #11 for persistence and #12 for enforcement; #13 was not needed.
-Independent combined review and focused actual API/PostgreSQL checks passed; current
-BACKLOG.md records verified local commits. Historical snapshot access denial remains
-history, not an active reviewer-folder gate. The split changes delivery
-boundaries, not the product's approval, authorization or Markdown-evidence rules;
-schema-only delivery must not enable unfinished final-approval routes. See
-BACKLOG.md for preserved partial work, attempts and the capability checkpoint.
-
-The API uses Argon2id password hashing, server-side cookie sessions, CSRF and exact
-Origin checks on unsafe requests, and database-backed rate limits. These are
-implemented local-app controls, not evidence of a shared-server security boundary.
-The agent-runtime gate is still blocked: installed OpenCode agents and a bare
-`bwrap` 0.6.1 namespace smoke test do not demonstrate a brokered, secret-safe
-isolated agent integration. Local setup and account recovery instructions are in
-[`docs/local-development.md`](docs/local-development.md). Do not infer TLS,
-reverse-proxy, backup/restore, production, or shared-server readiness from this
-slice.
-
-An operator-only synthetic worker/relay prototype now exists under
-`scripts/imp002_*.py`. Pinned bwrap/OpenCode launch, synthetic file/socket/network
-denials, configuration-injection denial, stub inference, outage/timeout and owned
-cleanup passed focused checks and independent synthetic-only review. The continuation
-adds a reviewed operator-only fixed HTTPS model transport and private resolver, plus
-bounded incremental text SSE with synthetic cancellation/error proof. Neither operator
-inspection nor live inference has run; actual account compatibility remains unknown
-and the app is not integrated. Full session streaming, resume/questions/permissions
-and revision-safe proposal import remain unproved. The owner accepts aggregate resource-exhaustion
-risk and defers memory/CPU/process/scratch quotas for this non-serving prototype
-only. This does not waive credential/project isolation or release/attachment rules.
-See BACKLOG.md for the prior three-attempt checkpoint and current continuation scope.
-
-Following private resolver compatibility failures, the owner selected independent
-synthetic session-protocol work instead of further operator troubleshooting. IMP-023
-has now proved confined synthetic server startup, text streaming/history/reconnect,
-interrupt handling and in-worker server restart with a fake inference upstream.
-Generated authentication is namespace-local, mDNS is disabled, and no host ingress
-is exposed; the host relay remains inference-only and unchanged. This proof does not
-include SSE replay or full worker-restart durability, and aggregate resource quotas
-remain deferred. No private inputs, operator modes or live model operation were used.
-This is not a product gateway or host service: questions/permissions/proposals,
-product integration, actual-model behavior and product chat acceptance remain
-unproved IMP-002 work. Synthetic protocol proof does not unblock chat or certify the
-host account/model connection.
-
-IMP-024 phase one now separately proves native canonical planning reads, questions
-and replies, once-only edit permissions, unapproved proposal capture, forbidden-tool
-denial, cancellation cleanup/stale-reply denial and terminal inference errors through
-the synthetic host relay. Independent boundary and affected repair reviews passed;
-the four confined scenarios and owned cleanup passed. This remains a non-serving
-preparation checkpoint: the private product broker, durable API/proposal import,
-chat UI and human-only connection entrypoint are not yet delivered. Earlier IMP-002
-and IMP-023 acceptance boundaries remain unchanged.
-
-### Current implementation versus planned application
-
-- This checkout contains root `scripts/backlog.py` and `run-tonight.sh`, plus an
-  `overnight-agent/` distribution carrying templates, helper, runner and agent definitions.
-  The owner deleted the root examples and selected the simplified nested bundle.
-  The IMP-001/003/004 application work is in `api/`, `web/`, and `compose.yaml`;
-  supported local commands and the
-  boundary between baseline checks and candidate review are in
-  `docs/local-development.md`.
-- `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example` are the selected canonical
-   **input templates** for new Impostr-created projects. IMP-022 integrates exact
-   nested discovery/packaging and coherent fixture inventories. Approval selects
-   frozen legacy/simplified profiles from the immutable three-file starter provenance,
-   never submitted headings or the installed bundle; unknown/mixed provenance fails
-   closed. Existing starters/history/approvals are not rewritten; partially seeded
-   projects remain explicitly incomplete rather than mixing versions. The root helper is
-  the compatibility reference for exported backlog syntax. These root planning
-  files describe Impostr itself and are not the templates for user projects.
-- OpenCode agents are installed for the current CLI environment (including
-  `tech-lead`, `architect`, `ui-designer`, `developer`, and `overnight`), but a
-  product-integrated web-session API and brokered, secret-safe runtime have **not**
-  been demonstrated. IMP-023's synthetic session protocol proof is confined to its
-  non-serving harness; it does not establish product authorization or actual model
-  integration. The bare `bwrap` 0.6.1 namespace smoke test alone remains insufficient;
-  questions, permission handling and proposals remain unverified. This repository
-  uses GitHub and an existing `v1` planning baseline.
-  The owner chose one work branch based on `v1`, ending in a single PR to
-  `development`; this replaces the former per-task sprint-PR proposal. See
-  `AGENTS.md` for the execution contract, effective after its publication.
+Accounts, private projects, versioned editors, human approvals/downloads, template
+integration and synthetic text chat are delivered. Native PDF backend is delivered after
+the event-format repair; BACKLOG.md records its evidence. Composer,
+extractor retirement and restored local workflow remain the approved next outcomes.
+Actual provider use remains owner-deferred. Earlier implementation narratives are
+preserved in docs/agent-history.md, not mixed into current product requirements.
 
 ## People, permissions, and workflow
 
@@ -310,13 +256,12 @@ the exported files have been installed in a Git repository.
   transcripts/session mappings, immutable Markdown revisions (content, document
   kind, version, author/origin, timestamp, template provenance), approvals, and
   audit events in PostgreSQL. The DB is authoritative for Impostr drafts/approved
-  revisions. In the current IMP-004 slice, `/workspaces` is a private, bounded,
+  revisions. `/workspaces` is a private, bounded,
   disposable API mirror of the three current database heads, not an agent workspace
-  or source of truth; reads can rebuild it from PostgreSQL. A later agent workspace
-  remains a proposal surface and must reconcile validated changes into new DB
-  revisions, never turn file edits into approval. The IMP-004 database restore
-  drill is not verified; see `docs/local-development.md` before relying on this as
-  durable storage.
+  or source of truth; reads can rebuild it from PostgreSQL. Agent workspaces are
+  proposal surfaces and must reconcile validated changes into new DB
+  revisions, never turn file edits into approval. Integrated backup/restore remains
+  IMP-011; do not claim it passed from migration tests alone.
 - Save each document with an expected current revision. A stale save or approval
   returns a conflict with the latest revision and preserves both versions for
   review. A generated revision does not overwrite a newer human edit. The approved
@@ -327,9 +272,8 @@ the exported files have been installed in a Git repository.
   required decisions for the intended project, malformed backlog headings or
   dependencies, and unauthorized marker transitions. Do not claim any app-specific
   test/run command is verified unless it has actually been run for that project.
-- **Planned pair-approval evidence rule (owner decision, not delivered by
-  IMP-004):** Save bounded `PROJECT.md` and `AGENTS.md` drafts with their exact
-  bytes, including raw HTML, but never use raw HTML elements or their descendants
+- **Pair-approval evidence rule:** Save bounded `PROJECT.md` and `AGENTS.md` drafts
+  with their exact bytes, including raw HTML, but never use raw HTML elements or their descendants
   as evidence for a required decision, even when a tag has no style or class.
   Server-side approval requires substantive, decided text in supported Markdown
   headings, prose, list items or table data cells; ordinary Markdown emphasis,
@@ -357,18 +301,11 @@ the exported files have been installed in a Git repository.
   accesses the DB directly, or receives the OpenCode server/host credentials.
   Session and document IDs are opaque server IDs, not proof of authorization.
   Cross-origin and CSRF policy must match the actual deployment origin.
-- Attachments have opaque project- and conversation-bound IDs. Authorize upload,
-  status, preview/fetch, model inclusion and deletion on the server. Store
-  originals and bounded safe derivatives outside the public web root and agent
-  workspace, retaining them with the project until explicitly deleted and
-  including them in the personal-release recovery drill. Reject spoofed content
-  types, unsafe names, active/macro content and oversized or abusive documents;
-  process PDF/DOCX/image inputs with bounded resources and no converter network
-  access. Only explicitly attached, validated content reaches the model. Record
-  what was actually included in a turn; a failed conversion cannot silently
-  produce a success state. Attachments are not added to the approved three-file
-  Markdown export. Actual byte/page/turn caps and selected model fidelity must
-  be measured and approved before attachment work is marked ready.
+- Attachments follow the native PDF contract above: private originals and metadata,
+  exact authorized file submissions and deletion fencing, no derivative requirement.
+  Keep binary data out of routine metadata/event lists, logs and approved three-file
+  exports. A stored or queued file is not a model submission. Provider parsing failure
+  must remain visible; no claim that every page was understood follows from a receipt.
 
 ## Architecture and technical direction
 
@@ -377,16 +314,22 @@ the exported files have been installed in a Git repository.
 | Browser | Vite + React + TypeScript + Tailwind CSS; stage-aware client, accessible editor/list/chat, no secret storage. |
 | Trusted API | Python + FastAPI (technical choice), typed request validation, auth and project authorization, revision transactions, streamed session gateway. |
 | Persistence | Docker-hosted PostgreSQL; SQLAlchemy + Alembic migrations, database-owned approval/version history and project data. |
-| Front door | Nginx, same-origin API/UI. Current Compose binds loopback only. A later operator-provisioned **private HTTPS** route must be verified from a phone/other device before the personal release; DB, worker and model relay have no browser ingress. No public Internet exposure. |
-| Agent runtime | On this PC, try the already-installed `bwrap` under the actual worker identity as a fail-closed per-project boundary, not the empty namespace smoke or `run-tonight.sh`'s optional sandbox. A trusted host-side relay keeps existing model credentials outside the worker and allows bounded model traffic. No host home, sibling projects, Docker/DB sockets, API secrets, or copied host OpenCode auth in the worker; prove live operation and negative access tests before a product gateway is claimed. If this is unavailable, IMP-002 remains blocked. |
-| Templates | Selected simplified examples under `overnight-agent/` will seed new drafts after IMP-022 integration. Existing immutable starter revisions/provenance stay unchanged. The API maintains a private disposable workspace mirror. The application parser oracle remains root `scripts/backlog.py`; expanded nested parser semantics are not automatically adopted. |
+| Front door | Nginx, same-origin API/UI, loopback only in this version; DB, worker and model relay have no browser ingress. Private HTTPS/LAN work is cancelled until a later owner request. |
+| Agent runtime | Installed OpenCode runs in a `bwrap`-confined worker with native server/driver, namespace-local shim and private host broker/model relay; no exact OpenCode version/hash lock. Native PDF synthetic flow now passes; BACKLOG.md records its local delivery. No host home, sibling projects, Docker/DB sockets, API secrets or copied host auth. Real provider use remains owner-deferred; sandbox/auth-source redesign is outside this repair. |
+| PDF input | Private PostgreSQL originals → explicit OpenCode file parts → narrow credential-protecting relay → Azure Responses inline PDF. No local extractor after IMP-027; original-byte identity, transport bounds and deletion still apply. |
+| Templates | Selected simplified examples under `overnight-agent/` seed new drafts through delivered IMP-022 integration. Existing immutable starter revisions/provenance stay unchanged. The API maintains a private disposable workspace mirror. The application parser oracle remains root `scripts/backlog.py`; expanded nested parser semantics are not automatically adopted. |
 
-The implemented IMP-001/003 slice pins its container runtimes and actual app
-dependencies in the manifests/locks listed in `AGENTS.md`. The host OpenCode
-CLI was most recently observed at 1.18.33; before building the gateway, prove
-the compatible session/stream/question API and pin the working integration. A Python
-API may use the authenticated OpenCode HTTP interface or a controlled adapter;
-do not assume the JS SDK or `opencode run` is a resumable web-chat transport.
+Approval selects frozen legacy/simplified profiles from immutable three-file starter
+provenance, never submitted headings or the installed bundle. Unknown/mixed provenance
+fails closed; do not rewrite existing starters/history/approvals or silently mix a
+partially seeded project. Root planning files describe Impostr, not user templates.
+
+Pin app runtimes/dependencies in api/requirements.lock, api/requirements-dev.lock and
+web/package-lock.json plus existing container inputs. OpenCode itself has no exact
+version/hash lock. Its authenticated native server/driver and model-only relay provide
+resumable planning; `opencode run` alone is not the product chat transport.
+The API uses Argon2id, server-side cookie sessions, CSRF/exact Origin checks and DB rate
+limits; these local-app controls do not establish shared-server readiness.
 
 Agent tools and configuration need a project-scoped isolation design verified on
 the deployment host. The bundled `tech-lead` definition can edit planning files
@@ -412,14 +355,14 @@ installs skills or initializes Git as a repair for missing setup.
   keyboard focus, dialog focus return, and screen-reader names/states work.
   Normal text should meet 4.5:1 contrast, controls/focus 3:1; respect reduced
   motion. Check the rendered flows in browser, including keyboard-only operation.
-- Chat attachments must show **Uploading**, **Processing**, **Ready to send** or
-  a specific failed/retry/remove state, then distinguish **Stored** from **Included
-  in this model turn** and **Not included**. Never claim that a filename, upload
-  success or extracted text alone proves the model saw an image. On mobile, keep
-  the composer and attachment controls usable without overflow; announce failures
-  and provide filename-specific keyboard/screen-reader controls. Explain that
-  text-only PDF/DOCX excludes scans, diagrams and embedded images, and deletion
-  cannot retract content already sent to a provider.
+- Native PDF attachments show **Uploading**, **Stored/Available to attach**, selected,
+  sending and specific upload/provider failure states, not a local extraction spinner
+  or text-coverage preview. Offer authorized download and filename/size information;
+  no new inline PDF viewer. Distinguish actual sent/not-sent/uncertain per-turn status
+  without claiming comprehension. Preserve composer input/selections through navigation
+  and reconnect; provide usable desktop/narrow keyboard/screen-reader controls. Explain
+  that Azure receives the original PDF, page images can increase cost/context usage,
+  and deletion cannot retract prior provider input.
 
 ## Security, operations, and acceptance
 
@@ -435,9 +378,9 @@ CSRF protection for cookie-authenticated mutations, rate limiting for login and
 agent prompts, size/time/concurrency limits, and safe Markdown rendering. Keep
 provider keys outside DB Markdown, browser storage, exports and logs. No public
 signup or unauthenticated OpenCode/DB ingress. Do not publish raw HTTP for phone
-access or assume a router is a security boundary. Private HTTPS, exact Origin/
-proxy handling and operator-managed network restrictions must be verified before
-the personal LAN release, not configured or guessed during current local work.
+access or assume a router is a security boundary. A future LAN release would need
+verified private HTTPS/proxy/network handling; it is outside this same-PC version,
+not a current setup or acceptance gate.
 Secret handling, backup/restore and account recovery are personal release/
 operational gates; later multi-user qualification is separate. Audit credential
 administration and approvals without recording secrets. Test negative
@@ -448,10 +391,11 @@ of distinct projects, resumed/new-tab chat, both approval gates, direct edits
 plus agent proposals, stale-revision rejection, backlog status/dependency
 validation, three revision-identical downloads, and failures/recovery. Use
 synthetic second-user/project probes for authorization; these do not qualify a
-multi-user server. Also prove actual image model input, honest text-only PDF/
-DOCX behavior, private attachment access and deletion, and the approved private
-HTTPS route from an actual phone/other device. Restore the DB and retained media
-from synthetic backups before release.
+multi-user server. Prove exact native PDF input through the synthetic inference
+boundary, private attachment access/deletion and restored originals/metadata with
+chat/revision/approval data. Native provider comprehension remains the owner's later
+live test, not a synthetic pass. No standalone image/DOCX or remote-device HTTPS gate
+remains in this version. Restore the DB from synthetic backups before local use.
 Start with focused checks for changed behavior and realistic risks; broaden for
 integration and the release demonstration above, not as a blanket per-task gate.
 Independently review substantial or security/data-sensitive changes; `ui-designer`
@@ -463,15 +407,15 @@ successful mock integration test with an isolated, working OpenCode deployment.
 
 | Topic | Status | Consequence / next action |
 |---|---|---|
-| Release boundary, private projects, admin UI, selected templates | Owner revised / personal first release | One owner on this PC; retain roles/authorization and plan-and-export workflow. Simplified nested templates are selected but await compatible application integration (IMP-022). A verified private HTTPS LAN route and full chat/media/approval/download flow are first-release gates. Public and multi-user server operation are later, not silently approved. No web runner. |
+| Release boundary, private projects, admin UI, selected templates | Owner revised / same-PC first release | Retain roles/authorization and plan-and-export workflow; simplified nested templates delivered by IMP-022. Native PDF workflow and synthetic restore remain IMP-025/026/027/011, actual provider testing owner-deferred. No LAN/public/multi-user server scope or web runner. |
 | Version-bound human approvals, planning-only marker buttons, resumable tabs, approved downloads only | Owner decided | Treat revision changes as stale approvals; reserve execution markers. |
 | UI/backend/deployment stack | Implemented local baseline | Vite/React/TypeScript/Tailwind, Python/FastAPI/SQLAlchemy/PostgreSQL/Alembic/Nginx; manifests/locks pin actual dependencies and container runtimes. |
-| Safe OpenCode integration | Owner chose `bwrap`-first / open capability gate | The non-serving IMP-024 phase-one synthetic harness now verifies native planning read/question/reply/edit-once permission and unapproved proposal capture, plus denied shell, abort cleanup and terminal-error handling inside the confined worker. It is not a product broker/API/UI or live model integration, and does not establish worker-restart durability or aggregate resource containment (personal text-chat quota work is cancelled). Next is broker Unix UID/authentication, durable DB state and proposals; IMP-002/005/006/008 acceptance remains open. Do not copy host auth into a worker. |
-| Deployment environment, exact app commands and secrets provision | Local-only setup verified / release gate open | Docker/Compose setup, migrations, local account bootstrap/recovery, API health and database recovery commands are documented in `docs/local-development.md`. No separate host PostgreSQL install is required. Web-agent isolation, TLS/reverse-proxy handling, backup/restore, and release checks remain unverified. |
-| Automated local browser-review credentials | Verified local fixture / residual host risk accepted | IMP-015 and exact-input IMP-004/013/007 reviews passed locally; IMP-014 still needs its own profile and rendering. The shared Playwright tool server is **not OS-confined** and may access host files, provider credentials or Docker. Use a fresh synthetic stack and generated short-lived Member login/session, revoke it after review, and never intentionally use owner's accounts or real project data. This is not host-secret/Docker denial, product isolation, shared-server readiness or an auth bypass. IMP-002 remains blocked. |
-| First-release attachments | Owner decided / model fidelity and limits unverified | PNG/JPEG actual image input; text/Markdown and bounded selectable-text PDF/DOCX extraction. No scanned/visual PDF or embedded DOCX images in v1. Retain privately per project/conversation until explicit deletion; only explicitly attached validated derivatives reach the model. Provider/media support and numeric limits require measured proof before the media items become ready. |
-| Phone/LAN access | Owner decided / operator setup later | Private HTTPS route on this PC, tested from another device, with backend/DB/worker/relay unexposed. No route, domain, certificate, trusted proxy or deployment command is verified; do not open raw LAN HTTP as a shortcut. Implementation can proceed locally before the access slice is ready, but the personal release cannot pass without it. |
-| This repository's execution/delivery policy | Owner approved / in use | Base from published `v1`; verified slices on `feature/impostr-v1`, ending in one PR to `development` for human merge. IMP-001/003/004/007/013/015 are locally committed; IMP-002 remains blocked and IMP-009/014 remain partial. IMP-020/021 are approved but capability-blocked drafts. Candidate evidence applies only to exact inputs. Temporary broad coordinator edit for the local batch is not product isolation or an acceptance waiver; restrictive-rule restoration remains owner post-batch work. Media/LAN/multi-user and revised release checks remain draft scope. |
+| Safe OpenCode integration | Synthetic product integration delivered; live owner-deferred | IMP-024/005 deliver confined native worker/server/shim, private broker, model-only host relay, durable API/proposals and ordinary foreground connection. Keep credentials outside workers. Native PDF transport is IMP-025; no host-auth discovery or sandbox migration. Personal text-chat aggregate quota work remains cancelled. |
+| Deployment environment, exact app commands and secrets provision | Local-only setup verified / workflow-restore pending | Docker/Compose setup, migrations, local account bootstrap/recovery, API health and database recovery are documented in `docs/local-development.md`. Confined synthetic product isolation is verified, not shared-server qualification. No host PostgreSQL install or current LAN/TLS gate; integrated backup/restore remains IMP-011. |
+| Automated local browser-review credentials | Verified local fixture / residual host risk accepted | Prior exact-input reviews are delivered; native PDF composer needs its own refreshed profile/rendering. Shared Playwright is **not OS-confined**. Use owned synthetic stack/generated short-lived Member, revoke and clean up after review; never use owner's accounts/private data or claim host-secret/Docker denial or product isolation from browser proof. |
+| First-release attachments | Native backend proof passed; composer/removal pending | IMP-025 supplies authorized original-file input; IMP-026/027 finish composer and extractor removal. Conservative decimal file/aggregate limits; actual deployment success remains owner-deferred. Preserve delivered IMP-017 and superseded IMP-018 history. |
+| Phone/LAN access | Cancelled for this version | Same-PC loopback only. Any later private HTTPS/device setup requires a new owner request; no raw LAN shortcut. |
+| This repository's execution/delivery policy | Single-branch local delivery; publication deferred | Preserve `feature/impostr-v1` commits, dirty candidate and task history. No concurrent/automatic runner, pushes/PRs or merges for this planning request/native local-use batch. IMP-012 retains later final PR specification for owner approval. Candidate evidence applies only to exact inputs; broad coordinator tools are not product isolation. |
 
 Implementation slices, dependencies and verification are in `BACKLOG.md`; actual
 verified repository commands and automation constraints are in `AGENTS.md`.

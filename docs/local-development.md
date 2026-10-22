@@ -10,7 +10,31 @@ shared-server release. Candidate review evidence applies only to the exact
 reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
 delivered release. Consult `BACKLOG.md` for task outcomes.
 
-### Latest IMP-025 runner stop (2026-10-22)
+## Current native PDF repair (2026-10-22)
+
+Native PDF backend is locally delivered in `a966d77`. The PDF event-format defect is
+fixed. OpenCode legitimately includes event/session/time
+metadata; the adapter now validates those documented fields instead of rejecting the
+event. Existing content/ownership/binary bounds remain. Full synthetic native order,
+exact file bytes/tool follow-up/receipts, retained history, near-bound input, rejected
+access/integrity and deletion/outage recovery passed, with build/API/PostgreSQL/static
+checks and all owned cleanup. Native test-helper packaging also passed focused API
+verification. BACKLOG.md records local delivery status and exact checkpoints.
+The final 201-file snapshot also passed the full native flow without the eight obsolete
+IMP-018 diagnostic/test inputs; those files remain preserved, not product dependencies.
+For a later task's new snapshot, use its actual committed baseline and fresh reviewed
+inputs rather than a historical fingerprint. The helper is anchored to native delivery.
+
+Use the short root AGENTS.md for current execution/Git limits. Old handoffs are in
+docs/agent-history.md; do not turn their old commands or verification matrices into
+current prerequisites. Reuse existing fixtures and unchanged evidence; ordinary
+formatting/testing does not need another owner approval or generic full-review pass.
+No new parser/service/diagnostic framework is part of this fix. Composer (IMP-026),
+extractor retirement (IMP-027), restore/workflow (IMP-011) and the owner's later actual
+provider test remain separate; do not imply the default app is already ready for use.
+No automatic runner/app start, installation, private configuration or publication.
+
+### Historical IMP-025 runner stop (2026-10-22), superseded by repair above
 
 The reviewed final native repair and 76 pure tests passed, but actual confined PDF
 execution failed its first turn with `native_stream_invalid`; the cause is unknown.
@@ -22,7 +46,34 @@ IMP-026/027/011 remain blocked. OpenCode's owner-approved version/hash unlock re
 no live/provider test, install or publication follows. Further native repair needs
 owner-approved finite scope, not an assumed runtime cause or borrowed allocation.
 
-## Native PDF plan — IMP-025 candidate blocked, not accepted (2026-10-14)
+## OpenCode unlock — ready for owner-started continuation (2026-10-22)
+
+The owner removed the exact OpenCode version requirement. The executable fingerprint
+is now observational, not an admission pin; native health checks require a healthy
+valid schema, not release1.18.34. Other runtime pins, fixed executable path, safe file
+checks, bwrap isolation/discovery masks and credential separation remain. No new pin
+or approval list is required after each OpenCode update; actual incompatibility stops
+the affected work rather than falling back to host execution or waiving checks.
+
+Independent affected review passed. Coordinator ran 54 IMP-002, 22 IMP-023 and 68
+IMP-025 tests plus actual synthetic/probes/native startup/planning smoke on 1.19.0,
+with owned state/listener/child cleanup. A later IMP-025 run passed its build, fresh
+PostgreSQL preservation/legacy-fence/send-constraint/capture-delete checks, migration
+0012, focused API and Ruff/mypy checks, but failed native stream ordering at
+`wait_terminal` with `turn_failed` / durable reason `native_stream_invalid`. The actual
+stream failure cause remains unknown; it is not attributed to a runtime version/hash.
+See the latest outcome below; native delivery remains unaccepted.
+
+The exact-input verifier no longer requires HEAD58bee09 after approved bookkeeping:
+preflight binds current HEAD and source bytes, checks known ancestry/allowed committed
+repair paths, and rejects unknown or changed frozen inputs. Refresh its fingerprint
+before execution; historical fingerprints below are not current authorization.
+Run the root helper from this checkout on `feature/impostr-v1`, `RUNNER_USE_SBX=0`.
+Preparation does not start it, activate live chat, install tools or authorize publication.
+Old "provide pinned1.18.34" and "no pin waiver/requeue" stop directions below are
+superseded by this explicit owner change, not their historical check outcomes.
+
+## Historical native PDF candidate/checkpoints, superseded by delivery above
 
 The native-PDF sequence remains IMP-025 original-file handoff and exact receipts,
 IMP-026 composer, IMP-027 extractor retirement, then IMP-011 local workflow/restore.
@@ -31,16 +82,19 @@ must not be described as delivered or usable. IMP-026's composer is absent and
 IMP-027's extractor removal remains pending. Preserve prior outcomes, budgets, logs,
 and private logs; IMP-018's historical budget and candidate remain unchanged.
 
-The coordinator's candidate fingerprint
-`4ad667f43837325cbe40f64693a5bd025adf7d0c45f06e28f6000f0e057c7ad4` over base
-`58bee09` passed frozen 209-input verification, build, two fresh PostgreSQL tests for
-legacy-completion fencing, preservation/schema checks and capture/delete race,
-migration `0012`, focused API checks, Ruff lint/format, and mypy (42). However,
-broker startup failed before any native receiver ran. `check_runtime` confirmed the
-only public OpenCode executable hash drift; `opencode --version` reported 1.19.0,
-while the boundary pins 1.18.34. Thus native byte/path/follow-up/history/near-bound/
-outage runtime behavior is not verified, and this missing pinned capability blocks
-acceptance. Two of three focused repairs have been used (1 remains).
+The latest coordinator fingerprint
+`28b707dc703a2addb08491bf89e98eb678c6907ba945bfae7ee405be5bf23e53` over the actual
+209 inputs passed frozen-input verification, build, fresh PostgreSQL preservation,
+legacy-fence, send-constraint and capture-delete checks, migration `0012`, focused API,
+Ruff lint/format and mypy. Native execution reached `wait_terminal` but failed with
+`turn_failed`, durable reason `native_stream_invalid`; the cause is unestablished.
+The receiver `.close` list-iterator defect was fixed, tested and independently approved
+in the last native repair, and 76 pure tests passed. All owned cleanup passed twice.
+There is still no receiver-byte/history/follow-up/near-bound/outage/purge native
+acceptance. The original native allocation is exhausted (3/3); the separate runtime-only
+allocation remains 1/3 used and is not a general PDF-attempt renewal. The dirty
+candidate remains uncommitted and undelivered; IMP-026, IMP-027 and IMP-011 remain
+blocked behind IMP-025.
 
 The unaccepted transport allocation is 68 MiB (71,303,168 bytes) for PDF-bearing
 frames/requests, with a separately checked 512 KiB non-binary envelope and existing
@@ -50,11 +104,11 @@ base64 contributes at most 66,668,328 bytes, leaving room for that envelope. Eac
 occurrence counts, including repeated history/tool follow-ups; no silent truncation
 or history dropping is permitted. These calculations are not near-bound runtime proof.
 
-Do not rebuild parsers, install on the host, waive the pin, or adopt a new runtime.
-Further work requires the owner to provide the approved pinned runtime or explicitly
-authorize a bounded, reviewed compatibility decision; neither installation/update
-nor pin change is automatic. Real-provider testing remains human-deferred and must
-not be run as part of this work. The older PDF sections retain delivered legacy
+Do not rebuild parsers or install on the host. The OpenCode version/hash unlock above
+remains in force; do not reinstate a version or digest pin or assume runtime caused the
+native stream failure. Any remaining runtime-only allocation cannot be borrowed as a
+general PDF renewal. Real-provider testing remains human-deferred and must not be run
+as part of this work. The older PDF sections retain delivered legacy
 evidence and superseded IMP-018 diagnostics; their parser/formatter instructions are
 not current assignments or native-PDF proof.
 
@@ -93,28 +147,61 @@ archive, generated PDFs, transcripts or runtime scratch belong in the source com
 IMP-017's three phases are delivered: phase-one extractor delivery is committed in
 `ca09dc3`, phase-two DB/raw intake in `269710f`, and phase-three extraction/lifecycle
 in `8925dfa`. Phase two used **2/5** attempts and phase three **4/5**; their histories
-are preserved. IMP-018 phase four is exhausted (**5/5**) and phase five has used
-**2/5**. A renewed finite phase-four scope is required before further implementation.
+are preserved. IMP-018's original phase-four budget is exhausted (**5/5**) and
+phase five has used **2/5**. The owner approved three additional focused phase-four
+deletion/outage repairs after `4d46a40`; current attempt accounting is in BACKLOG.md.
 No automatic runner/application start, UI/model activation, live provider acceptance
 or completed local-use workflow follows from IMP-017 acceptance.
 
-### IMP-018 PDF composer and inference receipt — unaccepted candidate
+### Historical IMP-018 PDF composer and inference receipt — superseded, unaccepted
 
 The uncommitted backend candidate adds selected attachment references, an inference
 receipt and delete handling, but the PDF composer is absent. It is not a usable
 candidate: actual end-to-end inference and rendered proof have not passed. Static
-reviews passed; runtime acceptance did not. Earlier fresh-PostgreSQL evidence passed
-two tests and failed `capture_delete_race`; the latest corrective candidate has
-no passing fresh PostgreSQL rerun.
+reviews passed; full runtime acceptance remains pending. The earlier PostgreSQL
+`capture_delete_race` failure remains historical evidence; the outage assertion has
+now reproduced with an exact source location.
 
 Latest coordinator check, from repository root:
 `/usr/bin/python3 -I -B scripts/imp018_verify.py --api-only`.
-Build, DB startup, upgrade and current migration (`0010`) passed. The final focused API
-run failed at `test_delete_outage_is_fenced_pending_and_purge_recovers_without_scrubbing_quotes`
-with an `AssertionError` at the call assertion. Earlier focused API passes are not
-final acceptance. All owned cleanup passed. Do not treat this candidate as usable or
-claim full inference/rendered acceptance; preserve the later human live-provider test.
-No private configuration access, push or automatic start is authorized.
+An earlier renewed coordinator check passed all focused API tests and all three fresh
+PostgreSQL tests; the capture/delete race observed the correct **202/409** outcome.
+That run reached mechanical Ruff findings. Imports/formatting were corrected,
+and the existing chat fixture is now registered centrally in `conftest.py` so focused
+receipt/reference modules retain fixture discovery without shadowing imports.
+Latest runtime failure is the outage test's former line239, stage `submission_retained`:
+it checked `turns[0]` after adding a queued follow-up. SQLite `CURRENT_TIMESTAMP` has
+second precision; history's `(created_at, id)` ordering can put that follow-up first
+when timestamps tie. Attempt **2/3** targets the original sent turn by its returned
+ID, retaining the exact `sent` assertion and all purge/fence/quote checks. It forces
+tied timestamps in the API fixture; a pure SQLite regression reproduces the old
+failure in reverse UUID order, passes both orders and rejects an actual old-status
+downgrade. No product receipt/deletion behavior was changed or accepted from this
+test correction. Fresh API/PostgreSQL/static acceptance for these inputs and full synthetic
+inference/rendered proof remain pending. Do not treat this candidate as usable or
+claim backend completion; preserve the later human live-provider test. No private
+configuration access, push or automatic start is authorized.
+
+The renewed diagnostic candidate pins HEAD `4d46a40` (only documentation/bookkeeping
+changed from `8324713`) and keeps exact candidate source hashes. The same API-only
+command now projects a source-known assertion `line` and fixed stage for this failing
+outage test, without raw pytest output, PDF text, SQL, response bodies or private
+values. The fixed synthetic test's format diagnostic captures validated formatted
+stdout and generates its diff locally, avoiding runtime header assumptions. A
+coordinator must verify the refreshed inputs and static gates before backend delivery.
+Latest coordinator API/PostgreSQL/lint checks passed, but the format diagnostic
+captured zero stdout. Attempt **3/3** replaces shell/stdin redirection with fixed
+check-container Python: it verifies the exact test hash, passes those bytes directly
+to Ruff using `subprocess.run(input=..., stdout=PIPE, stderr=PIPE)` and discards stderr.
+Only successful nonempty formatted stdout reaches the existing AST/comment guard;
+otherwise only fixed hash-match/return-code/stream-size metrics are reported. The
+zero-output cause remains unproved; this is a review-ready candidate transport repair,
+not format/full acceptance or a renewed budget.
+After affected boundary review,
+the full synthetic inference/receipt/purge command is:
+`/usr/bin/python3 -I -B scripts/imp018_verify.py --full --reviewed-full`.
+Neither command is developer-authorized Docker execution or permission to activate
+ordinary fake/live chat; composer/rendered acceptance remains separate and pending.
 
 ## PDF DB/raw intake phase two — coordinator-verified (IMP-017)
 
