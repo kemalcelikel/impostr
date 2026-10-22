@@ -10,6 +10,18 @@ shared-server release. Candidate review evidence applies only to the exact
 reviewed snapshot; neither a candidate preview nor a worktree alone constitutes a
 delivered release. Consult `BACKLOG.md` for task outcomes.
 
+### Latest IMP-025 runner stop (2026-10-22)
+
+The reviewed final native repair and 76 pure tests passed, but actual confined PDF
+execution failed its first turn with `native_stream_invalid`; the cause is unknown.
+Exact209-input build, fresh PostgreSQL preservation/fencing/capture-delete, migration0012,
+focused API and Ruff/format/mypy passed; owned cleanup passed twice. Native repairs3/3
+are exhausted, runtime-only1/3 used remains separate. Full candidate is uncommitted and
+undelivered; receiver-byte/history/follow-up/near-bound/outage/purge proof and downstream
+IMP-026/027/011 remain blocked. OpenCode's owner-approved version/hash unlock remains;
+no live/provider test, install or publication follows. Further native repair needs
+owner-approved finite scope, not an assumed runtime cause or borrowed allocation.
+
 ## Native PDF plan — IMP-025 candidate blocked, not accepted (2026-10-14)
 
 The native-PDF sequence remains IMP-025 original-file handoff and exact receipts,

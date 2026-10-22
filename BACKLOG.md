@@ -1376,6 +1376,20 @@ PROJECT.md's Native PDF contract. Reuse the preserved IMP-018 candidate, not a n
 chat implementation. This outcome delivers backend/API/worker/transport behavior;
 composer is IMP-026 and physical extractor removal is IMP-027. Attempts initially0/3.
 
+**Runner outcome (2026-10-22): blocked; native repairs3/3 exhausted.** Refreshed
+209-input preflight and actual synthetic run passed build, fresh PostgreSQL preservation,
+legacy fencing/send constraints/capture-delete, migration0012, focused API and Ruff/
+format/mypy. The final reviewed repair fixed receiver list-iterator cleanup and added
+fixed diagnostics (76 pure tests passed), but the first native PDF turn still failed:
+`native_order` / `wait_terminal` / `turn_failed`, durable reason `native_stream_invalid`.
+The cause is unestablished; this does not prove a runtime incompatibility. Runtime-only
+allocation remains1/3 used, not a general PDF renewal. Exact source fingerprint over
+HEADcd13cbf: `28b707dc703a2addb08491bf89e98eb678c6907ba945bfae7ee405be5bf23e53`.
+No native receiver-byte/follow-up/history/near-bound/outage/purge acceptance; all owned
+cleanup passed twice. Full candidate and repair remain uncommitted. Further general
+native repair needs owner-approved finite scope; downstream026/027/011 cannot proceed.
+OpenCode version/hash unlock remains valid; no install/private inputs/live/push/PR.
+
 **Current outcome (2026-10-14): blocked on pinned runtime capability.** Original-file
 capture/inline transport, per-call authorization, exact receipts and forward migrations
 0011/0012 are implemented but unaccepted; full dirty IMP-018/025 candidate is preserved.
