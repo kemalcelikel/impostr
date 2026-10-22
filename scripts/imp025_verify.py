@@ -1,7 +1,8 @@
 """COORDINATOR ONLY: exact-input native PDF proof; review BEFORE execution.
 
-Read-only command: --preflight. Execution requires --api-only, --synthetic or
---retirement-only, --reviewed-harness and --fingerprint from review of these exact bytes. Synthetic
+Read-only command: --preflight (with --restore-only for the restore profile).
+Execution requires --api-only, --synthetic, --retirement-only or --restore-only,
+--reviewed-harness and --fingerprint from review of these exact bytes. Synthetic
 mode runs the fixed-path OpenCode -> shim -> broker -> PlanningHTTPSInference.events,
 replacing ONLY its connection callable with an in-memory synthetic receiver.
 No DNS/TLS/provider, extractor, private settings, host installs or live modes.
@@ -15,6 +16,8 @@ reuse label-scoped stack/image/volume/child cleanup, including generated account
 private inputs and broker scratch. Cleanup failure makes the whole check fail.
 Retirement-only runs just the two fresh/populated migration preservation cases,
 without broker/provider/browser startup or API/static/native acceptance suites.
+Restore-only runs one whole-DB synthetic backup/restore drill and two refusal/
+rollback checks, using the actual standalone local_data helper and fresh DBs only.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -44,6 +48,15 @@ from app.chat_protocol import FAILURE_REASONS
 # Verified native backend + composer/owned-cleanup delivery; manual UI acceptance remains deferred.
 BASELINE = "34dbcb0125a13638cbaa88150483b4534c07cff9"
 CHECKPOINT = "34dbcb0125a13638cbaa88150483b4534c07cff9"
+RESTORE_CHECKPOINT = "d05233ffc58f1459c6e50688977edfb5d52705a9"
+RESTORE_INPUTS = (
+    "scripts/local_data.py", "scripts/test_local_data.py",
+    "api/tests/imp011_restore_fixture.py",
+)
+RESTORE_PATHS = frozenset(RESTORE_INPUTS) | {
+    "scripts/imp025_verify.py", "AGENTS.md", "PROJECT.md", "BACKLOG.md", "DONE.md",
+    "docs/local-development.md", "docs/local-development-history.md", "docs/agent-history.md", "docs/local-scope-history.md",
+}
 # Only owner-approved runtime/stream repair and history bookkeeping may be committed.
 # Future profile anchors advance only after verified delivery, never arbitrary commits.
 REPAIR_PATHS = frozenset({
@@ -52,7 +65,7 @@ REPAIR_PATHS = frozenset({
     "scripts/imp025_verify.py", "scripts/test_imp025_verify.py",
     "scripts/imp024_product_worker.py", "scripts/test_imp025_inline.py",
     "AGENTS.md", "PROJECT.md", "BACKLOG.md", "DONE.md",
-    "docs/local-development.md", "docs/local-scope-history.md",
+    "docs/local-development.md", "docs/local-development-history.md", "docs/local-scope-history.md",
     "docs/agent-history.md",
 })
 # Finite approved retirement slice. Historical migration inputs remain immutable;
@@ -149,7 +162,67 @@ STAGES = frozenset({
     "native_history", "native_bound", "native_rejections", "native_outage", "native_purge",
     "native_complete", "snapshot_execution", "imp025_verification",
     "native_diagnostic",
+    "restore_seed", "restore_backup", "restore_compare", "restore_readable",
+    "restore_refusal", "restore_rollback", "restore_transport", "restore_digest",
 })
+RESTORE_PARTS = (
+    "users", "projects", "project_documents", "project_document_revisions",
+    "project_document_pair_approvals", "project_approval_manifests", "conversations",
+    "chat_turns", "chat_events", "project_attachments", "chat_submission_receipts",
+    "chat_send_authorizations", "chat_turn_pdf_selections", "attachment_deletions",
+    "attachment_purges", "web_sessions", "schema", "constraints", "indexes",
+)
+RESTORE_TABLES = frozenset(RESTORE_PARTS[:-3]) | {
+    "alembic_version", "audit_events", "rate_limit_buckets", "document_conflict_proposals",
+    "bootstrap_state", "conversation_preferences", "project_turn_reservations",
+    "chat_interactions", "agent_document_proposals",
+}
+RESTORE_CONSTRAINT_FIELDS = (
+    "table_name", "constraint_name", "kind", "deferrable", "initially_deferred",
+    "validated", "no_inherit", "is_local", "inherit_count", "columns",
+    "referenced_schema", "referenced_table", "referenced_columns", "update_action",
+    "delete_action", "match_type", "delete_set_columns", "nulls_not_distinct",
+    "check_expression", "operators",
+)
+RESTORE_CATEGORIES = frozenset({
+    "target_not_fresh", "freshness_pg_failed", "restore_pg_failed", "docker_pg_failed",
+    "helper_failure_unclassified", "helper_output_mismatch", "digest_mismatch",
+    "relation_owner", "type_owner", "schema", "rows", "original_identity", "database", "operation",
+    "constraint_definition_mismatch", "constraint_identity_mismatch",
+})
+
+
+def constraint_difference(actual, expected):
+    """Only fixed comparison flags and an ordinal; no SQL or constraint names."""
+    for ordinal, (new, old) in enumerate(zip(actual, expected)):
+        same_identity = all(new[key] == old[key] for key in ("table", "name_sha256", "kind"))
+        if not same_identity or any(new[key] != old[key] for key in ("definition_sha256", "flags_sha256")):
+            fields = dict(category="constraint_definition_mismatch" if same_identity else "constraint_identity_mismatch",
+                          constraint_ordinal=ordinal,
+                           pretty_equal=new["pretty_sha256"] == old["pretty_sha256"],
+                           flags_equal=new["flags_sha256"] == old["flags_sha256"],
+                           definition_equal=new["definition_sha256"] == old["definition_sha256"],
+                           constraint_kind=old["kind"],
+                           mismatched_fields=[name for name in RESTORE_CONSTRAINT_FIELDS
+                                              if new["field_sha256"][name] != old["field_sha256"][name]])
+            if old["table"] in RESTORE_TABLES:
+                fields["constraint_table"] = old["table"]
+            return fields
+    return {}
+
+
+def restore_helper_failure(result, errors, refusal=None):
+    """Exact fixed-string mapping only; captured stderr never enters report fields."""
+    if result == (1 if refusal else 0) and errors == (refusal + "\n" if refusal else ""):
+        return None
+    if result == 0:
+        return "helper_output_mismatch"
+    return {
+        "Restore requires a fresh empty DB, initialized app role, and no other DB clients.\n": "target_not_fresh",
+        "Restore freshness query failed; private diagnostics suppressed.\n": "freshness_pg_failed",
+        "Restore PostgreSQL transaction failed; private diagnostics suppressed.\n": "restore_pg_failed",
+        "Docker/PostgreSQL operation failed; private diagnostics suppressed.\n": "docker_pg_failed",
+    }.get(errors, "helper_failure_unclassified")
 NATIVE_OPERATIONS = frozenset({
     "product_request", "upload_first", "upload_second", "upload_response", "upload_identity",
     "send_first", "wait_history", "wait_turn", "wait_terminal", "wait_failure_events", "wait_submission", "wait_deadline",
@@ -242,11 +315,11 @@ def read_source(root, name):
         os.close(fd)
 
 
-def fingerprint(sources, head):
+def fingerprint(sources, head, *, restore_only=False):
     require(re.fullmatch(r"[0-9a-f]{40}", head) is not None)
     rows = [dict(path=name, size=len(data), sha256=hashlib.sha256(data).hexdigest())
             for name, data in sorted(sources.items())]
-    metadata = dict(base=BASELINE, head=head, files=rows)
+    metadata = dict(base=RESTORE_CHECKPOINT if restore_only else BASELINE, head=head, files=rows)
     encoded = json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest(), metadata
 
@@ -264,24 +337,27 @@ def tracked_sources(revision):
     return paths
 
 
-def capture():
+def capture(*, restore_only=False):
     head = git("rev-parse", "HEAD").strip().decode("ascii")
     require(re.fullmatch(r"[0-9a-f]{40}", head) is not None)
-    git("merge-base", "--is-ancestor", BASELINE, CHECKPOINT)
-    git("merge-base", "--is-ancestor", CHECKPOINT, head)
+    checkpoint = RESTORE_CHECKPOINT if restore_only else CHECKPOINT
+    git("merge-base", "--is-ancestor", BASELINE, checkpoint)
+    git("merge-base", "--is-ancestor", checkpoint, head)
     changed = git("diff", "--no-ext-diff", "--no-textconv", "--no-renames",
-                  "--name-only", "-z", CHECKPOINT, head).split(b"\0")
-    require(all(name.decode("utf-8", "strict") in REPAIR_PATHS | RETIREMENT_CHANGES.keys()
+                  "--name-only", "-z", checkpoint, head).split(b"\0")
+    allowed = RESTORE_PATHS if restore_only else REPAIR_PATHS | RETIREMENT_CHANGES.keys()
+    require(all(name.decode("utf-8", "strict") in allowed
                 for name in changed if name))
-    baseline_paths, current_paths = tracked_sources(BASELINE), tracked_sources(head)
-    paths = baseline_paths | set(NEW_INPUTS)
+    baseline_paths, current_paths = tracked_sources(checkpoint if restore_only else BASELINE), tracked_sources(head)
+    new_inputs = RESTORE_INPUTS if restore_only else NEW_INPUTS
+    paths = baseline_paths | set(new_inputs)
     require(baseline_paths <= current_paths <= paths)
     sources = {name: read_source(ROOT, name) for name in sorted(paths)}
     require(sum(map(len, sources.values())) <= 64 * 1024 * 1024)
     # Only declared new candidate/test inputs are admitted. Missing future native
     # code must not silently fall back to baseline or disappear from the fingerprint.
     untracked = git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
-    require(all(not source_path(name.decode()) or name.decode() in NEW_INPUTS
+    require(all(not source_path(name.decode()) or name.decode() in new_inputs
                 for name in untracked if name))
     # Staging an undeclared new source must not hide it from the untracked check.
     indexed = git("ls-files", "--cached", "-z").split(b"\0")
@@ -302,15 +378,16 @@ def freeze(destination, sources, metadata):
     (destination / MANIFEST).chmod(0o444)
 
 
-def check_frozen(expected):
+def check_frozen(expected, *, restore_only=False):
     require(ROOT != Path("/home/kemal/projects/impostr") and ROOT.name == "source"
             and ROOT.parent.parent == Path("/tmp/opencode")
             and stat.S_IMODE(ROOT.parent.stat().st_mode) == 0o700
             and ROOT.stat().st_uid == ROOT.stat().st_gid == 1000)
     metadata = json.loads((ROOT / MANIFEST).read_bytes())
-    require(set(metadata) == {"base", "head", "files"} and metadata["base"] == BASELINE)
+    require(set(metadata) == {"base", "head", "files"}
+            and metadata["base"] == (RESTORE_CHECKPOINT if restore_only else BASELINE))
     names = [row["path"] for row in metadata["files"]]
-    require(names == sorted(set(names)) and set(NEW_INPUTS) <= set(names))
+    require(names == sorted(set(names)) and set(RESTORE_INPUTS if restore_only else NEW_INPUTS) <= set(names))
     # Extra modules/build inputs could change execution without changing a listed
     # file. The snapshot contains only captured files and its bound manifest.
     entries = list(ROOT.rglob("*"))
@@ -318,7 +395,7 @@ def check_frozen(expected):
     require({path.relative_to(ROOT).as_posix() for path in entries if not path.is_dir()}
             == set(names) | {MANIFEST})
     sources = {name: read_source(ROOT, name) for name in names}
-    actual, rebuilt = fingerprint(sources, metadata["head"])
+    actual, rebuilt = fingerprint(sources, metadata["head"], restore_only=restore_only)
     require(rebuilt == metadata and actual == expected)
 
 
@@ -371,6 +448,29 @@ class SafeOutput(CheckOutput):
                     "tests_failed", "test_errors", "test_import_error", "format_mismatch",
                     "lint_findings", "lint_diagnostic_unavailable", "type_errors"}:
                 safe["category"] = row["category"]
+            if check.startswith("restore_"):
+                if row.get("category") in RESTORE_CATEGORIES:
+                    safe["category"] = row["category"]
+                if row.get("relation") in RESTORE_PARTS:
+                    safe["relation"] = row["relation"]
+                    for field in ("source_count", "target_count"):
+                        require(type(row.get(field)) is int and 0 <= row[field] <= 100000)
+                        safe[field] = row[field]
+                if row.get("category") in {"constraint_definition_mismatch", "constraint_identity_mismatch"}:
+                    require(type(row.get("constraint_ordinal")) is int and 0 <= row["constraint_ordinal"] < 256)
+                    safe["constraint_ordinal"] = row["constraint_ordinal"]
+                    if row.get("constraint_table") in RESTORE_TABLES:
+                        safe["constraint_table"] = row["constraint_table"]
+                    require(row.get("constraint_kind") in {"c", "f", "p", "u", "x"})
+                    safe["constraint_kind"] = row["constraint_kind"]
+                    names = row.get("mismatched_fields")
+                    require(isinstance(names, list) and len(names) <= len(RESTORE_CONSTRAINT_FIELDS)
+                            and all(name in RESTORE_CONSTRAINT_FIELDS for name in names)
+                            and len(names) == len(set(names)))
+                    safe["mismatched_fields"] = names
+                    for field in ("pretty_equal", "flags_equal", "definition_equal"):
+                        require(type(row.get(field)) is bool)
+                        safe[field] = row[field]
             if check == "native_diagnostic":
                 require(row.get("operation") in NATIVE_OPERATIONS
                         and row.get("category") in NATIVE_CATEGORIES)
@@ -704,11 +804,14 @@ class Product:
 
 
 class NativeVerify(Verify):
-    def __init__(self, synthetic, *, retirement_only=False):
-        require(not (synthetic and retirement_only))
+    def __init__(self, synthetic, *, retirement_only=False, restore_only=False):
+        require(sum((synthetic, retirement_only, restore_only)) <= 1)
         super().__init__()
         self.synthetic = synthetic
         self.retirement_only = retirement_only
+        self.restore_only = restore_only
+        self.restore_targets = []
+        self.restore_files = None
         self.phase = "frozen_inputs"
         self.connection = self.runtime = self.product = None
         self.receiver = Receiver()
@@ -730,7 +833,170 @@ class NativeVerify(Verify):
         self.base += ["-f", str(overlay)]
         self.owner_overlay = self.inputs / "native-owner.yaml"
         self.owner_overlay.write_text(postgres_owner_overlay(ROOT)
-                                      + "      IMPOSTR_TEST_NATIVE_PDF: '1'\n")
+                                      + "      IMPOSTR_TEST_NATIVE_PDF: '1'\n"
+                                      + "      IMPOSTR_TEST_RESTORE: '1'\n")
+        if self.restore_only:
+            self.restore_overlay = self.inputs / "restore-checks.yaml"
+            self.restore_overlay.write_text(json.dumps({"services": {
+                "api-integration-check": {"environment": {"IMPOSTR_TEST_RESTORE": "1"}}
+            }}))
+            self.base += ["-f", str(self.restore_overlay)]
+
+    def run_restore(self):
+        """Only generated DB settings and owned synthetic archives; no app startup."""
+        from imp024_verify import Output
+        import local_data
+        # /tmp/opencode is group-writable synthetic harness scratch. Do NOT weaken
+        # human helper ancestry checks for it. Put only our generated dotenv copies
+        # and archives in a separate exclusive 0700 /tmp child, with 0600 files.
+        self.restore_files = tempfile.TemporaryDirectory(prefix="impostr-restore-drill-", dir="/tmp")
+        private = Path(self.restore_files.name)
+        envs = {}
+
+        class FixtureOutput(Output):
+            stdout_only = True
+
+            def __init__(self, action, phase):
+                super().__init__()
+                self.action, self.result = action, None
+                self.phase = phase
+                self.constraint_fields = []
+
+            def line(self, line):
+                if not line.startswith(b'{"check": "restore_'):
+                    return  # Build/Alembic output discarded, not a success marker.
+                row = json.loads(line)
+                if self.action == "digest" and row.get("check") == "restore_constraint_fields":
+                    require(self.result is None and set(row) == {"check", "ordinal", "field_sha256"}
+                            and type(row["ordinal"]) is int and row["ordinal"] == len(self.constraint_fields)
+                            and row["ordinal"] < 256)
+                    hashes = row["field_sha256"]
+                    require(isinstance(hashes, dict) and set(hashes) == set(RESTORE_CONSTRAINT_FIELDS)
+                            and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+                                    for value in hashes.values()))
+                    self.constraint_fields.append(hashes)
+                    return
+                if row.get("check") == "restore_fixture" and row.get("status") == "failed":
+                    category = row.get("category")
+                    report(self.phase, "failed", category=category if category in RESTORE_CATEGORIES else "operation")
+                    raise Unavailable()
+                require(row.get("check") == "restore_" + self.action and row.get("status") == "passed"
+                        and self.result is None)
+                if self.action == "digest":
+                    require(set(row) == {"check", "status", "digest", "parts", "constraint_details"}
+                            and re.fullmatch(r"[0-9a-f]{64}", row["digest"]) is not None)
+                    require(isinstance(row["parts"], dict) and set(row["parts"]) == set(RESTORE_PARTS))
+                    for part in row["parts"].values():
+                        require(set(part) == {"count", "sha256"} and type(part["count"]) is int
+                                and 0 <= part["count"] <= 100000
+                                and re.fullmatch(r"[0-9a-f]{64}", part["sha256"]) is not None)
+                    details = row["constraint_details"]
+                    require(isinstance(details, list) and len(details) == row["parts"]["constraints"]["count"]
+                            and len(details) <= 256 and len(details) == len(self.constraint_fields))
+                    for item, hashes in zip(details, self.constraint_fields):
+                        require(set(item) == {"table", "name_sha256", "kind", "definition_sha256", "pretty_sha256", "flags_sha256"}
+                                and isinstance(item["table"], str) and re.fullmatch(r"[a-z_]{1,63}", item["table"])
+                                and item["kind"] in {"c", "f", "p", "u", "x"})
+                        require(all(re.fullmatch(r"[0-9a-f]{64}", item[key]) is not None
+                                    for key in ("name_sha256", "definition_sha256", "pretty_sha256", "flags_sha256")))
+                        item["field_sha256"] = hashes
+                else:
+                    require(set(row) == {"check", "status"})
+                self.result = row
+
+            def finish(self):
+                require(self.result is not None)
+
+        def fixture(stack, action, *, owner=False):
+            output = FixtureOutput(action, self.phase)
+            base = stack.base + (["-f", str(self.owner_overlay)] if owner else [])
+            service = "api-integration-owner-check" if owner else "api-integration-check"
+            stack.compose_used = True
+            stack.command(base + ["run", "--no-deps", "--rm", *(("--build",) if owner else ()), service, "python", "-B",
+                                  "tests/imp011_restore_fixture.py", action],
+                          seconds=180, output=output)
+            return output.result
+
+        def helper(stack, action, path, *, refusal=None):
+            import io
+            from contextlib import redirect_stderr
+            # Invoke the actual CLI's implementation, with ONLY this owned dotenv.
+            if stack.project not in envs:
+                dotenv = private / (stack.project + ".env")
+                fd = os.open(dotenv, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, "wb") as output:
+                    output.write((stack.inputs / "fixture.env").read_bytes())
+                envs[stack.project] = dotenv
+            errors = io.StringIO()
+            with redirect_stderr(errors):
+                result = local_data.main([action, "--project", stack.project, "--env-file",
+                                          str(envs[stack.project]),
+                                          "--output" if action == "backup" else "--input", str(path)])
+            category = restore_helper_failure(result, errors.getvalue(), refusal)
+            if category is not None:
+                report(self.phase, "failed", category=category)
+                raise Unavailable()
+
+        def compare(actual, expected):
+            if (actual["digest"], actual["parts"]) != (expected["digest"], expected["parts"]):
+                for relation in RESTORE_PARTS:
+                    if actual["parts"][relation] != expected["parts"][relation]:
+                        fields = {"category": "digest_mismatch"}
+                        if relation == "constraints":
+                            fields.update(constraint_difference(actual["constraint_details"], expected["constraint_details"]))
+                        report(self.phase, "failed", **fields, relation=relation,
+                               source_count=expected["parts"][relation]["count"],
+                               target_count=actual["parts"][relation]["count"])
+                        break
+                else:
+                    report(self.phase, "failed", category="digest_mismatch")
+                raise Unavailable()
+
+        self.stage("build")
+        self.compose("build", "db", "api-integration-check", seconds=600)
+        self.stage("database")
+        self.compose("up", "-d", "--wait", "db")
+        self.stage("restore_seed")
+        fixture(self, "seed")
+        before = fixture(self, "digest")
+        self.stage("restore_backup")
+        archive = private / "owned.dump"
+        helper(self, "backup", archive)
+        for user in ("impostr_restored_app", "impostr_rollback_app"):
+            target = Verify()
+            self.restore_targets.append(target)  # Own cleanup even if prepare/build fails.
+            target.prepare()
+            target.base = target.base[:-2] + ["-f", str(self.restore_overlay)]
+            dotenv = target.inputs / "fixture.env"
+            dotenv.write_text(dotenv.read_text().replace("DB_USER=impostr_app\n", "DB_USER=" + user + "\n"))
+            target.compose("build", "db", "api-integration-check", seconds=600)
+        target, rollback = self.restore_targets
+        self.stage("restore_compare")
+        self.stage("restore_transport")
+        helper(target, "restore", archive)
+        report("restore_transport", "passed")
+        self.stage("restore_digest")
+        compare(fixture(target, "digest"), before)
+        report("restore_digest", "passed")
+        report("restore_compare", "passed")
+        self.stage("restore_refusal")
+        helper(target, "restore", archive,
+               refusal="Restore requires a fresh empty DB, initialized app role, and no other DB clients.")
+        compare(fixture(target, "digest"), before)  # Refusal must not alter target.
+        report("restore_refusal", "passed")
+        self.stage("restore_readable")
+        fixture(target, "readable")
+        report("restore_readable", "passed")
+        self.stage("restore_rollback")
+        # Add a superuser-only event trigger to the owned source, not the target.
+        # Earlier tables restore before its post-data failure, proving real rollback.
+        fixture(self, "poison", owner=True)
+        poisoned = private / "owned-failing.dump"
+        helper(self, "backup", poisoned)
+        helper(rollback, "restore", poisoned,
+               refusal="Restore PostgreSQL transaction failed; private diagnostics suppressed.")
+        fixture(rollback, "empty")
+        report("restore_rollback", "passed")
 
     def stop_broker(self):
         from imp024_verify import reap_children
@@ -841,6 +1107,16 @@ class NativeVerify(Verify):
         report("native_complete", "passed")
 
     def cleanup(self):
+        targets_clean = True
+        for target in reversed(self.restore_targets):
+            targets_clean = target.cleanup() and targets_clean
+        self.restore_targets.clear()
+        if self.restore_files is not None:
+            try:
+                self.restore_files.cleanup()
+            except Exception:
+                targets_clean = False
+            self.restore_files = None
         if self.base is not None and hasattr(self, "owner_overlay"):
             self.base += ["-f", str(self.owner_overlay)]
         closed = True
@@ -851,40 +1127,43 @@ class NativeVerify(Verify):
             closed = False
         finally:
             self.product = None
-        return super().cleanup() and closed
+        return super().cleanup() and closed and targets_clean
 
     def run(self):
         passed = False
         try:
             self.prepare()
-            self.stage("build")
-            # The owner check service builds the one required development image
-            # via run --build below; retirement needs no other application images.
-            services = ("db",) if self.retirement_only else (
-                "db", "api", "api-check", "api-integration-check"
-            )
-            self.compose("build", *services, *(("frontdoor",) if self.synthetic else ()), seconds=600)
-            self.stage("database")
-            self.compose("up", "-d", "--wait", "db")
-            self.stage("postgres")
-            self.compose_used = True
-            self.command(self.base + ["-f", str(self.owner_overlay), "run", "--build", "--rm",
-                "api-integration-owner-check", "python", "-m", "pytest", "-p", "no:cacheprovider",
-                "--tb=no", "--show-capture=no", "--color=no", "-s",
-                *((RETIREMENT_TEST,) if self.retirement_only else PG_TESTS)],
-                seconds=360, output=ResultOutput(expected=2 if self.retirement_only else 4))
-            if not self.retirement_only:
-                self.stage("migration")
-                self.compose("run", "--rm", "api", "alembic", "upgrade", "head")
-                self.check("api_tests", "python", "-m", "pytest", "-p", "no:cacheprovider",
-                    "--tb=no", "--show-capture=no", "--color=no", *API_TESTS, output=ResultOutput())
-                self.check("api_lint", "ruff", "check", "--output-format", "json", *API_FILES,
-                    output=RuffJsonOutput(check_files=API_FILES))
-                self.check("api_format", "ruff", "format", "--check", *API_FILES,
-                    output=CheckOutput("ruff_format", check_files=API_FILES))
-                self.check("api_types", "mypy", "app", output=CheckOutput("mypy", check_files=API_FILES))
-            if self.synthetic:
-                self.run_native()
+            if self.restore_only:
+                self.run_restore()
+            else:
+                self.stage("build")
+                # The owner check service builds the one required development image
+                # via run --build below; retirement needs no other application images.
+                services = ("db",) if self.retirement_only else (
+                    "db", "api", "api-check", "api-integration-check"
+                )
+                self.compose("build", *services, *(("frontdoor",) if self.synthetic else ()), seconds=600)
+                self.stage("database")
+                self.compose("up", "-d", "--wait", "db")
+                self.stage("postgres")
+                self.compose_used = True
+                self.command(self.base + ["-f", str(self.owner_overlay), "run", "--build", "--rm",
+                    "api-integration-owner-check", "python", "-m", "pytest", "-p", "no:cacheprovider",
+                    "--tb=no", "--show-capture=no", "--color=no", "-s",
+                    *((RETIREMENT_TEST,) if self.retirement_only else PG_TESTS)],
+                    seconds=360, output=ResultOutput(expected=2 if self.retirement_only else 4))
+                if not self.retirement_only:
+                    self.stage("migration")
+                    self.compose("run", "--rm", "api", "alembic", "upgrade", "head")
+                    self.check("api_tests", "python", "-m", "pytest", "-p", "no:cacheprovider",
+                        "--tb=no", "--show-capture=no", "--color=no", *API_TESTS, output=ResultOutput())
+                    self.check("api_lint", "ruff", "check", "--output-format", "json", *API_FILES,
+                        output=RuffJsonOutput(check_files=API_FILES))
+                    self.check("api_format", "ruff", "format", "--check", *API_FILES,
+                        output=CheckOutput("ruff_format", check_files=API_FILES))
+                    self.check("api_types", "mypy", "app", output=CheckOutput("mypy", check_files=API_FILES))
+                if self.synthetic:
+                    self.run_native()
             passed = True
         except (Exception, KeyboardInterrupt) as error:
             category = ("assertion" if isinstance(error, AssertionError) else
@@ -898,31 +1177,37 @@ class NativeVerify(Verify):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--preflight", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    parser.add_argument("--preflight", action="store_true")
     mode.add_argument("--api-only", action="store_true")
     mode.add_argument("--synthetic", action="store_true")
     mode.add_argument("--retirement-only", action="store_true")
+    mode.add_argument("--restore-only", action="store_true")
     parser.add_argument("--reviewed-harness", action="store_true")
     parser.add_argument("--fingerprint")
     parser.add_argument("--frozen", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.preflight:
+        if args.api_only or args.synthetic or args.retirement_only:
+            parser.error("preflight accepts only optional --restore-only profile")
         if args.reviewed_harness or args.fingerprint or args.frozen:
             parser.error("preflight forbids execution flags")
     elif not args.reviewed_harness or not re.fullmatch(r"[0-9a-f]{64}", args.fingerprint or ""):
         parser.error("execution requires reviewed harness and exact fingerprint")
+    elif not (args.api_only or args.synthetic or args.retirement_only or args.restore_only):
+        parser.error("select an execution mode")
     for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(number, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     parent = None
     try:
         if args.frozen:
-            check_frozen(args.fingerprint)
-            return NativeVerify(args.synthetic, retirement_only=args.retirement_only).run()
-        sources, head = capture()
-        actual, metadata = fingerprint(sources, head)
+            check_frozen(args.fingerprint, restore_only=args.restore_only)
+            return NativeVerify(args.synthetic, retirement_only=args.retirement_only,
+                                restore_only=args.restore_only).run()
+        sources, head = capture(restore_only=args.restore_only)
+        actual, metadata = fingerprint(sources, head, restore_only=args.restore_only)
         if args.preflight:
-            report("preflight", "passed", baseline=BASELINE, head=head, fingerprint=actual, files=len(sources),
+            report("preflight", "passed", baseline=metadata["base"], head=head, fingerprint=actual, files=len(sources),
                    boundary_executed=False)
             return 0
         require(actual == args.fingerprint)
@@ -930,8 +1215,8 @@ def main(argv=None):
         parent.prepare()
         snapshot = parent.inputs / "source"
         freeze(snapshot, sources, metadata)
-        require(fingerprint(*capture())[0] == actual)  # Concurrent review/source drift rejects.
-        execution_mode = ("--retirement-only" if args.retirement_only else
+        require(fingerprint(*capture(restore_only=args.restore_only), restore_only=args.restore_only)[0] == actual)
+        execution_mode = ("--restore-only" if args.restore_only else "--retirement-only" if args.retirement_only else
                           "--synthetic" if args.synthetic else "--api-only")
         parent.command(["/usr/bin/python3", "-I", "-B", str(snapshot / "scripts/imp025_verify.py"),
             execution_mode, "--reviewed-harness", "--fingerprint", actual,
