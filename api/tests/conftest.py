@@ -24,6 +24,17 @@ PUBLIC_ORIGIN = "http://127.0.0.1:8080"
 pytest_plugins = ("test_chat",)
 
 
+def pytest_addoption(parser):
+    parser.addoption("--imp018-diagnostics", action="store_true", default=False)
+
+
+def pytest_configure(config):
+    if config.getoption("--imp018-diagnostics"):
+        from imp018_pytest_diagnostic import DiagnosticPlugin
+
+        config.pluginmanager.register(DiagnosticPlugin(), "imp018-fixed-diagnostics")
+
+
 @pytest.fixture
 def settings() -> AppSettings:
     return AppSettings(

@@ -1,5 +1,0 @@
-[      62ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/auth/session:0
-[   63054ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://127.0.0.1:8080/api/auth/csrf:0
-[   79419ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/auth/session:0
-[  271012ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://172.26.0.2:5173/node_modules/.vite/deps/react-dom_client.js?v=89eb4994:15804
-[  271057ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://172.26.0.2:5173/api/auth/session:0
