@@ -71,3 +71,7 @@ remain preserved outside native execution. AGENTS shortened/history archived, PR
 and backlog guidance simplified. Fix1/3 used; old budgets retained. Next owner run026→027→011;
 no composer/retirement/restore/live claim, automatic start, installation or push/PR.
 IMP-026 blocked before rendered acceptance from `bd6454c`: reviewed composer/native browser candidate preserved uncommitted; focused web87 plus type/lint/format/build, fixture11 and related22/1 gated skip passed. Launch created no Member/login/Compose/images but retained unverified private/watchdog recovery state; operator-assisted cleanup is required before another pinned launch. Repairs2/3 used; affected docs finalized, outcome-only local commit, no product delivery/live provider/push/PR.
+Composer and fixture recovery delivered in 34dbcb0; old empty runtime/private state removed,
+new startup/normal Member UI/complete cleanup worked. Owner stopped extra automated browser
+testing; remaining browser/full-app acceptance is manual-deferred, not passed. New repair2/3,
+old budgets preserved. Next027→011; no live-provider claim, installs, auto runner start or push/PR.

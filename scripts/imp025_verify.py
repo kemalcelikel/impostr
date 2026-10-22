@@ -39,8 +39,9 @@ sys.path.insert(0, str(ROOT / "api/tests"))
 from imp024_verify import CheckOutput, RuffJsonOutput, Unavailable, Verify, report, require
 from app.chat_protocol import FAILURE_REASONS
 
-BASELINE = "a966d7775567860fb5943fb9db080f241aadc27d"
-CHECKPOINT = "a966d7775567860fb5943fb9db080f241aadc27d"
+# Verified native backend + composer/owned-cleanup delivery; manual UI acceptance remains deferred.
+BASELINE = "34dbcb0125a13638cbaa88150483b4534c07cff9"
+CHECKPOINT = "34dbcb0125a13638cbaa88150483b4534c07cff9"
 # Only owner-approved runtime/stream repair and history bookkeeping may be committed.
 # Future profile anchors advance only after verified delivery, never arbitrary commits.
 REPAIR_PATHS = frozenset({

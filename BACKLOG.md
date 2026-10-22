@@ -28,9 +28,16 @@ new push or merge is authorized by this document edit.
 
 ## Current position
 
-**Current owner request (2026-10-22):** Keep implementation and execution simple, and
+**Latest owner instruction (2026-10-22):** Stop extra automated/browser testing;
+owner will manually test the completed application. Composer/fixture repair is
+implemented and committed in `34dbcb0` using existing passing web/static/review
+evidence and observed startup/owned cleanup. Remaining rendered/full-app acceptance
+is deferred, not passed or an immediate queue gate. Next approved work is
+IMP-027→IMP-011; do not start another browser fixture to drain this queue.
+
+**Earlier native event repair (2026-10-22):** Keep implementation and execution simple, and
 fix the identified PDF event-format defect. Interactive repair has passed the real
-synthetic native flow and delivered IMP-025 in `a966d77`; IMP-026 is next eligible. New focused
+synthetic native flow and delivered IMP-025 in `a966d77`; IMP-026 was next eligible then. New focused
 repair1/3 used, old native3/3 and runtime-only1/3 unchanged. Ordinary formatting,
 fixture packaging and focused checks need no extra owner approval or whole-suite loop.
 AGENTS.md is now a short operating guide; old instructions/checkpoints are preserved
@@ -45,7 +52,8 @@ change, task commit, runner start or publication is authorized by this planning 
 
 **Owner-approved continuous future batch:** All four outcomes are approved, not disabled.
 Dependencies order execution, not approval. On the owner's next root-runner launch,
-continue IMP-025→026→027→011 as each prerequisite becomes locally verified/committed;
+continue the remaining IMP-027→IMP-011; IMP-025/026 are already delivered. The original
+sequence was IMP-025→026→027→011 as each prerequisite became locally verified/committed;
 do not stop after the first successful task. The root single-branch helper already
 rechecks eligibility between sessions. Preserve practical checks and finite limits;
 an actual blocker/exhaustion stops with a checkpoint. After IMP-011 stop without
@@ -1182,8 +1190,8 @@ phone/device, image/DOCX, shared-server qualification or live-provider gate.
 
 Owner authorized five focused verification/repair attempts, initially0/5. Reuse valid
 delivered chat/review evidence; inspect full assigned final branch without exhaustive
-suite repetition. Verify loopback ordinary-stack synthetic PDF upload→file selection→
-selected turn→question/proposal/conflict→human approval→three exact downloads. Perform
+suite repetition. Owner now defers the full PDF/chat/approval/download browser walkthrough
+to manual testing after implementation; do not rerun automated UI acceptance here. Perform
 owned synthetic DB backup/restore including original PDF bytes/hashes/metadata, conversations,
 document revisions/approvals; actual restored app reads and private access must work.
 Backup artifacts stay private disposable fixture data, never Git. Review new restore
@@ -1193,8 +1201,8 @@ errors/deletion, backup/restore, existing chat epoch/context limits and the late
 human live test. Missing optional audits are reported, not claimed passing or made
 new scope. Concrete failed workflow/security/data checks block local-use outcome.
 Local commits only then stop; no auto-start, operator/live execution, push/PR or deploy.
-Verify this workflow without extractor services/tools/config and with a restored PDF
-actually present at the synthetic native inference boundary. Do not rerun historical
+Finish the documented workflow without extractor services/tools/config; reuse delivered
+native-input evidence and check restored original data. Do not rerun historical
 parser containment/rejection gates or claim that synthetic receipt proves comprehension.
 The later human live test covers the owner's actual deployment reading a PDF; it is
 documented, not executed by agents or made an immediate queue gate.
@@ -1538,7 +1546,7 @@ reuse unchanged valid build/static/DB evidence. Review substantial trust/data ch
 and only the affected repair afterward. Keep owned cleanup and honest receipts; no
 parser rebuild, new diagnostic framework, exhaustive matrix or real Azure call.
 
-## [!] IMP-026 — Select and send native PDFs in the planning chat composer
+## [x] IMP-026 — Select and send native PDFs in the planning chat composer
 
 **Depends on:** IMP-025
 
@@ -1561,14 +1569,35 @@ preview. Attempts initially0/3. Follow PROJECT.md's native attachment states/dis
 
 ### Focused verification
 
-Web checks for changed composer/state/error/navigation behavior. Fresh reviewed exact-input
-candidate profile and pinned preflight using ordinary synthetic connection; normal generated
-Member rendered upload→select→send→status→remove/delete, tab/reconnect input retention,
-one access denial and desktop/narrow keyboard spot-check with owned cleanup. Review the
-important rendered flow; reuse unchanged editor/layout evidence. No owner's PDF/account,
-live provider or arbitrary dirty preview; this item is not accepted from backend-only tests.
+Reuse existing focused web/static checks and reviews. Owner explicitly defers remaining
+upload/select/send/delete, navigation/reconnect, denial and desktop/narrow browser
+walkthroughs to manual acceptance after implementation. Do not launch more automated
+browser fixtures or claim those checks passed. Keep server authorization/deletion and
+owned-resource cleanup; no owner's PDF/account, live provider or arbitrary dirty preview.
 
-**2026-10-22 outcome — blocked before rendered acceptance:** Composer and exact native
+**Delivered with owner-deferred manual acceptance (2026-10-22): `34dbcb0`.** Composer,
+types, selection/draft persistence and UI regressions are committed. Existing web87
+tests/type/lint/format/build and independent composer/profile reviews passed; unchanged
+UI evidence is reused. New fixture recovery allocation2/3 used, old0262/3 and all prior
+histories preserved. Cleanup now attempts independent owned steps even if PDF removal
+fails; registered empty scaffolding has fd/owner/inode/emptiness fences, not recursive
+crash-state adoption. The profile admits verified declared repair/bookkeeping ancestry,
+not an obsolete exact HEAD. Focused fixture24 and related17/one gated skip passed.
+
+The exact old synthetic PDF path was tool-denied; owner confirmed it absent by a
+metadata-only check. Status proved the registered runtime was owned-empty and inactive;
+reviewed recovery removed it and the old private state. Fresh reviewed launch at
+fingerprint `7e950b3cfa28307389eec2368e455145728f0116c521d73dd511a614186b5c52`
+started the ordinary native connection, normal generated Member login, project creation
+and conversation UI. Playwright then denied upload from its external staging path.
+No alternate upload/copy was attempted; fixture was stopped and Member/login/Compose/
+images/private state/guardian cleanup all verified. Owner then stopped further automated
+testing and deferred remaining browser/full-app acceptance to manual testing. It is
+not a rendered upload/send or live-provider pass. No broader permissions, workspace
+input-generation workaround, installation, runner restart or push/PR. Code delivery
+unblocks IMP-027; final app acceptance remains the owner's later test.
+
+**Historical 2026-10-22 outcome — blocked before rendered acceptance:** Composer and exact native
 browser-profile candidate preserved uncommitted from `bd6454c`; IMP-025 `a966d77` remains
 delivered. Coordinator focused web87 tests/type/lint/format/build passed; fixture11,
 related22/1 gated skip and native verifier34 passed. Independent composer/profile review
@@ -1616,7 +1645,8 @@ task. Attempts initially0/3. Do not delete application attachment/receipt functi
 ### Focused verification
 
 Inspect removed-input references, ordinary runtime/development packaging and startup
-without extractor, plus one native PDF turn. Fresh/populated legacy PostgreSQL upgrade
+without extractor; reuse native PDF evidence and defer the extra rendered turn to the
+owner's manual acceptance. Fresh/populated legacy PostgreSQL upgrade
 checks original/download hashes and project/chat/approval preservation with no derivative
 use. Independently review consequential data deletion/mapping; owned synthetic resources
 only, cleanup verified. Full restored application workflow remains IMP-011, not duplicated

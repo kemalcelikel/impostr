@@ -10,14 +10,13 @@
 
 ## Current work
 
-Owner asked to prioritize simplicity and fix the native PDF event-format defect.
-Native backend is now verified and locally delivered in `a966d77`. Preserve residual
-IMP-018 work and every earlier attempt/checkpoint; BACKLOG.md owns budgets and outcome
-detail. The focused event repair used1/3; old native3/3 and runtime-only1/3 remain
-separate, not reset. Do not restart the runner.
+Native backend is delivered in `a966d77`; composer and owned fixture cleanup are
+delivered in `34dbcb0`. Owner requested stopping extra automated/browser testing and
+will manually accept the completed application. Preserve residual IMP-018 work and
+all attempt history; BACKLOG.md owns outcomes/budgets. Do not restart the runner.
 
-Next owner-started sequence is IMP-026 composer → IMP-027 extractor
-retirement → IMP-011 local workflow/restore. Keep Bubblewrap; no Podman/sbx migration.
+Next owner-started sequence is IMP-027 extractor retirement → IMP-011 local workflow/
+restore. Keep Bubblewrap; no Podman/sbx migration.
 OpenCode has no exact version or executable-hash admission lock; retain fixed-path safe
 availability, observational digest, other runtime pins and actual compatibility checks.
 Original PDFs use native OpenCode/Azure input, not local parsing/OCR/text preview.
@@ -29,6 +28,9 @@ Real-provider acceptance is owner-deferred, not passed or an immediate execution
   change; no new parser, diagnostic framework, service or compatibility layer for a small bug.
 - Check the changed behavior and realistic failures. Reuse unchanged valid evidence;
   no coverage targets, exhaustive matrices or mandatory whole-suite runs per edit.
+- Owner defers remaining browser/full-app walkthroughs to manual testing after
+  implementation. Do not launch more browser suites, create test-placement/permission
+  work, or block delivery solely on that deferred evidence. Never label it passed.
 - Review substantial/security/data-sensitive changes independently; re-review only the
   affected repair. Concrete important defects block, optional polish/coverage does not.
 - Ordinary formatting, focused tests and a distinct in-scope repair need no extra owner

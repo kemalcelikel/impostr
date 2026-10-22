@@ -25,7 +25,24 @@ IMP-018 diagnostic/test inputs; those files remain preserved, not product depend
 For a later task's new snapshot, use its actual committed baseline and fresh reviewed
 inputs rather than a historical fingerprint. The helper is anchored to native delivery.
 
-## IMP-026 composer — blocked before rendered acceptance (2026-10-22)
+## Composer/fixture repair delivered; manual acceptance deferred (2026-10-22)
+
+Composer and owned fixture cleanup are locally delivered in `34dbcb0`. Existing
+passing web/static/review evidence was reused; actual fixture startup, normal generated
+Member sign-in/project/conversation and complete shutdown/owned cleanup worked.
+The owner explicitly stopped extra automated/browser testing and will manually test
+the completed application. Remaining PDF upload/send/delete, narrow/keyboard, reconnect
+and full-app browser acceptance is **deferred, not passed**. Do not repeat the fixture
+or add a new input-placement/permission workaround to manufacture that evidence.
+
+The old failed fixture's empty registered runtime/private state was removed safely;
+owner confirmed the exact old external synthetic PDF absent after tool access was
+denied. A new synthetic run's accounts/login/Compose/images/private state and guardian
+were also cleaned up. No live provider test or automatic ordinary app/runner start.
+Extractor retirement and local workflow/restore remain IMP-027/011. The final ordinary
+setup/runbook is still being finished; this is not a claim of complete app acceptance.
+
+### Historical IMP-026 block before rendered acceptance
 
 The uncommitted composer and native browser fixture are implemented and reviewed. Focused
 web checks (87 tests, type, lint, format and build) and pure fixture checks (11 tests;

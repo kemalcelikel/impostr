@@ -84,6 +84,19 @@ and runtime-only1/3 preserved. Native composer, extractor retirement and restore
 workflow remain026→027→011; live-model acceptance stays owner-deferred. No automatic
 runner/application start, host installation or publication.
 
+## Composer repair and owner-deferred manual testing (2026-10-22)
+
+Owner asked for actual fixture/composer repair, then explicitly stopped additional
+automated/browser testing and chose manual acceptance once implementation is finished.
+Composer and owned cleanup are delivered in `34dbcb0`: existing web/static/review
+evidence was reused, retained empty fixture state was safely removed, and a new fixture
+startup/normal Member UI/shutdown completed with owned cleanup. New recovery2/3 used;
+old0262/3 and all earlier histories remain. Extra upload/narrow/reconnect/full-app
+browser evidence is deferred, not passed and not a queue gate. No copying/transmission
+of denied staging files or broader tool permissions was authorized. Continue approved
+extractor retirement/local workflow-restore implementation; retain data/privacy
+requirements and later owner/provider acceptance. No automatic runner start or push/PR.
+
 ## IMP-025 native stream outcome (latest session)
 
 The actual 209-input synthetic candidate fingerprint
