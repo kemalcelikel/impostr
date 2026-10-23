@@ -32,7 +32,7 @@ BACKLOG_FILE="$PROJECT_DIR/BACKLOG.md"
 LOG_DIR="$PROJECT_DIR/.opencode"
 SANDBOX_NAME="${PROJECT_NAME}-$(date +%Y%m%d-%H%M)"
 PHASE_TIMEOUT=7200          # 2 hours per session
-ITEMS_PER_SESSION=3         # backlog items per OpenCode session
+ITEMS_PER_SESSION=1         # backlog items per OpenCode session
                             # set to 1 for large or complex items
 SPRINT_REMOTE="${SPRINT_REMOTE:-origin}"
 AGENT="overnight"

@@ -1,0 +1,170 @@
+services:
+  db:
+    build:
+      context: ./db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-impostr}
+      POSTGRES_USER: ${POSTGRES_USER:-impostr_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      IMPOSTR_APP_DB_USER: ${DB_USER:-impostr_app}
+      IMPOSTR_APP_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready --username=$$POSTGRES_USER --dbname=$$POSTGRES_DB",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      target: runtime
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-impostr}
+      DB_USER: ${DB_USER:-impostr_app}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      APP_PORT: ${APP_PORT:-8080}
+      IMPOSTR_PUBLIC_ORIGIN: ${IMPOSTR_PUBLIC_ORIGIN:-}
+      IMPOSTR_RATE_LIMIT_KEY: ${IMPOSTR_RATE_LIMIT_KEY:-${DB_PASSWORD:?Set DB_PASSWORD in .env}}
+      IMPOSTR_TEMPLATE_DIR: /app/templates
+      IMPOSTR_WORKSPACE_ROOT: /workspaces
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /workspaces:mode=0700,uid=10001,gid=10001,size=256m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    networks:
+      - backend
+
+  frontdoor:
+    build:
+      context: ./web
+      target: runtime
+    ports:
+      # Loopback-only until trusted reverse-proxy client-IP handling is implemented and tested.
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    networks:
+      - edge
+      - backend
+
+  api-check:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      target: development
+    profiles:
+      - checks
+    environment:
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+      IMPOSTR_TEMPLATE_DIR: /app/templates
+      IMPOSTR_WORKSPACE_ROOT: /workspaces
+    command: ["python", "-m", "pytest", "-p", "no:cacheprovider"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - checks
+
+  api-integration-check:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      target: development
+    profiles:
+      - integration
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-impostr}
+      DB_USER: ${DB_USER:-impostr_app}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      APP_PORT: ${APP_PORT:-8080}
+      IMPOSTR_PUBLIC_ORIGIN: ${IMPOSTR_PUBLIC_ORIGIN:-}
+      IMPOSTR_RATE_LIMIT_KEY: ${IMPOSTR_RATE_LIMIT_KEY:-${DB_PASSWORD:?Set DB_PASSWORD in .env}}
+      IMPOSTR_TEMPLATE_DIR: /app/templates
+      IMPOSTR_WORKSPACE_ROOT: /workspaces
+      IMPOSTR_TEST_POSTGRES: "1"
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /workspaces:mode=0700,uid=10001,gid=10001,size=256m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+
+  web-check:
+    build:
+      context: ./web
+      target: checks
+    profiles:
+      - checks
+    command: ["npm", "run", "test"]
+    networks:
+      - checks
+
+volumes:
+  postgres-data:
+
+networks:
+  backend:
+    internal: true
+  checks:
+    internal: true
+  edge:

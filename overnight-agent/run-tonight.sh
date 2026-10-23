@@ -43,6 +43,8 @@ SESSION_COUNT=0
 NO_PROGRESS_SESSIONS=0
 STOPPED_FOR_REVIEW=0
 USE_SBX=0
+SPRINT_ARGS=()
+RESUME_ARGS=()
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,38 @@ log() {
 
 backlog() {
   python3 "$SCRIPT_DIR/backlog.py" "$@"
+}
+
+return_to_sprint() {
+  # The agent must finish task delivery before we change checkouts.
+  if [ -n "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
+    log "Partial/uncommitted task work preserved; cannot switch to another sprint task. Recover this checkout before relaunching."
+    return 1
+  fi
+  local outcome_file="$LOG_DIR/session-outcomes.log"
+  cp "$BACKLOG_FILE" "$outcome_file"
+  if ! git -C "$PROJECT_DIR" fetch "$SPRINT_REMOTE"; then
+    log "Could not refresh sprint; preserving the current task checkout."
+    return 1
+  fi
+  local remote_ref="refs/remotes/$SPRINT_REMOTE/$SPRINT_BRANCH"
+  local local_ref="refs/heads/$SPRINT_BRANCH"
+  if ! git -C "$PROJECT_DIR" merge-base --is-ancestor "$local_ref" "$remote_ref"; then
+    log "Local sprint has divergent/unpublished commits; reconcile before continuing."
+    return 1
+  fi
+  # Fast-forward the inactive local reference, without a merge/rebase or history rewrite.
+  if [ "$(git -C "$PROJECT_DIR" branch --show-current)" = "$SPRINT_BRANCH" ]; then
+    if [ "$(git -C "$PROJECT_DIR" rev-parse HEAD)" != "$(git -C "$PROJECT_DIR" rev-parse "$remote_ref")" ]; then
+      log "Session unexpectedly remained on an outdated sprint; reconcile before continuing."
+      return 1
+    fi
+  else
+    # branch -f refuses a branch checked out in another worktree; update-ref does not.
+    git -C "$PROJECT_DIR" branch -f "$SPRINT_BRANCH" "$remote_ref" || return 1
+    git -C "$PROJECT_DIR" switch "$SPRINT_BRANCH" || return 1
+  fi
+  backlog reconcile "$BACKLOG_FILE" "$outcome_file"
 }
 
 prepare_sandbox_opencode() {
@@ -151,7 +185,9 @@ run_session() {
   set -e
 
   if   [ "$code" -eq 0 ];   then log "Session $num completed."
-  elif [ "$code" -eq 124 ]; then log "Session $num timed out after ${PHASE_TIMEOUT}s — moving on."
+  elif [ "$code" -eq 124 ]; then
+    log "Session $num timed out after ${PHASE_TIMEOUT}s — inspecting outcomes before continuing."
+    SESSION_FAILURES=$((SESSION_FAILURES + 1))
   else
     log "Session $num exited with code $code."
     SESSION_FAILURES=$((SESSION_FAILURES + 1))
@@ -190,12 +226,15 @@ if ! git -C "$PROJECT_DIR" rev-parse --verify HEAD >/dev/null 2>&1 ||
 fi
 
 log "Starting overnight run: $PROJECT_NAME"
+# Tools and the queue helper must use the same checkout even when launched elsewhere.
+cd "$PROJECT_DIR"
 
 SPRINT_WORKFLOW=0
 if grep -Fxq 'Use the installed `sprint-workflow` skill for branching and pull requests.' "$PROJECT_DIR/AGENTS.md"; then
   SPRINT_WORKFLOW=1
   ITEMS_PER_SESSION=1
   SPRINT_BRANCH=$(backlog sprint-branch "$BACKLOG_FILE")
+  SPRINT_ARGS=(--sprint-ref "refs/remotes/$SPRINT_REMOTE/$SPRINT_BRANCH")
   BRANCH=$(git -C "$PROJECT_DIR" branch --show-current)
   if [ "$BRANCH" != "$SPRINT_BRANCH" ]; then
     log "ERROR: Start sprint work on $SPRINT_BRANCH after reconciling merged BACKLOG.md; currently on ${BRANCH:-detached HEAD}."
@@ -206,7 +245,7 @@ if grep -Fxq 'Use the installed `sprint-workflow` skill for branching and pull r
     log "ERROR: Fetch and align the local sprint branch with $SPRINT_REMOTE/$SPRINT_BRANCH before running."
     exit 1
   fi
-  log "Sprint workflow selected: one task per run on $SPRINT_BRANCH."
+  log "Sprint workflow selected: one task per session; continue independent work on $SPRINT_BRANCH."
 fi
 
 # Reset stale [~] items left over from any previous interrupted run
@@ -227,13 +266,13 @@ fi
 
 log "Found $PENDING ready item(s). Running up to $ITEMS_PER_SESSION eligible items per session."
 
-if ! ELIGIBLE=$(backlog count-eligible "$BACKLOG_FILE"); then
+if ! ELIGIBLE=$(backlog count-eligible "$BACKLOG_FILE" "${SPRINT_ARGS[@]}"); then
   log "ERROR: could not evaluate backlog dependencies."
   exit 1
 fi
 if [ "$ELIGIBLE" -eq 0 ]; then
   log "No dependency-eligible items; ready items remain waiting for their prerequisites."
-  backlog list-waiting "$BACKLOG_FILE" | tee -a "$LOG_DIR/run.log"
+  backlog list-waiting "$BACKLOG_FILE" "${SPRINT_ARGS[@]}" | tee -a "$LOG_DIR/run.log"
   exit 0
 fi
 
@@ -271,13 +310,13 @@ while true; do
     break
   fi
 
-  if ! ELIGIBLE=$(backlog count-eligible "$BACKLOG_FILE"); then
+  if ! ELIGIBLE=$(backlog count-eligible "$BACKLOG_FILE" "${SPRINT_ARGS[@]}"); then
     log "ERROR: could not evaluate backlog dependencies; stopping without a success summary."
     exit 1
   fi
   if [ "$ELIGIBLE" -eq 0 ]; then
     log "No dependency-eligible items; stopping with $REMAINING ready item(s) waiting."
-    backlog list-waiting "$BACKLOG_FILE" | tee -a "$LOG_DIR/run.log"
+    backlog list-waiting "$BACKLOG_FILE" "${SPRINT_ARGS[@]}" | tee -a "$LOG_DIR/run.log"
     break
   fi
 
@@ -286,32 +325,34 @@ while true; do
   OUTCOMES_BEFORE=$(backlog count-outcomes "$BACKLOG_FILE")
 
   # Claim the batch and build its prompt from the same backlog snapshot.
-  if PROMPT=$(backlog claim-batch "$BACKLOG_FILE" "$ITEMS_PER_SESSION"); then
+  if PROMPT=$(backlog claim-batch "$BACKLOG_FILE" "$ITEMS_PER_SESSION" "${SPRINT_ARGS[@]}" "${RESUME_ARGS[@]}"); then
     :
   else
     CLAIM_STATUS=$?
     if [ "$CLAIM_STATUS" -eq 1 ]; then
       log "No dependency-eligible items remained when claiming; stopping with the current queue unchanged."
-      backlog list-waiting "$BACKLOG_FILE" | tee -a "$LOG_DIR/run.log"
+      backlog list-waiting "$BACKLOG_FILE" "${SPRINT_ARGS[@]}" | tee -a "$LOG_DIR/run.log"
       break
     fi
     log "ERROR: could not claim backlog batch (exit code $CLAIM_STATUS); stopping without a success summary."
     exit "$CLAIM_STATUS"
   fi
   if [ "$SPRINT_WORKFLOW" -eq 1 ]; then
-    PROMPT+=$'\nThis sprint run assigns one task and stops after this session. Leave the task branch for human PR integration. A later run begins on the fetched, reconciled sprint branch, not this task branch. Preserve interrupted partial work; do not force-switch or overwrite its BACKLOG.md. Commit and publish final PR URL/outcome bookkeeping on the task branch as required by the selected workflow.'
+    PROMPT+=$'\nThis session assigns one sprint task. The runner continues with other independent tasks after clean task delivery. Leave completed task changes and final backlog/PR metadata committed and published on the task branch. Preserve unfinished work and record a concrete next step; the runner may resume this same task in place. Never switch away from dirty partial work or implement unmerged dependencies.'
   fi
 
   # Run the session
   run_session "$SESSION_NUM" "$PROMPT"
 
-  # Reset any items the agent did not finish (still showing as [~])
-  backlog reset-running "$BACKLOG_FILE"
-
-  if [ "$SPRINT_WORKFLOW" -eq 1 ]; then
-    log "Sprint run stopped after one task. Review its PR and reconcile the sprint baseline before another run."
-    break
+  UNFINISHED=$(backlog count-running "$BACKLOG_FILE")
+  if [ "$SPRINT_WORKFLOW" -eq 1 ] && [ "$UNFINISHED" -gt 0 ]; then
+    cp "$BACKLOG_FILE" "$LOG_DIR/resume-assignment.log"
+    RESUME_ARGS=(--resume-from "$LOG_DIR/resume-assignment.log")
+  else
+    RESUME_ARGS=()
   fi
+  # Reset unfinished items for an in-place continuation; never erase partial code.
+  backlog reset-running "$BACKLOG_FILE"
 
   OUTCOMES_AFTER=$(backlog count-outcomes "$BACKLOG_FILE")
   if [ "$OUTCOMES_AFTER" -gt "$OUTCOMES_BEFORE" ]; then
@@ -326,6 +367,15 @@ while true; do
     fi
   fi
 
+  if [ "$SPRINT_WORKFLOW" -eq 1 ]; then
+    if [ "$UNFINISHED" -gt 0 ]; then
+      log "Unfinished sprint task: continue in the current checkout within the no-progress limit."
+    elif ! return_to_sprint; then
+      STOPPED_FOR_REVIEW=1
+      break
+    fi
+  fi
+
 done
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
@@ -333,7 +383,7 @@ done
 log ""
 
 if [ "$STOPPED_FOR_REVIEW" -eq 1 ]; then
-  log "━━━ STOPPED FOR REVIEW: three sessions without an outcome ━━━"
+  log "━━━ STOPPED FOR REVIEW: no progress or checkout transition blocked ━━━"
 elif [ "$SESSION_FAILURES" -eq "$SESSION_COUNT" ] && [ "$SESSION_COUNT" -gt 0 ]; then
   log "━━━ ALL $SESSION_COUNT SESSION(S) FAILED ━━━"
   log "Check .opencode/session-*.log before assuming anything was accomplished."

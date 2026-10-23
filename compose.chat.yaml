@@ -1,0 +1,13 @@
+# Optional ordinary chat connection. The foreground human launcher owns this
+# directory. Never mount its sibling private scratch/lock or any provider input.
+services:
+  api:
+    environment:
+      IMPOSTR_CHAT_ENABLED: "1"
+    volumes:
+      - type: bind
+        source: ${IMPOSTR_CHAT_CHANNEL_DIR:?Set the launcher-owned channel directory}
+        target: /run/impostr-broker
+        read_only: true
+        bind:
+          create_host_path: false

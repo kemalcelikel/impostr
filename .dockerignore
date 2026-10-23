@@ -1,0 +1,31 @@
+# The API image needs only its runtime sources, migrations, lockfiles, tests, and
+# the three canonical nested examples. Everything else (especially credentials and
+# live planning/runner data) stays outside the build context.
+**
+!api/
+!api/Dockerfile
+!api/requirements.lock
+!api/requirements-dev.lock
+!api/pyproject.toml
+!api/alembic.ini
+!api/app/
+!api/app/**
+!api/migrations/
+!api/migrations/**
+!api/tests/
+!api/tests/**
+# API tests compare backlog parsing with the repository's compatibility helper.
+!scripts/
+!scripts/backlog.py
+!scripts/imp025_fixtures.py
+!overnight-agent/
+!overnight-agent/PROJECT.md.example
+!overnight-agent/AGENTS.md.example
+!overnight-agent/BACKLOG.md.example
+api/**/__pycache__/
+api/**/.pytest_cache/
+api/**/.mypy_cache/
+api/**/.ruff_cache/
+api/**/*.pyc
+api/**/.env
+api/**/.env.*
