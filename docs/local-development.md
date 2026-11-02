@@ -118,6 +118,24 @@ Keep DB running for backup. Full non-destructive shutdown uses `down` without `-
 The `/workspaces` API mirror is disposable; recreate API after restoration. Broker
 scratch, channels and native processes are not backup data.
 
+### Sample card canvas
+
+After rebuilding the frontend with your existing stack/env as described above,
+sign in, select a project and choose **Canvas** beside Planning and editing / Final
+review. Its three tabs show predefined sample trees, not actual directories or tasks.
+Drag a card's header; its body text remains selectable. Background/middle-mouse drag
+or scrolling pans, pinch zooms, and **− / + / Fit view** controls adjust the view.
+Focus the canvas and hold Space to pan over cards. Select a card from the selector,
+then use movement buttons or focus the move group and press arrow keys.
+
+Each project/board retains its positions, selection and zoom during navigation in
+this page session. Refresh resets all samples. Canvas navigation preserves existing
+draft/task/chat state; the existing save/discard rules still apply to project changes.
+There is no card/connection editing, Markdown/directory loading or persistent canvas
+save yet. Focused tests/build/source review passed; manually check pointer/trackpad
+feel, text selection and narrow-screen rendering. No real application stack was
+started or upgraded by the canvas implementation.
+
 ## Private backup
 
 Human only. Stop API/frontdoor, any other non-DB services in this project, and the

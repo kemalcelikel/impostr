@@ -207,6 +207,10 @@ Remaining browser/provider and full restore acceptance is the owner's manual wor
 the automated constraint comparison remains unresolved.
 Actual provider use remains owner-deferred. Earlier implementation narratives are
 preserved in docs/agent-history.md, not mixed into current product requirements.
+The card-canvas prototype is implemented on `feature/canvas`: project-scoped
+sample trees, tab-local layout and pan/zoom, not real directories or Markdown loading.
+Its product contract is below; BACKLOG.md records delivery, focused checks and manual
+acceptance caveats.
 
 ## People, permissions, and workflow
 
@@ -316,6 +320,40 @@ the exported files have been installed in a Git repository.
   must remain visible; no claim that every page was understood follows from a receipt.
 
 ## Architecture and technical direction
+
+### Owner-approved card canvas prototype (2026-10-26)
+
+Add a separate project-scoped **Canvas** view alongside planning/editing and final
+review, without replacing their document, chat, approval or download behavior. This
+is the first visual slice of the earlier hierarchical-planning exploration in
+`docs/backlog-tree-notes.md`, not approval to implement that complete overhaul.
+
+- Use React Flow (`@xyflow/react`, initially pinned to 12.12.0) with custom ordinary
+  React/HTML cards and SVG parent/child connectors. Reuse the existing dark Tailwind
+  theme. Keep its stylesheet after Tailwind's import, and give the viewport explicit
+  width/height; no general drawing tool, new UI framework or automatic layout engine.
+- Seed several independent sample boards with predefined tree relationships and
+  initial positions. Each card has a header/title, a bounded lorem-ipsum main body,
+  and a footer of arbitrary, clearly sample metadata. Content is display-only: no
+  add/delete, connection editing, Markdown editor, resizing or reparenting in this slice.
+- Drag cards from their headers; preserve body text selection. Support background
+  panning, Space-drag/middle-mouse panning, trackpad/pinch navigation, visible zoom
+  in/out, zoom percentage and Fit view. Provide keyboard-accessible canvas tabs and
+  button/keyboard alternatives to dragging. Keep page scrolling and small-screen
+  controls usable without horizontal page overflow.
+- Tabs switch between real independent sample boards, not actual directories or
+  conversation/document tabs. Retain each board's positions, selection and viewport
+  during tab switches in this page session. Refresh resets sample state; no localStorage,
+  database/API persistence, new accounts, filesystem reads or provider operation.
+- Keep stable content IDs, hierarchy and visual coordinates separate. Moving a card
+  changes only layout, never its parent, dependency/readiness semantics, approvals or
+  Markdown. Future authorized Markdown/directory loading and durable saving need their
+  own data/authorization contracts; the present three-file export remains unchanged.
+
+Initial library peer requirements permit React 19; actual compatibility is checked
+through the pinned existing web build and focused tests, not assumed from docs alone.
+Use fixed sample coordinates now; consider Dagre only when automatic arrangement is
+separately requested. Do not continually undo manual positions with layout effects.
 
 | Boundary | Planned choice / responsibility |
 |---|---|

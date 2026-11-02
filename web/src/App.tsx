@@ -184,7 +184,7 @@ export default function App() {
   const [userOffset, setUserOffset] = useState(0);
   const [projectOffset, setProjectOffset] = useState(0);
   const [workspaceHasEdits, setWorkspaceHasEdits] = useState(false);
-  const [wideFinalReview, setWideFinalReview] = useState(false);
+  const [wideProjectView, setWideProjectView] = useState(false);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [accounts, setAccounts] = useState<User[]>([]);
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
@@ -243,7 +243,7 @@ export default function App() {
     setProjectOffset(0);
     setUserOffset(0);
     setWorkspaceHasEdits(false);
-    setWideFinalReview(false);
+    setWideProjectView(false);
     setWorkspaceLoading(false);
     setWorkspaceError("");
   }, []);
@@ -676,7 +676,7 @@ export default function App() {
       </header>
 
       <main
-        className={`relative z-10 w-full px-5 pb-14 pt-8 sm:px-8 sm:pt-12 ${wideFinalReview ? "max-w-none" : "mx-auto max-w-6xl"}`}
+        className={`relative z-10 w-full min-w-0 px-5 pb-14 pt-8 sm:px-8 sm:pt-12 ${wideProjectView ? "max-w-none" : "mx-auto max-w-6xl"}`}
       >
         {pageState === "loading" ? (
           <section
@@ -865,7 +865,7 @@ export default function App() {
               onSessionExpired={handleWorkspaceSessionExpired}
               onPendingChange={reportWorkspacePending}
               onProjectPageChange={setProjectOffset}
-              onWideReviewChange={setWideFinalReview}
+              onWideReviewChange={setWideProjectView}
               projectOffset={projectOffset}
               projects={projects}
             />

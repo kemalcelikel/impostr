@@ -10,6 +10,18 @@
 
 ## Current work
 
+Owner approved the card-canvas prototype on 2026-10-26 (IMP-028/029). Interactive
+coordination only; implement the PROJECT.md canvas contract with focused web checks.
+This new scope does not reopen old PDF/provider/restore verification or start a runner.
+The canvas began on `development` at merge `547e0e5` (GitHub PR #1). At the owner's
+request, its unchanged uncommitted work moved to `feature/canvas`, based on that merge;
+`development` remains unchanged. The earlier feature/impostr-v1 batch below remains
+delivery history, not a branch to switch back to. Leave this slice uncommitted unless
+the owner requests commits; the owner has now requested the local canvas commit.
+Canvas implementation and focused checks are delivered together on `feature/canvas`;
+IMP-028/029 are `[x]` under owner-manual rendered acceptance. BACKLOG.md preserves the
+earlier uncommitted checkpoint. Do not reimplement or start a runner.
+
 Native backend is delivered in `a966d77`, composer/fixture cleanup in `34dbcb0`,
 extractor retirement in `d05233f`, and private backup/fresh-target restore in `756a3c8`.
 Owner explicitly stopped tests, verification and comparator refinements and will
@@ -66,11 +78,22 @@ The root helper takes one dependency-eligible item per session and rechecks afte
 Its timeout/exit0 alone does not prove delivery. Use the root helper/parser, not the
 nested toolkit's sprint defaults. No generally available automatic browser test login.
 
+Canvas checks were verified in the existing `web/Dockerfile` **checks** target,
+Node22.17.0/npm10.9.2, inside `/web`: `npm run build` and
+`npm run test -- src/canvasState.test.ts src/CardCanvas.test.tsx src/ProjectWorkspace.test.tsx`.
+Changed-file ESLint/Prettier also passed. These are not host Node commands or a reason
+to launch deferred browser/provider/restore checks. Docker remains coordinator-only.
+
 ## Code and environment conventions
 
 - API: api/ (Python/FastAPI/SQLAlchemy/Alembic); UI: web/ (Vite/React/TypeScript/Tailwind).
   Pin dependencies in existing manifests/locks; do not hand-edit generated lockfiles.
   Use forward migrations; preserve originals, approvals, revisions and template provenance.
+- The approved canvas permits adding only its app dependency `@xyflow/react` and
+  generating the npm lock with the existing pinned Node/npm container. Coordinator
+  owns Docker operations; developers edit source only. Do not use the incompatible
+  host Node24/npm11, weaken engine-strict, install tooling/skills or expose Docker to
+  implementation agents. This is not an exception for host/provider configuration.
 - Starter inputs are overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example. Never restore
   deleted root examples or rewrite immutable starters to repair current behavior.
   /workspaces is a disposable API mirror, not an agent workspace or authority.
@@ -92,8 +115,11 @@ nested toolkit's sprint defaults. No generally available automatic browser test 
 
 ## Git and task state
 
-Use the existing **single-branch batch**, not sprint mode: feature/impostr-v1 based on
-published origin/v1. Inspect status, assigned diff and recent history; preserve dirty
+The earlier **single-branch batch**, not sprint mode, used feature/impostr-v1 based on
+published origin/v1 and is now merged in development. For the current canvas request,
+work on the owner-selected `feature/canvas` branch. The owner authorized the verified
+canvas delivery commit only; no push or further branch change is authorized.
+Inspect status, assigned diff and recent history; preserve dirty
 work. Flags follow Git subcommands, e.g. `git diff --no-ext-diff --no-textconv` and
 `git log --no-ext-diff --no-textconv --oneline -10`. No developer Git writes/branch commands.
 

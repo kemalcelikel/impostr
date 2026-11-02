@@ -3,6 +3,21 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectWorkspace, { type ProjectSummary } from "./ProjectWorkspace";
 
+// Canvas/workspace lifecycle coverage does not exercise the library renderer.
+vi.mock("@xyflow/react", async (original) => ({
+  ...(await original<typeof import("@xyflow/react")>()),
+  ReactFlow: () => null,
+  Background: () => null,
+}));
+vi.mock("./chat", async (original) => ({
+  ...(await original<typeof import("./chat")>()),
+  streamChat: vi.fn(async (_path: string, signal: AbortSignal) => {
+    await new Promise<void>((resolve) =>
+      signal.addEventListener("abort", () => resolve(), { once: true }),
+    );
+  }),
+}));
+
 const project: ProjectSummary = {
   id: "00000000-0000-4000-8000-000000000020",
   name: "Twin tab plan",
@@ -210,6 +225,107 @@ afterEach(() => {
 });
 
 describe("private project drafts", () => {
+  it("opens Canvas without losing unsaved source, chat text or an in-flight chat request", async () => {
+    const sending = deferred<Response>();
+    let sendSignal: AbortSignal | null | undefined;
+    const wideView = vi.fn();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (path.endsWith("/chat") && init?.method === "POST")
+        return Promise.resolve(jsonResponse({ id: "canvas-chat", title: "Canvas chat" }, 201));
+      if (path.endsWith("/turns") && init?.method === "POST") {
+        sendSignal = init.signal;
+        return sending.promise;
+      }
+      if (path.includes("/attachments"))
+        return Promise.resolve(jsonResponse({ attachments: [], next_after: null }));
+      if (path.includes("/events?")) return Promise.resolve(jsonResponse({ events: [], after: 0 }));
+      if (path.endsWith("/chat/canvas-chat"))
+        return Promise.resolve(jsonResponse({ turns: [], interactions: [] }));
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock, {
+      projects: [project, secondProject],
+      onWideReviewChange: wideView,
+    });
+    expect(screen.queryByRole("button", { name: "Canvas" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const chat = screen.getByRole("region", { name: "Project conversation" });
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    const composer = screen.getByRole("textbox", { name: "Message tech-lead" });
+    await waitFor(() => expect(composer).toBeEnabled());
+    fireEvent.change(composer, { target: { value: "Keep this pending message" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(sendSignal).toBeDefined());
+    fireEvent.change(editor, { target: { value: "# Unsaved source survives Canvas\n" } });
+    const requestsAtEntry = fetchMock.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(wideView).toHaveBeenLastCalledWith(true);
+    expect(editor).toBeInTheDocument();
+    expect(editor.closest("[hidden]")).not.toBeNull();
+    expect(chat).toBeInTheDocument();
+    expect(composer).toHaveValue("Keep this pending message");
+    expect(sendSignal?.aborted).toBe(false);
+    expect(fetchMock.mock.calls).toHaveLength(requestsAtEntry);
+    showProjectList();
+    expect(screen.getByRole("button", { name: "Open project Second private plan" })).toBeDisabled();
+    const exit = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(exit);
+    expect(exit.defaultPrevented).toBe(true);
+    sending.resolve(jsonResponse({ detail: "Another project turn is active" }, 409));
+    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    expect(wideView).toHaveBeenLastCalledWith(false);
+    expect(screen.getByRole("textbox", { name: "Edit PROJECT.md" })).toBe(editor);
+    expect(screen.getByRole("region", { name: "Project conversation" })).toBe(chat);
+    expect(editor).toHaveValue("# Unsaved source survives Canvas\n");
+    expect(screen.getByRole("textbox", { name: "Message tech-lead" })).toBe(composer);
+    expect(composer).toHaveValue("Keep this pending message");
+    expect(await screen.findByText("Another project turn is active")).toBeInTheDocument();
+    expect(sendSignal?.aborted).toBe(false);
+  });
+
+  it("keeps sample board state independent by authorized project without canvas API writes", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && pathOf(input).endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      throw new Error(`Unexpected request ${pathOf(input)}`);
+    });
+    renderWorkspace(fetchMock, { projects: [project, secondProject] });
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Journey tree" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Select a sample card" }), {
+      target: { value: "journey-arrive" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Move selected card right" }));
+    showProjectList();
+    fireEvent.click(screen.getByRole("button", { name: "Open project Second private plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(screen.getByRole("tab", { name: "Idea tree" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("combobox", { name: "Select a sample card" })).toHaveValue("");
+    fireEvent.click(screen.getByRole("tab", { name: "Release tree" }));
+    showProjectList();
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(screen.getByRole("tab", { name: "Journey tree" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("combobox", { name: "Select a sample card" })).toHaveValue(
+      "journey-arrive",
+    );
+    expect(fetchMock.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(
+      true,
+    );
+  });
+
   it("opens the full-width final review and returns to planning", async () => {
     const wideReviewChange = vi.fn();
     const finalStatus = {
@@ -259,9 +375,19 @@ describe("private project drafts", () => {
       screen.queryByRole("button", { name: "Return to final review" }),
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Final review and downloads" }));
-    await screen.findByRole("heading", { name: "Review and download approved files" });
+    const reviewHeading = await screen.findByRole("heading", {
+      name: "Review and download approved files",
+    });
     expect(wideReviewChange).toHaveBeenLastCalledWith(true);
     expect(screen.getByRole("button", { name: "Download PROJECT.md" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(reviewHeading).toBeInTheDocument();
+    expect(reviewHeading.closest("[hidden]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Final review and downloads" }));
+    expect(screen.getByRole("heading", { name: "Review and download approved files" })).toBe(
+      reviewHeading,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
     expect(wideReviewChange).toHaveBeenLastCalledWith(false);
@@ -476,6 +602,14 @@ describe("private project drafts", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
       target: { value: "Updated task" },
     });
+
+    const taskTitle = screen.getByRole("textbox", { name: "Task title" });
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(taskTitle).toBeInTheDocument();
+    expect(taskTitle.closest("[hidden]")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    expect(screen.getByRole("textbox", { name: "Task title" })).toBe(taskTitle);
+    expect(taskTitle).toHaveValue("Updated task");
 
     expect(screen.getByRole("tab", { name: "Project" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Save task changes" }));

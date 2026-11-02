@@ -14,6 +14,8 @@ import { ApiError, apiRequest } from "./api";
 import BacklogPlanning, { type BacklogTaskDocument } from "./BacklogPlanning";
 import FinalReview, { type ReviewDocumentKind } from "./FinalReview";
 import ProjectChat from "./ProjectChat";
+import CardCanvas from "./CardCanvas";
+import { createCanvasState, type CanvasState, type CanvasUpdate } from "./canvasState";
 import type { ChatMemory } from "./chat";
 
 // Browser-memory only. App retains this on expiry and returns it only after
@@ -24,6 +26,7 @@ export type WorkspaceMemory = {
   editor?: { projectId: string; kind: DocumentKind; text: string; revision: number };
   chats: Record<string, ChatMemory>;
   task?: import("./BacklogPlanning").TaskMemory;
+  canvases?: Record<string, CanvasState>;
 };
 const ignoreWorkspaceMemory: (snapshot: WorkspaceMemory) => void = () => {};
 
@@ -574,6 +577,10 @@ export default function ProjectWorkspace({
   const restorationEditor = useRef(restoration.editor);
   const [chatMemories, setChatMemories] = useState(restoration.chats);
   const [taskMemory, setTaskMemory] = useState(restoration.task);
+  const [canvasMemories, setCanvasMemories] = useState(restoration.canvases ?? {});
+  // An overlay view, not a document/stage switch. Keep the current stage and its
+  // editor, task detail, final review and chat subtree mounted behind it.
+  const [canvasProjectId, setCanvasProjectId] = useState<string | null>(null);
   const reportChatMemory = useCallback((projectId: string, snapshot: ChatMemory) => {
     setChatMemories((current) =>
       current[projectId] === snapshot ? current : { ...current, [projectId]: snapshot },
@@ -680,6 +687,17 @@ export default function ProjectWorkspace({
   // the refreshed page is empty or no longer contains this project.
   const selectedProject =
     visibleProjects.find((project) => project.id === selectedProjectId) ?? selectedProjectSnapshot;
+  const canvasVisible = Boolean(selectedProject && canvasProjectId === selectedProject.id);
+  const reportCanvasChange = useCallback(
+    (update: CanvasUpdate) => {
+      if (!selectedProjectId) return;
+      setCanvasMemories((current) => ({
+        ...current,
+        [selectedProjectId]: update(current[selectedProjectId] ?? createCanvasState()),
+      }));
+    },
+    [selectedProjectId],
+  );
   const reportCurrentChatMemory = useCallback(
     (snapshot: ChatMemory) => {
       if (selectedProjectId) reportChatMemory(selectedProjectId, snapshot);
@@ -766,6 +784,7 @@ export default function ProjectWorkspace({
   }, [instanceId, selectedKind, workspaceStage]);
 
   function enterFinalReview(focusHeading = false): void {
+    setCanvasProjectId(null);
     setWorkspaceStage("final-review");
     setReturnToFinalReview(false);
     setFocusFinalReviewHeading(focusHeading);
@@ -774,6 +793,7 @@ export default function ProjectWorkspace({
   }
 
   function returnToPlanning(): void {
+    setCanvasProjectId(null);
     const returningFromReview = workspaceStage === "final-review";
     setWorkspaceStage("planning");
     if (returningFromReview) setReturnToFinalReview(true);
@@ -814,6 +834,7 @@ export default function ProjectWorkspace({
       kind: selectedKind,
       chats: chatMemories,
       task: taskMemory,
+      canvases: canvasMemories,
       editor:
         selectedProjectId && currentDocument && editorIsDirty
           ? {
@@ -838,6 +859,7 @@ export default function ProjectWorkspace({
     restoration.projectId,
     chatMemories,
     taskMemory,
+    canvasMemories,
   ]);
 
   useEffect(() => {
@@ -1434,6 +1456,7 @@ export default function ProjectWorkspace({
         return;
       }
       setSelectedKind("project");
+      setCanvasProjectId(null);
       setWorkspaceStage("planning");
       setReturnToFinalReview(false);
       onWideReviewChange(false);
@@ -1478,6 +1501,7 @@ export default function ProjectWorkspace({
     setSelectedProjectSnapshot(project);
     setProjectListOpen(false);
     setSelectedKind("project");
+    setCanvasProjectId(null);
     setWorkspaceStage("planning");
     setReturnToFinalReview(false);
     onWideReviewChange(false);
@@ -1511,6 +1535,7 @@ export default function ProjectWorkspace({
     invalidateHistory();
     setSelectedProjectId(null);
     setSelectedProjectSnapshot(null);
+    setCanvasProjectId(null);
     setWorkspaceStage("planning");
     setReturnToFinalReview(false);
     onWideReviewChange(false);
@@ -2422,6 +2447,7 @@ export default function ProjectWorkspace({
               onClick={() => {
                 setSelectedProjectId(null);
                 setSelectedProjectSnapshot(null);
+                setCanvasProjectId(null);
                 setWorkspaceStage("planning");
                 setReturnToFinalReview(false);
                 onWideReviewChange(false);
@@ -2486,7 +2512,11 @@ export default function ProjectWorkspace({
                   {selectedProject.name}
                 </p>
                 <h3 className="mt-2 break-words text-xl font-semibold">
-                  {workspaceStage === "planning" ? "Planning drafts" : "Three-file final review"}
+                  {canvasVisible
+                    ? "Sample card canvas"
+                    : workspaceStage === "planning"
+                      ? "Planning drafts"
+                      : "Three-file final review"}
                 </h3>
                 <p className="mt-2 text-xs leading-5 text-copy-muted">
                   Project created {isoDate(selectedProject.created_at)} · changes create immutable
@@ -2500,26 +2530,50 @@ export default function ProjectWorkspace({
 
             <nav aria-label="Project stages" className="mt-5 flex flex-wrap gap-2">
               <button
-                aria-pressed={workspaceStage === "planning"}
-                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${workspaceStage === "planning" ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
+                aria-pressed={!canvasVisible && workspaceStage === "planning"}
+                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${!canvasVisible && workspaceStage === "planning" ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
                 onClick={returnToPlanning}
                 type="button"
               >
                 Planning and editing
               </button>
               <button
-                aria-pressed={workspaceStage === "final-review"}
-                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${workspaceStage === "final-review" ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
+                aria-pressed={!canvasVisible && workspaceStage === "final-review"}
+                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${!canvasVisible && workspaceStage === "final-review" ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
                 onClick={() => enterFinalReview()}
                 type="button"
               >
                 Final review and downloads
               </button>
+              <button
+                aria-pressed={canvasVisible}
+                className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${canvasVisible ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
+                onClick={() => {
+                  setCanvasMemories((current) =>
+                    current[selectedProject.id]
+                      ? current
+                      : { ...current, [selectedProject.id]: createCanvasState() },
+                  );
+                  setCanvasProjectId(selectedProject.id);
+                  onWideReviewChange(true);
+                }}
+                type="button"
+              >
+                Canvas
+              </button>
             </nav>
 
+            {canvasVisible ? (
+              <CardCanvas
+                key={selectedProject.id}
+                state={canvasMemories[selectedProject.id] ?? createCanvasState()}
+                onChange={reportCanvasChange}
+              />
+            ) : null}
             <nav
               aria-label="Workspace regions"
               className={`mt-4 flex flex-wrap gap-2 ${workspaceStage === "planning" ? "min-[769px]:hidden" : ""}`}
+              hidden={canvasVisible}
             >
               {(["chat", "files", "backlog"] as const).map((region) => (
                 <button
@@ -2547,6 +2601,7 @@ export default function ProjectWorkspace({
             </nav>
             <div
               className={`mt-5 grid min-w-0 gap-5 ${workspaceStage === "planning" ? "min-[769px]:grid-cols-[minmax(360px,400px)_minmax(0,1fr)]" : ""}`}
+              hidden={canvasVisible}
             >
               <div
                 className={`${workspaceStage === "final-review" ? (primaryRegion === "chat" ? "" : "hidden") : primaryRegion === "chat" ? "" : "hidden min-[769px]:block"}`}

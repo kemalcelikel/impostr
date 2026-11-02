@@ -28,6 +28,26 @@ new push or merge is authorized by this document edit.
 
 ## Current position
 
+**Owner-approved canvas slice (2026-10-26):** Plan and implement the recommended
+predefined-card prototype under IMP-028/029 below. Earlier PDF/restore stop and
+manual-acceptance instructions stay in force for that delivered work, not as a ban
+on focused checks of this new UI. Canvas began on `development` at `547e0e5`, the merge
+of GitHub PR #1, and the owner subsequently moved the unchanged uncommitted candidate
+to `feature/canvas` based on that merge. Earlier batch branch/PR fields and all attempts
+remain history; `development` has no canvas commits.
+Interactive implementation only, no runner or Git publication. The owner has now
+requested a local canvas commit; the verified implementation and planning records are
+delivered together on `feature/canvas`. Earlier checked-but-uncommitted work stayed
+`[~]`; IMP-028/029 become `[x]` with this delivery, not a claim of rendered acceptance.
+
+**Canvas outcome:** IMP-028/029 are implemented, checked and delivered together
+on `feature/canvas` based on `development` at `547e0e5`. The branch switch preserved
+the candidate diff and untracked files; no earlier task/attempt was reset. Focused 61-test pass,
+successful pinned build, changed-file lint/format and independent source review;
+rendered pointer/trackpad/narrow-screen acceptance is still owner-manual. See task
+outcomes at the end. No application stack, runner, live provider or push started.
+Delivery commit title: `Add project card canvas with draggable sample trees`.
+
 **Final owner instruction (2026-10-22):** Finish packaging; stop testing, verifying,
 looping and comparator refinements. Native backend/composer, extractor retirement
 (`d05233f`) and private backup/fresh-target restore (`756a3c8`) are implemented and
@@ -2042,3 +2062,77 @@ runbook and independent security review. Two-user private project/chat/media/app
 download end-to-end denials must pass. Preserve role/ownership rules; local browser
 risk acceptance and LAN smoke are not server proof. Deferred until separate owner
 release approval, actual server/TLS/relay/isolation and recovery resources exist.
+
+## [x] IMP-028 — Display and navigate independent sample card trees
+
+**Depends on:** None
+
+**Delivery:** Owner-authorized local commit on `feature/canvas`, delivered together
+with IMP-029 in `Add project card canvas with draggable sample trees`. Reused the
+unchanged passing code/build/test/review evidence below; final staged whitespace and
+backlog parsing checked. Actual pointer/trackpad/rendered acceptance remains manual.
+
+**Initial checked checkpoint (2026-10-26):** Implemented, checked, uncommitted—not `[x]`. Added reusable
+CardCanvas plus separate seeds/state and tests; pinned @xyflow/react12.12.0 with npm
+generated lock under existing Node22.17.0/npm10.9.2. Three independent sample trees,
+fixed connectors, header-only drag, selectable text, pan/pinch, 25–150% zoom/Fit,
+accessible tabs and selected-card movement controls. No content/connection editing.
+
+Coordinator's focused canvas/state/workspace Vitest run passed **61 tests**. Initial
+build caught a test-only partial ReactFlow mock type cast and lint found its effect
+dependency warning; smallest test repair made, then affected **3 tests**, production
+TypeScript/Vite build, changed-file ESLint and Prettier passed. Source review approved
+without important defects. `git diff --check` and backlog parser pass. No browser
+suite/live-data check: actual pointer/trackpad/text selection/rendering remain manual.
+Production-only npm audit reported0 advisories; npm ci reported5 development advisories
+and Vite warned about a578kB minified entry chunk (169kB gzip). No automatic upgrades
+or warning suppression; dependency/bundle tuning is a nonblocking future concern.
+
+Implement the PROJECT.md owner-approved card canvas prototype in a reusable frontend
+component with pinned React Flow, separate content/hierarchy/layout, custom cards and
+several sample boards. Use existing theme and fixed initial positions, no layout engine.
+
+Acceptance:
+- Header/title, lorem-ipsum body and arbitrary sample-metadata footer are readable;
+  parent/child connector lines follow header-driven card moves without changing hierarchy.
+- Canvas pan/zoom and Fit view work; zoom level is visible. Cards retain selectable
+  body text and have button/keyboard movement alternatives.
+- Accessible board tabs retain independent positions, selection and viewport when
+  switching; refresh resets samples. No persistence or content/connection editing.
+
+Verification: Focused Vitest tests for board isolation, movement/hierarchy invariance,
+viewport retention and zoom limits; pinned TypeScript/build and changed-file lint/format.
+Owner manually checks pointer/trackpad feel and visual rendering; do not claim those passed
+from mocked/jsdom tests. No old fixture/browser/provider/restore loops.
+
+## [x] IMP-029 — Integrate the canvas without disturbing planning drafts
+
+**Depends on:** IMP-028
+
+**Delivery:** Owner-authorized local commit together with IMP-028 on `feature/canvas`;
+the dependency implementation is in the same commit. Source, tests, lockfile and
+planning records are included; no API/data/approval behavior or publication is added.
+
+**Initial checked checkpoint (2026-10-26):** Integrated against the IMP-028 worktree candidate; both
+were uncommitted and not runner-eligible completion at that checkpoint. Canvas is a separate
+full-width authorized project view; planning/review/chat subtrees are hidden rather
+than unmounted. Existing per-user browser memory retains independent board state
+by project; refresh resets samples. Focused tests passed for source/chat/in-flight
+turn/task-edit preservation, project isolation and no canvas API writes; independent
+source review found no material approval/authorization/state-boundary defect. Existing
+workspace checks are included in the61-test run above. No API/migration/file/approval
+changes, live stack or browser fixture. Owner manually accepts rendered narrow layout.
+
+Expose Canvas in the signed-in project workspace using the IMP-028 component. Give
+it useful width/height without replacing existing planning, chat or final review.
+
+Acceptance:
+- An authorized selected project can open Canvas and return to planning/review;
+  existing unsaved document/task/chat state is not discarded by canvas navigation.
+- Samples remain project-local; switching projects does not leak another project's
+  layout. No API endpoints, actual directory/file access, migrations or approvals change.
+- Narrow-screen controls remain reachable and canvas stays within page bounds.
+
+Verification: Focused workspace navigation/state-preservation tests plus the canvas
+checks above; independent source review of integration and state boundaries. Remaining
+rendered/full-app walkthrough is owner-manual, not a new automated browser gate.
