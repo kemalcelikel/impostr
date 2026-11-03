@@ -10,7 +10,7 @@ app-role ownership succeeded; the automated full constraint comparison remains
 unresolved. No more testing or comparison refinements were done for this handoff.
 
 History is preserved in `local-development-history.md`. Product rules are in PROJECT.md;
-delivery and caveats are in BACKLOG.md.
+active tasks are in BACKLOG.md; completed delivery/caveats are in `backlog-completed.md`.
 
 ## Before starting
 
@@ -117,6 +117,24 @@ docker compose --env-file "$ENV_FILE" -p "$STACK" stop api frontdoor
 Keep DB running for backup. Full non-destructive shutdown uses `down` without `-v`.
 The `/workspaces` API mirror is disposable; recreate API after restoration. Broker
 scratch, channels and native processes are not backup data.
+
+### Sample card canvas
+
+After rebuilding the frontend with your existing stack/env as described above,
+sign in, select a project and choose **Canvas** beside Planning and editing / Final
+review. Its three tabs show predefined sample trees, not actual directories or tasks.
+Drag a card's header; its body text remains selectable. Background/middle-mouse drag
+or scrolling pans, pinch zooms, and **− / + / Fit view** controls adjust the view.
+Focus the canvas and hold Space to pan over cards. Select a card from the selector,
+then use movement buttons or focus the move group and press arrow keys.
+
+Each project/board retains its positions, selection and zoom during navigation in
+this page session. Refresh resets all samples. Canvas navigation preserves existing
+draft/task/chat state; the existing save/discard rules still apply to project changes.
+There is no card/connection editing, Markdown/directory loading or persistent canvas
+save yet. Focused tests/build/source review passed; manually check pointer/trackpad
+feel, text selection and narrow-screen rendering. No real application stack was
+started or upgraded by the canvas implementation.
 
 ## Private backup
 

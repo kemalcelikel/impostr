@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
 
 @theme {
   --color-canvas: #0a100c;
@@ -32,6 +33,21 @@ body {
 ::selection {
   color: #0a100c;
   background: #8ee2aa;
+}
+
+.card-canvas {
+  --xy-background-color: var(--color-canvas);
+  --xy-edge-stroke: var(--color-accent);
+  --xy-handle-background-color: var(--color-accent);
+  --xy-handle-border-color: var(--color-surface);
+}
+
+.card-canvas .react-flow__node .canvas-text {
+  user-select: text;
+}
+
+.card-canvas .react-flow__handle {
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

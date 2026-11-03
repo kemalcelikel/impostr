@@ -2,8 +2,9 @@
 
 This is the full backlog as it stood before simplification, including uncommitted
 owner decisions, failed attempts, approvals, fingerprints and delivery evidence.
-It is a historical reference, **not an executable queue**. Current task states,
-acceptance and next steps are in [BACKLOG.md](../BACKLOG.md); current operating
+It is a historical reference, **not an executable queue**. Active task states,
+acceptance and next steps are in [BACKLOG.md](../BACKLOG.md); later completed task
+records are in [backlog-completed.md](backlog-completed.md). Current operating
 limits are in [AGENTS.md](../AGENTS.md). Superseded instructions below do not
 override those files. Preserve this record rather than updating its old statuses.
 
