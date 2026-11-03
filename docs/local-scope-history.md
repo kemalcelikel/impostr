@@ -32,6 +32,12 @@ and pinned OpenCode source confirmed a native file-input route. Azure lists
 supplies extracted text plus page images. OpenCode 1.18.34 attaches PDFs natively.
 This is documented support, not a live test of the owner's deployment.
 
+Source provenance retained from the earlier PROJECT.md (checked 2026-10-13):
+[Azure Responses PDF input](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses#file-input),
+[Azure model catalog](https://ai.azure.com/catalog/models/gpt-6.1-sol), and
+[OpenCode 1.18.34 PDF Read support](https://github.com/anomalyco/opencode/blob/v1.18.34/packages/opencode/src/tool/read.ts).
+The checked OpenCode release is historical evidence, not a current version pin.
+
 The new target is private original upload → explicit OpenCode PDF attachment → existing
 trusted host model relay → Azure Responses. Local qpdf/pdftotext, structural parsing,
 inner parser sandbox, extraction jobs/retries and text-coverage preview are retired by

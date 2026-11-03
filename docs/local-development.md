@@ -10,7 +10,7 @@ app-role ownership succeeded; the automated full constraint comparison remains
 unresolved. No more testing or comparison refinements were done for this handoff.
 
 History is preserved in `local-development-history.md`. Product rules are in PROJECT.md;
-delivery and caveats are in BACKLOG.md.
+active tasks are in BACKLOG.md; completed delivery/caveats are in `backlog-completed.md`.
 
 ## Before starting
 

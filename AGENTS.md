@@ -2,136 +2,76 @@
 
 ## Read first
 
-- Product/domain rules: PROJECT.md. Scope, dependencies, budgets and outcomes: BACKLOG.md.
-- Setup and operator instructions: docs/local-development.md. Old decisions/checkpoints:
-  docs/agent-history.md and existing history documents; these are not active assignments.
-- Keep this guide short. Product behavior belongs in PROJECT.md; task evidence belongs
-  in BACKLOG.md, not another repeated handoff or mandatory verification checklist.
+- Product, architecture and domain rules: `PROJECT.md`.
+- Active scope, task state and dependencies: `BACKLOG.md`.
+- Completed task specifications and outcomes: `docs/backlog-completed.md`.
+- Setup, Compose, chat and backup/restore: `docs/local-development.md`.
+- Earlier decisions and verification constraints: `docs/agent-history.md` and the
+  existing history documents. Historical checkpoints are not active assignments.
 
-## Current work
-
-Owner approved the card-canvas prototype on 2026-10-26 (IMP-028/029). Interactive
-coordination only; implement the PROJECT.md canvas contract with focused web checks.
-This new scope does not reopen old PDF/provider/restore verification or start a runner.
-The canvas began on `development` at merge `547e0e5` (GitHub PR #1). At the owner's
-request, its unchanged uncommitted work moved to `feature/canvas`, based on that merge;
-`development` remains unchanged. The earlier feature/impostr-v1 batch below remains
-delivery history, not a branch to switch back to. Leave this slice uncommitted unless
-the owner requests commits; the owner has now requested the local canvas commit.
-Canvas implementation and focused checks are delivered together on `feature/canvas`;
-IMP-028/029 are `[x]` under owner-manual rendered acceptance. BACKLOG.md preserves the
-earlier uncommitted checkpoint. Do not reimplement or start a runner.
-
-Native backend is delivered in `a966d77`, composer/fixture cleanup in `34dbcb0`,
-extractor retirement in `d05233f`, and private backup/fresh-target restore in `756a3c8`.
-Owner explicitly stopped tests, verification and comparator refinements and will
-manually accept the application. Preserve residual work/history; do not restart the runner.
-
-The implementation queue through IMP-011 is complete under owner-deferred acceptance.
-Automated full restore-constraint comparison remains unresolved—not passed. Do not
-start another check/review loop, activate deferred/live scope or discard attempt history.
-Setup/backup/restore: docs/local-development.md; BACKLOG.md owns caveats and outcomes.
-Keep Bubblewrap; no Podman/sbx migration.
-OpenCode has no exact version or executable-hash admission lock; retain fixed-path safe
-availability, observational digest, other runtime pins and actual compatibility checks.
-Original PDFs use native OpenCode/Azure input, not local parsing/OCR/text preview.
-Real-provider acceptance is owner-deferred, not passed or an immediate execution gate.
+PROJECT.md contains current product contracts; this file contains operating conventions
+and verified commands. Neither is a changelog. Update existing sections when behavior
+changes; do not append dated notes, task histories, commit references, attempt counts
+or delivery reports. Keep outcomes with their task; archive completed task blocks
+intact in `docs/backlog-completed.md`, without summaries in the active backlog.
+Completed prerequisites are satisfied; omit them from active dependency declarations.
+Keep superseded decisions in the existing history documents, not duplicate handoffs.
 
 ## Keep execution simple
 
-- Reuse existing code, upstream SDK behavior and fixtures. Choose the smallest adequate
-  change; no new parser, diagnostic framework, service or compatibility layer for a small bug.
-- Check the changed behavior and realistic failures. Reuse unchanged valid evidence;
-  no coverage targets, exhaustive matrices or mandatory whole-suite runs per edit.
-- Owner defers remaining browser/full-app walkthroughs to manual testing after
-  implementation. Do not launch more browser suites, create test-placement/permission
-  work, or block delivery solely on that deferred evidence. Never label it passed.
-- Final owner instruction also stops additional restore verification/comparator work.
-  Package the existing implementation; report its unresolved comparison honestly.
-- Review substantial/security/data-sensitive changes independently; re-review only the
-  affected repair. Concrete important defects block, optional polish/coverage does not.
-- Ordinary formatting, focused tests and a distinct in-scope repair need no extra owner
-  approval. A fix request authorizes local recovery commits with a finite new allocation;
-  preserve used attempts. Stop for exhausted scope, missing essential capability or an
-  action outside these limits—not for another paperwork or review-only pass.
-- Use one coordinator per checkout. On owner runner launch, `overnight` takes coordination
-  and delegates implementation; interactive execution ends. Continue dependency-eligible
-  approved work after verified local commits, through IMP-011, unless an actual blocker
-  stops it. Do not reopen deferred items or run the later live test to drain the queue.
+- Reuse existing code and dependencies; choose the smallest adequate change.
+- Coordinator owns planning documents, task state, Git and Docker operations;
+  delegate application implementation. Use one coordinator per checkout.
+- Check changed behavior and realistic risks. Reuse valid evidence; no coverage targets,
+  exhaustive matrices or mandatory whole-suite runs for every edit.
+- Independently review substantial/security/data-sensitive changes. Concrete important
+  defects block delivery; optional polish does not.
+- Respect deferred browser/provider/restore acceptance in task records and the runbook. Do not
+  claim it passed, reopen stopped verification or launch a runner unless requested.
+- Ordinary formatting and focused checks need no extra approval. Preserve repair
+  attempts; stop on exhausted scope or an essential tool denial, without bypasses.
+- Finish with what changed, what was checked and what remains, usually five bullets or fewer.
 
 ## Verified commands
 
-Run from the repository root. These are tools, not mandatory gates for every task.
-Application setup, Compose/check commands and the human-only connection are documented
-in docs/local-development.md; agents must not use its real-credential/operator modes.
+From the repository root, when relevant:
 
-| Purpose | Command | Scope |
-|---|---|---|
-| Backlog syntax/status | `python3 -B scripts/backlog.py list-all BACKLOG.md` | Root parser is the app compatibility oracle. |
-| Queue eligibility | `python3 -B scripts/backlog.py count-eligible BACKLOG.md` | Dependencies must be locally committed `[x]`. |
-| Focused native helper tests | `/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp025_*.py'` | Changed PDF helper behavior; not a real-provider test. |
-| Native candidate preflight | `/usr/bin/python3 -I -B scripts/imp025_verify.py --preflight` | Coordinator; anchored to verified native delivery. New task profiles follow actual committed inputs; full modes need fresh fingerprint/review. |
-| Whitespace | `git diff --check` | Use focused paths if unrelated work is dirty. |
-| Owner runner launch | `RUNNER_USE_SBX=0 ./run-tonight.sh` | Owner only, from this checkout on feature/impostr-v1. |
+- Backlog parsing: `python3 -B scripts/backlog.py list-all BACKLOG.md`
+- Queue eligibility: `python3 -B scripts/backlog.py count-eligible BACKLOG.md`
+- Whitespace: `git diff --check` (focus paths when unrelated work is dirty).
+- Native helper tests: `/usr/bin/python3 -B -m unittest discover -s scripts -p 'test_imp025_*.py'`
 
-The root helper takes one dependency-eligible item per session and rechecks after it.
-Its timeout/exit0 alone does not prove delivery. Use the root helper/parser, not the
-nested toolkit's sprint defaults. No generally available automatic browser test login.
+Use the root backlog parser/helper, not the nested toolkit's sprint defaults.
+Native candidate/fixture checks retain their exact-input and cleanup requirements.
 
-Canvas checks were verified in the existing `web/Dockerfile` **checks** target,
-Node22.17.0/npm10.9.2, inside `/web`: `npm run build` and
+Web checks use the existing `web/Dockerfile` **checks** target with pinned
+Node22.17.0/npm10.9.2. Inside `/web`: `npm run build` and
 `npm run test -- src/canvasState.test.ts src/CardCanvas.test.tsx src/ProjectWorkspace.test.tsx`.
-Changed-file ESLint/Prettier also passed. These are not host Node commands or a reason
-to launch deferred browser/provider/restore checks. Docker remains coordinator-only.
+Use existing ESLint/Prettier for changed files. Do not use incompatible host Node24/npm11.
 
 ## Code and environment conventions
 
-- API: api/ (Python/FastAPI/SQLAlchemy/Alembic); UI: web/ (Vite/React/TypeScript/Tailwind).
+- API: `api/` (Python/FastAPI/SQLAlchemy/Alembic); UI: `web/` (Vite/React/TypeScript/Tailwind).
   Pin dependencies in existing manifests/locks; do not hand-edit generated lockfiles.
   Use forward migrations; preserve originals, approvals, revisions and template provenance.
-- The approved canvas permits adding only its app dependency `@xyflow/react` and
-  generating the npm lock with the existing pinned Node/npm container. Coordinator
-  owns Docker operations; developers edit source only. Do not use the incompatible
-  host Node24/npm11, weaken engine-strict, install tooling/skills or expose Docker to
-  implementation agents. This is not an exception for host/provider configuration.
-- Starter inputs are overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example. Never restore
-  deleted root examples or rewrite immutable starters to repair current behavior.
-  /workspaces is a disposable API mirror, not an agent workspace or authority.
-- Same-PC loopback only. Use owned synthetic DB/accounts/files for verification, never
-  owner's files, reusable logins, private live data, provider auth/config or host env values.
-  Only reviewed human-run connection code may obtain real credentials. No installs,
-  network provisioning, deployment, host auth copies or unsafe host execution fallback.
-- Preserve UID/GID, namespaces, read-only runtime/discovery masks, bounded files/transport,
-  project/session authorization, credential separation and deletion fencing. Personal
-  text-chat aggregate quota work stays cancelled; do not revive it as a prerequisite.
-- Docker is coordinator-only, never exposed to product workers or implementation agents.
-  Stop on an essential tool denial; no alternate path/transport/tool to bypass it.
-- Candidate execution uses reviewed exact input bytes, fresh fingerprint and owned cleanup.
-  UI review uses normal generated Member sign-in; keep the exact approved synthetic
-  /tmp/opencode/impostr-review-handoff UID/GID1000 mode0775 exception, accepting group
-  observation/tampering only there. Other path/owner/no-symlink/credential checks remain.
-  Shared Playwright is not OS-confined; never use its incidental host/Docker access.
-  Do not grant developer access to privileged handoff data or transmit denied contents.
+- Generate npm locks in the pinned container; do not weaken engine-strict or install
+  tooling/skills without authorization. Docker is not exposed to implementation agents.
+- Starter inputs are `overnight-agent/{PROJECT,AGENTS,BACKLOG}.md.example`; keep them
+  immutable. `/workspaces` is a disposable API mirror, not the agent workspace.
+- Preserve the application's authorization, data and worker-isolation contracts in
+  PROJECT.md. Shared Playwright is not OS-confined; do not use its incidental host access.
 
 ## Git and task state
 
-The earlier **single-branch batch**, not sprint mode, used feature/impostr-v1 based on
-published origin/v1 and is now merged in development. For the current canvas request,
-work on the owner-selected `feature/canvas` branch. The owner authorized the verified
-canvas delivery commit only; no push or further branch change is authorized.
-Inspect status, assigned diff and recent history; preserve dirty
-work. Flags follow Git subcommands, e.g. `git diff --no-ext-diff --no-textconv` and
-`git log --no-ext-diff --no-textconv --oneline -10`. No developer Git writes/branch commands.
-
-Coordinator may make verified local task/recovery commits, staging only intended files
-or hunks. `[x]` means verified and committed here, not merged. Subagents do not commit or
-change task state. `[ ]` approved ready; `[~]` claimed; `[!]` blocked; `[-]` draft/deferred.
-Do not reset another run's claim or requeue an unrelated blocker. Approved bounded
-unfinished work may checkpoint `[~]` for the root helper to resume within remaining limits;
-repeated failure without a new hypothesis, missing capability or exhaustion stays `[!]`.
-
-No current push/PR permission. No merge, force push, history rewrite, skipped hooks,
-discarding user work or Git initialization for exported projects. Do not commit .env,
-dumps, provider settings, logins/cookies, private artifacts, runner logs or progress.md.
-Keep progress.md as a compact checkpoint and DONE.md as the existing brief batch summary.
-Finish with what changed, what was checked and what remains—usually five bullets or fewer.
+- Work on the owner-selected branch, currently `feature/canvas`; do not use the old
+  batch's branch or sprint fields as instructions to switch.
+- Inspect status, intended diff and recent history before Git writes. Stage only
+  intended files/hunks. Commit, push or change branches only when authorized.
+- Subagents do not write Git or change task state. No merges, force pushes, history
+  rewriting, skipped hooks, discarded user work or Git initialization for exports.
+- Do not commit secrets, dumps, logins/cookies, private artifacts, runner logs or progress.md.
+- Preserve stable task IDs, dependencies, completed work and attempt history. Markers:
+  `[ ]` approved ready; `[~]` claimed; `[!]` blocked; `[-]` draft/deferred;
+  `[x]` verified and locally committed, not necessarily merged or manually accepted.
+- Do not reset another run's claim or requeue unrelated blockers. Keep progress.md and
+  DONE.md as their existing compact checkpoint/summary, not new repeated handoffs.
