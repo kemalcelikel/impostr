@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, apiRequest } from "./api";
 import AttachmentComposer from "./AttachmentComposer";
+import { Badge, Button, Feedback, Field, Input, TabButton } from "./ui/controls";
+import { Icon } from "./ui/Icon";
 import {
   mergeEvents,
   streamChat,
@@ -13,8 +15,6 @@ import {
   type Interaction,
 } from "./chat";
 
-const control =
-  "min-h-11 rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50";
 type Conversation = { id: string; title: string };
 const ignoreMemory: (snapshot: ChatMemory) => void = () => {};
 const needsReceiptRefresh = (turn: ChatTurn) =>
@@ -43,103 +43,103 @@ function InteractionCard({
     onDraft(next);
   }
   return (
-    <div className="grid gap-3 rounded-lg border border-amber-200/30 bg-amber-100/5 p-3">
-      <p className="text-sm font-semibold">
-        {interaction.kind === "permission" ? "Permission required" : "Answer required"}
-      </p>
-      {interaction.kind === "permission" ? (
-        <>
-          <p className="break-words text-sm">{interaction.data.permission}</p>
-          <p className="text-xs text-copy-muted">
-            Only this operation can be allowed once. Unrestricted or always access is not available.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className={control}
-              disabled={busy || !interaction.data.once_allowed}
-              onClick={() => onReply({ reply: "once" })}
-              type="button"
-            >
-              Allow once
-            </button>
-            <button
-              className={control}
-              disabled={busy}
-              onClick={() => onReply({ reply: "reject" })}
-              type="button"
-            >
-              Reject
-            </button>
-          </div>
-        </>
-      ) : (
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onReply({ answers });
-          }}
-        >
-          {interaction.data.questions?.map((question, index) => (
-            <fieldset className="grid min-w-0 gap-2" key={index} disabled={busy}>
-              <legend className="text-sm font-medium">
-                {question.header}: {question.question}
-              </legend>
-              {question.options.map((option) => (
-                <label className="flex min-h-11 items-center gap-2 text-sm" key={option.label}>
-                  <input
-                    type={question.multiple ? "checkbox" : "radio"}
-                    name={`${interaction.id}-${index}`}
-                    checked={answers[index]?.includes(option.label) ?? false}
-                    onChange={(event) =>
-                      update(
-                        index,
-                        question.multiple
-                          ? event.target.checked
-                            ? [...(answers[index] ?? []), option.label]
-                            : (answers[index] ?? []).filter((value) => value !== option.label)
-                          : [option.label],
-                      )
-                    }
-                  />
-                  <span>
-                    {option.label}
-                    <span className="block text-xs text-copy-muted">{option.description}</span>
-                  </span>
-                </label>
-              ))}
-              {question.custom !== false ? (
-                <label className="grid gap-2 text-sm">
-                  Custom answer
-                  <input
-                    className={control}
-                    maxLength={4096}
-                    value={
-                      custom[index] ??
-                      answers[index]?.find(
-                        (value) => !question.options.some((option) => option.label === value),
-                      ) ??
-                      ""
-                    }
-                    onChange={(event) => {
-                      setCustom((current) => ({ ...current, [index]: event.target.value }));
-                      update(index, event.target.value ? [event.target.value] : []);
-                    }}
-                  />
-                </label>
-              ) : null}
-            </fieldset>
-          ))}
-          <button
-            className={control}
-            disabled={busy || answers.length === 0 || answers.some((values) => values.length === 0)}
-            type="submit"
+    <Feedback tone="warning" className="min-w-0">
+      <div className="grid min-w-0 gap-3">
+        <p className="font-semibold">
+          {interaction.kind === "permission" ? "Permission required" : "Answer required"}
+        </p>
+        {interaction.kind === "permission" ? (
+          <>
+            <p className="break-words text-sm">{interaction.data.permission}</p>
+            <p className="text-xs text-copy-muted">
+              Only this operation can be allowed once. Unrestricted or always access is not
+              available.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                disabled={busy || !interaction.data.once_allowed}
+                onClick={() => onReply({ reply: "once" })}
+                type="button"
+              >
+                Allow once
+              </Button>
+              <Button disabled={busy} onClick={() => onReply({ reply: "reject" })} type="button">
+                Reject
+              </Button>
+            </div>
+          </>
+        ) : (
+          <form
+            className="grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onReply({ answers });
+            }}
           >
-            Submit answers
-          </button>
-        </form>
-      )}
-    </div>
+            {interaction.data.questions?.map((question, index) => (
+              <fieldset className="grid min-w-0 gap-2" key={index} disabled={busy}>
+                <legend className="text-sm font-medium">
+                  {question.header}: {question.question}
+                </legend>
+                {question.options.map((option) => (
+                  <label className="flex min-h-11 items-center gap-2 text-sm" key={option.label}>
+                    <input
+                      type={question.multiple ? "checkbox" : "radio"}
+                      name={`${interaction.id}-${index}`}
+                      checked={answers[index]?.includes(option.label) ?? false}
+                      onChange={(event) =>
+                        update(
+                          index,
+                          question.multiple
+                            ? event.target.checked
+                              ? [...(answers[index] ?? []), option.label]
+                              : (answers[index] ?? []).filter((value) => value !== option.label)
+                            : [option.label],
+                        )
+                      }
+                    />
+                    <span>
+                      {option.label}
+                      <span className="block text-xs text-copy-muted">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+                {question.custom !== false ? (
+                  <label className="grid gap-2 text-sm">
+                    Custom answer
+                    <Input
+                      maxLength={4096}
+                      value={
+                        custom[index] ??
+                        answers[index]?.find(
+                          (value) => !question.options.some((option) => option.label === value),
+                        ) ??
+                        ""
+                      }
+                      onChange={(event) => {
+                        setCustom((current) => ({ ...current, [index]: event.target.value }));
+                        update(index, event.target.value ? [event.target.value] : []);
+                      }}
+                    />
+                  </label>
+                ) : null}
+              </fieldset>
+            ))}
+            <Button
+              variant="primary"
+              className="justify-self-start"
+              disabled={
+                busy || answers.length === 0 || answers.some((values) => values.length === 0)
+              }
+              type="submit"
+            >
+              Submit answers
+            </Button>
+          </form>
+        )}
+      </div>
+    </Feedback>
   );
 }
 
@@ -456,334 +456,414 @@ export default function ProjectChat({
 
   if (!authorized)
     return (
-      <section aria-label="Project conversation" className="rounded-xl border border-line p-4">
-        <p role="status">Revalidating chat access. Private history and drafts are hidden.</p>
+      <section aria-label="Project conversation" className="conversation-surface">
+        <header className="workbench-section-heading">
+          <h2>Conversation</h2>
+        </header>
+        <div className="workbench-panel p-4">
+          <Feedback role="status">
+            Revalidating chat access. Private history and drafts are hidden.
+          </Feedback>
+        </div>
       </section>
     );
   return (
-    <section
-      aria-label="Project conversation"
-      className="grid min-w-0 gap-4 rounded-xl border border-line bg-surface p-4"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="font-semibold">Conversations</h4>
-        <button
-          className={control}
-          disabled={busy}
-          onClick={() => void newConversation()}
-          type="button"
+    <section aria-label="Project conversation" className="conversation-surface">
+      <header className="workbench-section-heading">
+        <h2>Conversation</h2>
+        <span
+          className="conversation-connection"
+          data-disconnected={connection.startsWith("Disconnected")}
+          role="status"
         >
-          New conversation
-        </button>
-      </div>
-      <div
-        aria-label="Conversation tabs"
-        role="tablist"
-        className="flex min-w-0 gap-2 overflow-x-auto"
-      >
-        {conversations.map((conversation, index) => (
-          <button
-            aria-selected={selected === conversation.id}
-            aria-controls={`chat-history-${projectId}`}
-            id={`chat-tab-${conversation.id}`}
-            role="tab"
-            tabIndex={selected === conversation.id ? 0 : -1}
-            className={`${control} shrink-0 ${selected === conversation.id ? "border-accent text-accent" : "text-copy-muted"}`}
-            aria-disabled={busy}
-            key={conversation.id}
-            onClick={() => void selectConversation(conversation.id)}
-            onKeyDown={(event) => {
-              if (busy) return;
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-              event.preventDefault();
-              const next =
-                conversations[
-                  event.key === "Home"
-                    ? 0
-                    : event.key === "End"
-                      ? conversations.length - 1
-                      : (index + (event.key === "ArrowRight" ? 1 : -1) + conversations.length) %
-                        conversations.length
-                ];
-              if (next) {
-                document.getElementById(`chat-tab-${next.id}`)?.focus();
-                void selectConversation(next.id);
-              }
-            }}
+          {connection}
+        </span>
+      </header>
+      <div className="workbench-panel conversation-panel">
+        <div className="conversation-thread-bar">
+          <Button
+            className="workbench-quiet conversation-new"
+            variant="ghost"
+            icon="plus"
+            disabled={busy}
+            onClick={() => void newConversation()}
             type="button"
           >
-            {conversation.title}
-          </button>
-        ))}
-      </div>
-      <p className="text-xs text-copy-muted" role="status">
-        {connection}
-        {activeTurn ? ` · ${activeTurn.state}` : ""}
-      </p>
-      {error ? (
-        <div role="alert" className="text-sm text-red-200">
-          {error}
-          <button
-            className={`${control} mt-2`}
-            onClick={() => {
-              setEvents([]);
-              setHistory({ turns: [], interactions: [] });
-              setConnection("Connecting…");
-              setRetry((current) => current + 1);
-            }}
-            type="button"
+            New conversation
+          </Button>
+          <div
+            aria-label="Conversation tabs"
+            role="tablist"
+            className="workbench-tab-strip conversation-tabs"
           >
-            Reconnect chat
-          </button>
+            {conversations.map((conversation, index) => (
+              <TabButton
+                selected={selected === conversation.id}
+                aria-controls={`chat-history-${projectId}`}
+                id={`chat-tab-${conversation.id}`}
+                tabIndex={selected === conversation.id ? 0 : -1}
+                className="workbench-tab shrink-0"
+                aria-disabled={busy}
+                key={conversation.id}
+                onClick={() => void selectConversation(conversation.id)}
+                onKeyDown={(event) => {
+                  if (busy) return;
+                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                  event.preventDefault();
+                  const next =
+                    conversations[
+                      event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? conversations.length - 1
+                          : (index + (event.key === "ArrowRight" ? 1 : -1) + conversations.length) %
+                            conversations.length
+                    ];
+                  if (next) {
+                    document.getElementById(`chat-tab-${next.id}`)?.focus();
+                    void selectConversation(next.id);
+                  }
+                }}
+                type="button"
+              >
+                {conversation.title}
+              </TabButton>
+            ))}
+          </div>
         </div>
-      ) : null}
-      <div
-        role="tabpanel"
-        aria-labelledby={selected ? `chat-tab-${selected}` : undefined}
-        id={`chat-history-${projectId}`}
-        tabIndex={0}
-        ref={historyRegion}
-        onScroll={() => {
-          const region = historyRegion.current;
-          if (region)
-            follow.current = region.scrollHeight - region.scrollTop - region.clientHeight < 80;
-        }}
-        className="grid max-h-[32rem] min-h-40 min-w-0 content-start gap-4 overflow-y-auto rounded-lg bg-canvas p-3 focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        {!history.turns.length ? (
-          <p className="text-sm text-copy-muted">
-            Plan with tech-lead. Saved drafts are shared across conversations; histories are
-            separate.
-          </p>
+        {activeTurn ? (
+          <div className="conversation-turn-status" role="status">
+            <Badge tone="info">{activeTurn.state}</Badge>
+          </div>
         ) : null}
-        {history.turns.map((turn) => {
-          const turnEvents = events.filter((event) => event.turn_id === turn.id);
-          const proposals = turnEvents.flatMap((event) =>
-            event.type === "proposals" && Array.isArray(event.data.items)
-              ? (event.data.items as { id: string; state: string; filename: string }[])
-              : [],
-          );
-          return (
-            <article className="grid min-w-0 gap-3" key={turn.id}>
-              <p className="text-xs font-semibold text-copy-muted">You</p>
-              <p className="break-words whitespace-pre-wrap text-sm">{turn.prompt}</p>
-              {turn.references?.length ? (
-                <ul
-                  aria-label={`PDF references for ${turn.prompt || "this turn"}`}
-                  className="grid gap-1"
-                >
-                  {turn.references.map((reference) => (
-                    <li className="break-all text-xs text-copy-muted" key={reference.attachment_id}>
-                      {reference.filename} ·{" "}
-                      {reference.original_size === null
-                        ? "size unavailable"
-                        : `${reference.original_size.toLocaleString()} bytes`}{" "}
-                      {reference.kind === "native-original-v1"
-                        ? reference.availability === "unavailable"
-                          ? "historical reference; original unavailable"
-                          : "original PDF reference"
-                        : "historical extracted-text reference; original-file submission is not established"}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {turn.submission ? (
-                <p className="text-xs text-copy-muted" role="status">
-                  {turn.submission.status === "sent"
-                    ? turn.submission.reference_kind === "native-original-v1"
-                      ? "Original PDF sent to Azure (submission confirmed; provider acceptance is not implied)"
-                      : turn.submission.reference_kind === "legacy-text-v1" ||
-                          turn.submission.reference_kind === "mixed"
-                        ? "Sent (historical extracted-text or mixed submission; original-file delivery is not established)"
-                        : "Sent (submission confirmed; provider acceptance is not implied)"
-                    : turn.submission.status === "failed-before-send"
-                      ? "Not sent (receipt confirms no model submission)"
-                      : turn.submission.status === "uncertain"
-                        ? `Uncertain${
-                            turn.submission.reconciliation_pending
-                              ? " · checking receipt"
-                              : " · no automatic resubmission"
-                          }`
-                        : "Sending · awaiting submission receipt"}
-                </p>
-              ) : null}
-              <p className="text-xs font-semibold text-accent">tech-lead · {turn.state}</p>
-              <p className="break-words whitespace-pre-wrap text-sm leading-6">
-                {turnEvents
-                  .filter((event) => event.type === "delta")
-                  .map((event) => String(event.data.text ?? ""))
-                  .join("")}
-              </p>
-              {turnEvents
-                .filter((event) => event.type === "failed" || event.type === "interrupted")
-                .map((event) => (
-                  <p className="text-sm text-amber-100" key={event.id}>
-                    Turn {event.type}: {String(event.data.reason ?? "connection interrupted")}. No
-                    automatic resubmission.
-                  </p>
-                ))}
-              {history.interactions
-                .filter(
-                  (interaction) =>
-                    interaction.turn_id === turn.id &&
-                    interaction.state === "pending" &&
-                    turn.state === "running",
-                )
-                .map((interaction) => (
-                  <InteractionCard
-                    key={interaction.id}
-                    interaction={interaction}
-                    initialAnswers={draftsMemory.answers[interaction.id]}
-                    busy={busy}
-                    onReply={(answer) => void reply(interaction, answer)}
-                    onDraft={(answers) =>
-                      setDraftsMemory((current) => ({
-                        ...current,
-                        answers: { ...current.answers, [interaction.id]: answers },
-                      }))
-                    }
-                  />
-                ))}
-              {history.interactions
-                .filter(
-                  (interaction) =>
-                    interaction.turn_id === turn.id && interaction.state === "replying",
-                )
-                .map((interaction) => (
-                  <p className="text-xs text-copy-muted" key={interaction.id}>
-                    Reply queued · waiting for worker acknowledgement
-                  </p>
-                ))}
-              {history.interactions
-                .filter(
-                  (interaction) =>
-                    interaction.turn_id === turn.id &&
-                    !["pending", "replying"].includes(interaction.state),
-                )
-                .map((interaction) => (
-                  <p className="text-xs text-copy-muted" key={interaction.id}>
-                    {interaction.kind === "question"
-                      ? interaction.data.questions?.map((question) => question.question).join(" · ")
-                      : "Permission request"}{" "}
-                    · {interaction.state}
-                  </p>
-                ))}
-              {proposals.map((proposal) => (
-                <div className="rounded-lg border border-line p-3 text-sm" key={proposal.id}>
-                  <p>
-                    {proposal.filename} ·{" "}
-                    {proposal.state === "conflict"
-                      ? "Conflict — your saved edit was kept"
-                      : "Agent draft imported — human approval required"}
-                  </p>
-                  <button
-                    className={`${control} mt-2`}
-                    onClick={() => onCompareProposal(proposal.filename, proposal.id)}
-                    type="button"
-                  >
-                    {proposal.state === "conflict"
-                      ? "Compare conflict proposal"
-                      : "Review agent draft"}
-                  </button>
-                </div>
-              ))}
-            </article>
-          );
-        })}
-      </div>
-      {selected ? (
-        <AttachmentComposer
-          key={`${projectId}:${selected}`}
-          projectId={projectId}
-          conversationId={selected}
-          csrfToken={csrfToken}
-          selected={selectedAttachments}
-          disabled={busy}
-          onSelectionChange={(attachments: ChatAttachment[]) => {
-            setDraftsMemory((snapshot) => ({
-              ...snapshot,
-              drafts: {
-                ...snapshot.drafts,
-                [selected]: {
-                  text: snapshot.drafts[selected]?.text ?? "",
-                  requestId: crypto.randomUUID(),
-                  attachments,
-                },
-              },
-            }));
-          }}
-          onSessionExpired={onSessionExpired}
-        />
-      ) : null}
-      <form className="grid gap-2" onSubmit={(event) => void send(event)}>
-        <label htmlFor={`chat-composer-${projectId}`} className="text-sm font-medium">
-          Message tech-lead
-        </label>
-        <textarea
-          id={`chat-composer-${projectId}`}
-          className={`${control} min-h-28 resize-y`}
-          maxLength={32768}
-          value={draft}
-          disabled={!selected}
-          onChange={(event) => {
-            const text = event.target.value;
-            const requestId = crypto.randomUUID();
-            setDraftsMemory((current) => ({
-              ...current,
-              drafts: {
-                ...current.drafts,
-                [selected]: {
-                  text,
-                  requestId,
-                  attachments: current.drafts[selected]?.attachments ?? [],
-                },
-              },
-            }));
-          }}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              (event.ctrlKey || event.metaKey) &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={`${control} border-accent bg-accent/10 text-accent`}
-            disabled={!selected || busy || Boolean(activeTurn) || !draft.trim()}
-            type="submit"
-          >
-            {busy ? "Sending…" : "Send"}
-          </button>
-          {activeTurn ? (
-            <button
-              className={control}
-              disabled={busy || activeTurn.state === "cancelling"}
-              onClick={() =>
-                void mutate<ChatTurn>(`${root}/${selected}/turns/${activeTurn.id}/abort`).then(
-                  (value) => {
-                    if (value)
-                      setHistory((current) => ({
-                        ...current,
-                        turns: current.turns.map((turn) => (turn.id === value.id ? value : turn)),
-                      }));
-                  },
-                )
-              }
+        {error ? (
+          <Feedback className="conversation-feedback" role="alert" tone="danger">
+            <p className="break-words">{error}</p>
+            <Button
+              icon="refresh"
+              className="mt-2"
+              onClick={() => {
+                setEvents([]);
+                setHistory({ turns: [], interactions: [] });
+                setConnection("Connecting…");
+                setRetry((current) => current + 1);
+              }}
               type="button"
             >
-              Stop
-            </button>
+              Reconnect chat
+            </Button>
+          </Feedback>
+        ) : null}
+        <div
+          role="tabpanel"
+          aria-labelledby={selected ? `chat-tab-${selected}` : undefined}
+          aria-label={selected ? undefined : "Conversation history"}
+          id={`chat-history-${projectId}`}
+          tabIndex={0}
+          ref={historyRegion}
+          onScroll={() => {
+            const region = historyRegion.current;
+            if (region)
+              follow.current = region.scrollHeight - region.scrollTop - region.clientHeight < 80;
+          }}
+          className="conversation-history"
+        >
+          {!history.turns.length ? (
+            <p className="text-sm text-copy-muted">
+              Plan with tech-lead. Saved drafts are shared across conversations; histories are
+              separate.
+            </p>
           ) : null}
-          <span className="text-xs text-copy-muted">
-            Ctrl / ⌘ + Enter sends. Enter adds a line.
-          </span>
+          {history.turns.map((turn) => {
+            const turnEvents = events.filter((event) => event.turn_id === turn.id);
+            const proposals = turnEvents.flatMap((event) =>
+              event.type === "proposals" && Array.isArray(event.data.items)
+                ? (event.data.items as { id: string; state: string; filename: string }[])
+                : [],
+            );
+            return (
+              <article className="chat-turn" key={turn.id}>
+                <div className="chat-human-message">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-copy-muted">
+                    <Icon name="user" />
+                    You
+                  </p>
+                  <p className="break-words whitespace-pre-wrap text-sm leading-6">{turn.prompt}</p>
+                  {turn.references?.length ? (
+                    <ul
+                      aria-label={`PDF references for ${turn.prompt || "this turn"}`}
+                      className="grid gap-1"
+                    >
+                      {turn.references.map((reference) => (
+                        <li
+                          className="flex items-start gap-2 text-xs leading-5 text-copy-muted"
+                          key={reference.attachment_id}
+                        >
+                          <Icon name="document" />
+                          <span className="min-w-0 break-words">
+                            {reference.filename} ·{" "}
+                            {reference.original_size === null
+                              ? "size unavailable"
+                              : `${reference.original_size.toLocaleString()} bytes`}{" "}
+                            {reference.kind === "native-original-v1"
+                              ? reference.availability === "unavailable"
+                                ? "historical reference; original unavailable"
+                                : "original PDF reference"
+                              : "historical extracted-text reference; original-file submission is not established"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+                {turn.submission ? (
+                  <Feedback
+                    className="text-xs"
+                    role="status"
+                    tone={
+                      turn.submission.status === "failed-before-send"
+                        ? "danger"
+                        : turn.submission.status === "uncertain"
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {turn.submission.status === "sent"
+                      ? turn.submission.reference_kind === "native-original-v1"
+                        ? "Original PDF sent to Azure (submission confirmed; provider acceptance is not implied)"
+                        : turn.submission.reference_kind === "legacy-text-v1" ||
+                            turn.submission.reference_kind === "mixed"
+                          ? "Sent (historical extracted-text or mixed submission; original-file delivery is not established)"
+                          : "Sent (submission confirmed; provider acceptance is not implied)"
+                      : turn.submission.status === "failed-before-send"
+                        ? "Not sent (receipt confirms no model submission)"
+                        : turn.submission.status === "uncertain"
+                          ? `Uncertain${
+                              turn.submission.reconciliation_pending
+                                ? " · checking receipt"
+                                : " · no automatic resubmission"
+                            }`
+                          : "Sending · awaiting submission receipt"}
+                  </Feedback>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="flex items-center gap-2 text-xs font-semibold">
+                    <Icon name="chat" />
+                    tech-lead
+                  </p>
+                  <Badge
+                    tone={
+                      turn.state === "failed"
+                        ? "danger"
+                        : ["interrupted", "cancelled", "cancelling"].includes(turn.state)
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {turn.state}
+                  </Badge>
+                </div>
+                <p className="break-words whitespace-pre-wrap text-sm leading-6">
+                  {turnEvents
+                    .filter((event) => event.type === "delta")
+                    .map((event) => String(event.data.text ?? ""))
+                    .join("")}
+                </p>
+                {turnEvents
+                  .filter((event) => event.type === "failed" || event.type === "interrupted")
+                  .map((event) => (
+                    <Feedback
+                      role="alert"
+                      tone={event.type === "failed" ? "danger" : "warning"}
+                      key={event.id}
+                    >
+                      Turn {event.type}: {String(event.data.reason ?? "connection interrupted")}. No
+                      automatic resubmission.
+                    </Feedback>
+                  ))}
+                {history.interactions
+                  .filter(
+                    (interaction) =>
+                      interaction.turn_id === turn.id &&
+                      interaction.state === "pending" &&
+                      turn.state === "running",
+                  )
+                  .map((interaction) => (
+                    <InteractionCard
+                      key={interaction.id}
+                      interaction={interaction}
+                      initialAnswers={draftsMemory.answers[interaction.id]}
+                      busy={busy}
+                      onReply={(answer) => void reply(interaction, answer)}
+                      onDraft={(answers) =>
+                        setDraftsMemory((current) => ({
+                          ...current,
+                          answers: { ...current.answers, [interaction.id]: answers },
+                        }))
+                      }
+                    />
+                  ))}
+                {history.interactions
+                  .filter(
+                    (interaction) =>
+                      interaction.turn_id === turn.id && interaction.state === "replying",
+                  )
+                  .map((interaction) => (
+                    <Feedback role="status" className="text-xs" key={interaction.id}>
+                      Reply queued · waiting for worker acknowledgement
+                    </Feedback>
+                  ))}
+                {history.interactions
+                  .filter(
+                    (interaction) =>
+                      interaction.turn_id === turn.id &&
+                      !["pending", "replying"].includes(interaction.state),
+                  )
+                  .map((interaction) => (
+                    <Badge
+                      className="justify-self-start"
+                      tone={interaction.state === "replied" ? "neutral" : "warning"}
+                      key={interaction.id}
+                    >
+                      {interaction.kind === "question"
+                        ? interaction.data.questions
+                            ?.map((question) => question.question)
+                            .join(" · ")
+                        : "Permission request"}{" "}
+                      · {interaction.state}
+                    </Badge>
+                  ))}
+                {proposals.map((proposal) => (
+                  <Feedback
+                    tone={proposal.state === "conflict" ? "warning" : "info"}
+                    key={proposal.id}
+                  >
+                    <p>
+                      {proposal.filename} ·{" "}
+                      {proposal.state === "conflict"
+                        ? "Conflict — your saved edit was kept"
+                        : "Agent draft imported — human approval required"}
+                    </p>
+                    <Button
+                      icon="eye"
+                      className="mt-2"
+                      onClick={() => onCompareProposal(proposal.filename, proposal.id)}
+                      type="button"
+                    >
+                      {proposal.state === "conflict"
+                        ? "Compare conflict proposal"
+                        : "Review agent draft"}
+                    </Button>
+                  </Feedback>
+                ))}
+              </article>
+            );
+          })}
         </div>
-      </form>
+        <form className="conversation-composer" onSubmit={(event) => void send(event)}>
+          <Field id={`chat-composer-${projectId}`} label="Message tech-lead">
+            <textarea
+              id={`chat-composer-${projectId}`}
+              aria-describedby={`chat-composer-${projectId}-shortcut`}
+              className="ui-input conversation-input"
+              maxLength={32768}
+              value={draft}
+              disabled={!selected}
+              onChange={(event) => {
+                const text = event.target.value;
+                const requestId = crypto.randomUUID();
+                setDraftsMemory((current) => ({
+                  ...current,
+                  drafts: {
+                    ...current.drafts,
+                    [selected]: {
+                      text,
+                      requestId,
+                      attachments: current.drafts[selected]?.attachments ?? [],
+                    },
+                  },
+                }));
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  (event.ctrlKey || event.metaKey) &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+          </Field>
+          {selected ? (
+            <AttachmentComposer
+              key={`${projectId}:${selected}`}
+              projectId={projectId}
+              conversationId={selected}
+              csrfToken={csrfToken}
+              selected={selectedAttachments}
+              disabled={busy}
+              onSelectionChange={(attachments: ChatAttachment[]) => {
+                setDraftsMemory((snapshot) => ({
+                  ...snapshot,
+                  drafts: {
+                    ...snapshot.drafts,
+                    [selected]: {
+                      text: snapshot.drafts[selected]?.text ?? "",
+                      requestId: crypto.randomUUID(),
+                      attachments,
+                    },
+                  },
+                }));
+              }}
+              onSessionExpired={onSessionExpired}
+            />
+          ) : null}
+          <div className="conversation-composer-bottom">
+            <Button
+              className="chat-send workbench-quiet"
+              variant="ghost"
+              icon="chevronRight"
+              disabled={!selected || busy || Boolean(activeTurn) || !draft.trim()}
+              type="submit"
+            >
+              {busy ? "Sending…" : "Send"}
+            </Button>
+            {activeTurn ? (
+              <Button
+                icon="close"
+                variant="danger"
+                disabled={busy || activeTurn.state === "cancelling"}
+                onClick={() =>
+                  void mutate<ChatTurn>(`${root}/${selected}/turns/${activeTurn.id}/abort`).then(
+                    (value) => {
+                      if (value)
+                        setHistory((current) => ({
+                          ...current,
+                          turns: current.turns.map((turn) => (turn.id === value.id ? value : turn)),
+                        }));
+                    },
+                  )
+                }
+                type="button"
+              >
+                Stop
+              </Button>
+            ) : null}
+            <span className="chat-composer-shortcut" id={`chat-composer-${projectId}-shortcut`}>
+              Ctrl / ⌘ + Enter sends. Enter adds a line.
+            </span>
+            {activeTurn ? (
+              <p className="w-full text-xs text-copy-muted">
+                {activeTurn.state === "cancelling"
+                  ? "Stop requested · waiting for confirmation."
+                  : "A turn is active. You can draft your next message; sending is available after it ends."}
+              </p>
+            ) : null}
+          </div>
+        </form>
+      </div>
     </section>
   );
 }

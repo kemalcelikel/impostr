@@ -7,7 +7,10 @@ Bubblewrap still confines the planning worker. OpenCode has no exact version/has
 The owner chose manual acceptance after implementation. Browser/full-app and actual
 Azure acceptance are **not passed**. Actual synthetic backup/restore transport and
 app-role ownership succeeded; the automated full constraint comparison remains
-unresolved. No more testing or comparison refinements were done for this handoff.
+unresolved. The earlier handoff's statement that no more testing or comparison
+refinements were done applies to that actual-provider/restore acceptance, not to later
+focused frontend UI checks. Those checks do not qualify real-data, provider, deployment,
+shared-server or restore acceptance.
 
 History is preserved in `local-development-history.md`. Product rules are in PROJECT.md;
 active tasks are in BACKLOG.md; completed delivery/caveats are in `backlog-completed.md`.
@@ -71,6 +74,14 @@ For an existing stack, build and migrate using its existing env/project, then re
 API/frontdoor. Migration0013 removes extraction fields but keeps originals/history;
 do not edit old migrations or wipe the DB to upgrade.
 
+For frontend-only changes, keep the existing project, env file and port, and rebuild
+and recreate only the frontdoor. These commands do not restart API/database services:
+
+```sh
+docker compose --env-file "$ENV_FILE" -p "$STACK" -f compose.yaml build frontdoor
+docker compose --env-file "$ENV_FILE" -p "$STACK" -f compose.yaml up -d --no-deps --force-recreate frontdoor
+```
+
 ## Enable planning chat
 
 The ordinary base stack starts without chat. In a **human's plain terminal**:
@@ -118,11 +129,39 @@ Keep DB running for backup. Full non-destructive shutdown uses `down` without `-
 The `/workspaces` API mirror is disposable; recreate API after restoration. Broker
 scratch, channels and native processes are not backup data.
 
+### Frontend navigation and theme
+
+After rebuilding the frontend with your existing stack/env as described above, sign in
+and open a project from **Projects**. Its named navigation group offers **Planning**
+and **Review & downloads**; **Sample canvas** is a project-scoped **Demo** under Tools.
+There is no separate global Workspace destination. **Account security** is in the
+lower utility area; administrators also have **Accounts**. Project creation is in the
+**New project** disclosure and opens the newly created project.
+
+Planning has **Documents** and **Conversation** work surfaces, alongside each other
+when space permits and selected through a surface switch at compact widths. Project,
+Agent rules and Backlog are document tabs. **Review pair** opens the saved document-pair
+review; the integrated editor toolbar provides **Save**, **Discard** and **History**.
+Final review uses saved-file tabs beside the Approval/downloads surface, with eligibility
+near its actions and additional validation/revision details in a disclosure. **Manage
+PDFs** and PDF limits/privacy details are collapsible near the composer; selected
+references remain visible.
+
+The workspace stays mounted while switching destinations or theme, preserving unsaved
+input and in-flight turns. This is in-page state, not a substitute for saving: project
+changes, sign-out, refresh, or other existing save/discard rules still matter. The theme
+control is available signed in or out. Until you choose light or dark, it follows the
+system preference; an explicit choice is saved in this browser's localStorage under
+`impostr.theme`. It is browser-only, not an account setting. If browser storage is
+unavailable, the current page still honors the choice, but it cannot persist it there.
+Frontend updates do not start or restore the foreground provider connection. If chat
+is disconnected after a PC restart, use the existing human-only connection steps above.
+
 ### Sample card canvas
 
 After rebuilding the frontend with your existing stack/env as described above,
-sign in, select a project and choose **Canvas** beside Planning and editing / Final
-review. Its three tabs show predefined sample trees, not actual directories or tasks.
+sign in, open a project and choose **Sample canvas** under Tools. Its three tabs show predefined
+sample boards, not actual directories or tasks.
 Drag a card's header; its body text remains selectable. Background/middle-mouse drag
 or scrolling pans, pinch zooms, and **− / + / Fit view** controls adjust the view.
 Focus the canvas and hold Space to pan over cards. Select a card from the selector,
@@ -132,9 +171,11 @@ Each project/board retains its positions, selection and zoom during navigation i
 this page session. Refresh resets all samples. Canvas navigation preserves existing
 draft/task/chat state; the existing save/discard rules still apply to project changes.
 There is no card/connection editing, Markdown/directory loading or persistent canvas
-save yet. Focused tests/build/source review passed; manually check pointer/trackpad
-feel, text selection and narrow-screen rendering. No real application stack was
-started or upgraded by the canvas implementation.
+save. Canvas layouts are project-scoped in-page memory and reset on refresh; they do not
+represent or modify live task data. Focused frontend checks and synthetic preview
+spotchecks covered the new UI, not real-data writes, provider acceptance, full Azure
+operation, restore qualification or shared-server behavior. Use the actual Compose
+project, env file and port; frontend-only updates follow the commands above.
 
 ## Private backup
 

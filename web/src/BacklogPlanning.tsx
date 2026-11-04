@@ -8,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { ApiError, apiRequest } from "./api";
+import { Badge, Button, Disclosure, Input } from "./ui/controls";
 
 type BacklogTaskStatus = "-" | " " | "~" | "x" | "!";
 type EditableTaskStatus = "-" | " ";
@@ -917,33 +918,35 @@ export default function BacklogPlanning({
   const statusSummary = taskDocument ? (
     <section
       aria-labelledby={`${generatedId}-status-title`}
-      className="grid min-w-0 gap-3 rounded-xl border border-line bg-surface p-4"
+      className="backlog-status"
       role="region"
     >
       <div>
-        <h5 className="font-semibold text-foreground" id={`${generatedId}-status-title`}>
+        <h5 className="text-sm font-semibold text-foreground" id={`${generatedId}-status-title`}>
           Saved task status
         </h5>
-        <p className="mt-1 text-xs leading-5 text-copy-muted">
-          Read-only summary for BACKLOG.md revision {taskDocument.revision_number}. Ready means the
-          owner marked a task as ready; it does not mean this backlog revision is approved.
-          Dependency-eligible means every prerequisite is complete.
-        </p>
+        <Disclosure className="backlog-rules" title="Readiness & runner rules">
+          <p className="text-xs leading-5 text-copy-muted">
+            Read-only summary for BACKLOG.md revision {taskDocument.revision_number}. Ready means
+            the owner marked a task as ready; it does not mean this backlog revision is approved.
+            Dependency-eligible means every prerequisite is complete.
+          </p>
+        </Disclosure>
       </div>
       {summary ? (
-        <div aria-live="polite" className="grid min-w-0 gap-3">
-          <dl className="grid min-w-0 gap-3 sm:grid-cols-3">
-            <div className="min-w-0 rounded-lg border border-line bg-canvas px-3 py-2">
+        <div aria-live="polite" className="grid min-w-0 gap-2">
+          <dl className="flex min-w-0 flex-wrap gap-x-5 gap-y-2">
+            <div className="min-w-0">
               <dt className="text-xs text-copy-muted">Ready</dt>
-              <dd className="mt-1 font-mono text-lg text-foreground">{summary.ready_count}</dd>
+              <dd className="font-medium text-foreground">{summary.ready_count}</dd>
             </div>
-            <div className="min-w-0 rounded-lg border border-line bg-canvas px-3 py-2">
+            <div className="min-w-0">
               <dt className="text-xs text-copy-muted">Dependency-eligible</dt>
-              <dd className="mt-1 font-mono text-lg text-accent">{summary.eligible_count}</dd>
+              <dd className="font-medium text-accent">{summary.eligible_count}</dd>
             </div>
-            <div className="min-w-0 rounded-lg border border-line bg-canvas px-3 py-2">
+            <div className="min-w-0">
               <dt className="text-xs text-copy-muted">Waiting on prerequisites</dt>
-              <dd className="mt-1 font-mono text-lg text-foreground">{summary.waiting_count}</dd>
+              <dd className="font-medium text-foreground">{summary.waiting_count}</dd>
             </div>
           </dl>
           <p className="text-xs text-copy-muted">
@@ -958,40 +961,28 @@ export default function BacklogPlanning({
     </section>
   ) : null;
 
-  const railClassName = [
-    "min-w-0 rounded-xl border border-line bg-canvas p-3",
-    panel === "markdown" ? "hidden" : panel === "tasks" ? "block" : "hidden lg:block",
-    railOpen ? "" : "lg:hidden",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const detailClassName =
-    panel === "markdown" ? "hidden" : panel === "detail" ? "block" : "hidden lg:block";
   return (
-    <section
-      aria-labelledby={`${generatedId}-heading`}
-      className="mt-5 grid min-w-0 gap-4 rounded-xl border border-line bg-canvas p-4 sm:p-5"
-    >
-      <header className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+    <section aria-labelledby={`${generatedId}-heading`} className="backlog-planning">
+      <header className="backlog-heading">
         <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
-            Human backlog planning
-          </p>
-          <h4 className="mt-1 text-lg font-semibold" id={`${generatedId}-heading`}>
+          <h4 className="text-sm font-semibold" id={`${generatedId}-heading`}>
             Task list and details
           </h4>
-          <p className="mt-1 text-sm leading-6 text-copy-muted">
-            Task edits save a new BACKLOG.md revision and refresh this list and Markdown together.
-            Runner-owned outcomes remain read-only.
-          </p>
+          <Disclosure className="backlog-rules" title="Task edit rules">
+            <p className="text-xs leading-5 text-copy-muted">
+              Task edits save a new BACKLOG.md revision and refresh this list and Markdown together.
+              Runner-owned outcomes remain read-only.
+            </p>
+          </Disclosure>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
             aria-controls={taskListId}
             aria-expanded={railOpen}
-            className={`${
-              panel === "markdown" ? "hidden" : "hidden lg:inline-flex"
-            } min-h-11 rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`}
+            className="backlog-wide-control workbench-quiet"
+            variant="ghost"
+            hidden={panel === "markdown"}
+            icon="folder"
             onClick={() => {
               if (!railOpen) focusRailAfterOpenRef.current = true;
               setRailOpen((open) => !open);
@@ -999,39 +990,29 @@ export default function BacklogPlanning({
             type="button"
           >
             {railOpen ? "Hide task list" : "Show task list"}
-          </button>
-          <button
-            aria-controls={markdownId}
-            aria-pressed={panel === "markdown"}
-            className="hidden min-h-11 rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent lg:inline-flex"
-            onClick={() => changePanel(panel === "markdown" ? "detail" : "markdown")}
-            type="button"
-          >
-            {panel === "markdown" ? "Return to task details" : "Edit Markdown"}
-          </button>
-          <button
-            className="min-h-11 rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+          </Button>
+          <Button
+            className="workbench-quiet"
+            variant="ghost"
+            icon="refresh"
             disabled={loadState === "loading" || taskBusy}
             onClick={retryTasks}
             type="button"
           >
             {loadState === "loading" ? "Loading tasks…" : "Reload task list"}
-          </button>
+          </Button>
         </div>
       </header>
 
-      <div aria-label="Backlog view" className="grid grid-cols-3 gap-2 lg:hidden" role="group">
+      <div aria-label="Backlog view" className="backlog-view-choice" role="group">
         {taskPanels.map((item) => (
-          <button
+          <Button
             aria-controls={
               item === "tasks" ? taskListId : item === "detail" ? taskDetailId : markdownId
             }
             aria-pressed={panel === item}
-            className={`min-h-11 min-w-0 rounded-lg border px-2 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-              panel === item
-                ? "border-accent/60 bg-accent/10 text-accent"
-                : "border-line bg-surface-raised text-copy-muted hover:border-accent/40 hover:text-foreground"
-            }`}
+            className="workbench-surface-choice"
+            variant="ghost"
             id={`${generatedId}-view-${item}`}
             key={item}
             onClick={() => changePanel(item)}
@@ -1039,7 +1020,7 @@ export default function BacklogPlanning({
             type="button"
           >
             {item === "tasks" ? "Tasks" : item === "detail" ? "Detail" : "Markdown"}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -1062,13 +1043,9 @@ export default function BacklogPlanning({
           <p className="text-sm leading-6 text-red-100">
             Saved task details are unavailable: {loadError}
           </p>
-          <button
-            className="min-h-11 justify-self-start rounded-lg border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={retryTasks}
-            type="button"
-          >
+          <Button className="justify-self-start" icon="refresh" onClick={retryTasks} type="button">
             Retry loading tasks
-          </button>
+          </Button>
         </div>
       ) : loadState === "loading" ? (
         <p aria-live="polite" className="text-sm text-copy-muted" role="status">
@@ -1092,9 +1069,10 @@ export default function BacklogPlanning({
         </p>
       ) : null}
       {conflict && panel !== "detail" ? (
-        <button
+        <Button
           aria-controls={taskDetailId}
-          className="min-h-11 justify-self-start rounded-lg border border-amber-100/40 px-3 py-2 text-sm font-medium text-amber-50 hover:bg-amber-100/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="justify-self-start"
+          icon="alert"
           onClick={() => {
             focusDetailAfterSelectionRef.current = true;
             onPanelChange("detail");
@@ -1102,7 +1080,7 @@ export default function BacklogPlanning({
           type="button"
         >
           Review task conflict details
-        </button>
+        </Button>
       ) : null}
       {taskDocument && !snapshotMatchesMarkdown ? (
         <p
@@ -1117,15 +1095,14 @@ export default function BacklogPlanning({
       ) : null}
 
       <div
-        className={`grid min-w-0 gap-4 ${
-          railOpen
-            ? "lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)]"
-            : "lg:grid-cols-1"
-        }`}
+        className="backlog-layout"
+        data-panel={panel}
+        data-rail={railOpen ? "open" : "closed"}
+        hidden={panel === "markdown"}
       >
         <aside
           aria-labelledby={`${generatedId}-task-list-title`}
-          className={railClassName}
+          className="backlog-rail min-w-0"
           id={taskListId}
         >
           <div className="flex min-w-0 items-baseline justify-between gap-2 border-b border-line pb-3">
@@ -1137,7 +1114,7 @@ export default function BacklogPlanning({
             >
               Saved tasks
             </h5>
-            <span className="shrink-0 font-mono text-[10px] text-copy-muted">
+            <span className="shrink-0 text-xs text-copy-muted">
               {taskDocument?.tasks.length ?? 0}
             </span>
           </div>
@@ -1158,18 +1135,12 @@ export default function BacklogPlanning({
                   task.status === "-" ? " " : task.status === " " ? "-" : null;
                 const taskIsEditable = nextStatus !== null;
                 return (
-                  <li
-                    className="grid min-w-0 gap-2 rounded-lg border border-line bg-surface-raised p-2"
-                    key={task.id}
-                  >
-                    <button
+                  <li className="grid min-w-0 gap-2 border-b border-line py-2" key={task.id}>
+                    <Button
                       aria-label={`Select task ${task.id}: ${task.title}`}
                       aria-pressed={isSelected}
-                      className={`min-h-11 min-w-0 rounded-md px-2 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                        isSelected
-                          ? "bg-accent/10 text-foreground"
-                          : "text-foreground hover:bg-canvas"
-                      }`}
+                      className="backlog-task-row"
+                      variant="ghost"
                       disabled={
                         !snapshotMatchesMarkdown || formIsDirty || conflict !== null || taskBusy
                       }
@@ -1177,22 +1148,16 @@ export default function BacklogPlanning({
                       ref={isSelected ? selectedTaskButtonRef : undefined}
                       type="button"
                     >
-                      <span className="block break-all font-mono text-[10px] text-copy-muted">
+                      <span className="block break-all font-mono text-xs text-copy-muted">
                         {task.id}
                       </span>
                       <span className="mt-1 block break-words text-sm font-medium">
                         {task.title}
                       </span>
-                      <span
-                        className={`mt-2 inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium ${
-                          taskIsEditable
-                            ? "border-accent/25 bg-accent/5 text-accent"
-                            : "border-line text-copy-muted"
-                        }`}
-                      >
+                      <Badge className="mt-2" tone={taskIsEditable ? "info" : "neutral"}>
                         <span aria-hidden="true">[{task.status}]</span>
                         {taskStatusLabel(task.status)}
-                      </span>
+                      </Badge>
                       {task.status === " " && !task.eligible ? (
                         <span className="mt-2 block break-words text-xs leading-5 text-amber-100">
                           Waiting on {task.waiting_on.join(", ") || "prerequisites"}
@@ -1202,18 +1167,20 @@ export default function BacklogPlanning({
                           Dependency-eligible
                         </span>
                       ) : null}
-                    </button>
+                    </Button>
                     {taskIsEditable ? (
-                      <button
+                      <Button
                         aria-controls={taskDetailId}
                         aria-label={`Mark ${task.id} ${nextStatus === " " ? "ready" : "draft"}`}
-                        className="min-h-11 w-full rounded-md border border-line px-2 py-2 text-xs font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
+                        className="workbench-quiet"
+                        variant="ghost"
+                        icon={nextStatus === " " ? "check" : "document"}
                         disabled={!taskActionsAllowed || taskPending}
                         onClick={() => toggleTaskStatus(task)}
                         type="button"
                       >
                         Mark {nextStatus === " " ? "ready" : "draft"}
-                      </button>
+                      </Button>
                     ) : (
                       <p className="px-2 pb-1 text-xs leading-5 text-copy-muted">
                         Runner-managed status · read-only
@@ -1228,14 +1195,12 @@ export default function BacklogPlanning({
 
         <section
           aria-labelledby={`${generatedId}-task-detail-title`}
-          className={`min-w-0 rounded-xl border border-line bg-surface p-4 sm:p-5 ${detailClassName}`}
+          className="backlog-detail min-w-0"
           id={taskDetailId}
         >
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-4">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-copy-muted">
-                Task details
-              </p>
+              <p className="text-sm text-copy-muted">Task details</p>
               <h5
                 className="mt-1 break-words text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 id={`${generatedId}-task-detail-title`}
@@ -1246,9 +1211,9 @@ export default function BacklogPlanning({
               </h5>
             </div>
             {detailTask ? (
-              <span className="rounded-full border border-line bg-canvas px-3 py-1.5 font-mono text-[10px] text-copy-muted">
+              <Badge>
                 [{detailTask.status}] {taskStatusLabel(detailTask.status)}
-              </span>
+              </Badge>
             ) : null}
           </div>
 
@@ -1326,14 +1291,15 @@ export default function BacklogPlanning({
                   {conflict.state === "error" ? (
                     <>
                       <p className="text-sm leading-6 text-red-100">{conflict.message}</p>
-                      <button
-                        className="min-h-11 justify-self-start rounded-lg border border-line px-3 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      <Button
+                        className="justify-self-start"
+                        icon="refresh"
                         disabled={taskBusy}
                         onClick={retryConflict}
                         type="button"
                       >
                         {taskBusy ? "Reloading latest task…" : "Retry latest task"}
-                      </button>
+                      </Button>
                     </>
                   ) : null}
                   {conflict.latestTask ? (
@@ -1374,8 +1340,8 @@ export default function BacklogPlanning({
                   ) : null}
                   {conflict.state === "ready" ? (
                     <div className="flex min-w-0 flex-wrap items-center gap-3">
-                      <button
-                        className="min-h-11 rounded-lg border border-amber-100/40 px-3 py-2 text-sm font-medium text-amber-50 hover:bg-amber-100/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                      <Button
+                        icon="history"
                         disabled={
                           !conflict.latestTask ||
                           !isEditableStatus(conflict.latestTask.status) ||
@@ -1387,7 +1353,7 @@ export default function BacklogPlanning({
                         type="button"
                       >
                         Reapply attempted task edits to revision {taskDocument?.revision_number}
-                      </button>
+                      </Button>
                       {conflict.reapplyRevision === taskDocument?.revision_number ? (
                         <span aria-live="polite" className="text-sm text-accent" role="status">
                           Reapply confirmed for revision {conflict.reapplyRevision}. Save to create
@@ -1408,8 +1374,9 @@ export default function BacklogPlanning({
                     >
                       Task title
                     </label>
-                    <input
-                      className="min-h-11 w-full min-w-0 rounded-lg border border-input-border bg-canvas px-3 py-2 text-sm text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    <Input
+                      aria-invalid={Boolean(titleError)}
+                      aria-describedby={titleError ? `${generatedId}-task-title-error` : undefined}
                       disabled={!taskActionsAllowed || !snapshotMatchesMarkdown}
                       id={`${generatedId}-task-title`}
                       maxLength={256}
@@ -1418,7 +1385,11 @@ export default function BacklogPlanning({
                       value={displayedDraft.title}
                     />
                     {titleError ? (
-                      <p className="text-sm text-red-200" role="alert">
+                      <p
+                        className="text-sm text-danger"
+                        id={`${generatedId}-task-title-error`}
+                        role="alert"
+                      >
                         {titleError}
                       </p>
                     ) : null}
@@ -1431,14 +1402,17 @@ export default function BacklogPlanning({
                     >
                       Dependencies · task IDs, comma-separated
                     </label>
-                    <input
-                      className="min-h-11 w-full min-w-0 rounded-lg border border-input-border bg-canvas px-3 py-2 text-sm text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    <Input
+                      aria-describedby={`${generatedId}-task-dependencies-hint`}
                       disabled={!taskActionsAllowed || !snapshotMatchesMarkdown}
                       id={`${generatedId}-task-dependencies`}
                       onChange={(event) => updateDraftField("dependencies", event.target.value)}
                       value={displayedDraft.dependencies}
                     />
-                    <p className="text-xs leading-5 text-copy-muted">
+                    <p
+                      className="text-xs leading-5 text-copy-muted"
+                      id={`${generatedId}-task-dependencies-hint`}
+                    >
                       Leave blank for no dependencies. IDs must already exist; the saved backlog
                       validator rejects unknown tasks and dependency cycles.
                     </p>
@@ -1452,7 +1426,7 @@ export default function BacklogPlanning({
                       Task body · Markdown
                     </label>
                     <textarea
-                      className="min-h-56 w-full min-w-0 resize-y rounded-lg border border-input-border bg-canvas px-3 py-3 font-mono text-xs leading-6 text-foreground outline-none focus-visible:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                      className="ui-input min-h-56 resize-y py-3 font-mono text-sm leading-6"
                       disabled={!taskActionsAllowed || !snapshotMatchesMarkdown}
                       id={`${generatedId}-task-body`}
                       onChange={(event) => updateDraftField("body", event.target.value)}
@@ -1480,25 +1454,20 @@ export default function BacklogPlanning({
                     </p>
                   ) : null}
                   <div className="flex min-w-0 flex-wrap items-center gap-3 border-t border-line pt-4">
-                    <button
-                      className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={!canSaveDraft}
-                      type="submit"
-                    >
+                    <Button icon="save" variant="primary" disabled={!canSaveDraft} type="submit">
                       {taskBusy
                         ? "Saving task…"
                         : conflict?.reapplyRevision === taskDocument?.revision_number
                           ? "Save re-applied task edits"
                           : "Save task changes"}
-                    </button>
-                    <button
-                      className="min-h-11 rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    </Button>
+                    <Button
                       disabled={!taskPending || taskBusy}
                       onClick={discardTaskChanges}
                       type="button"
                     >
                       Discard task edits
-                    </button>
+                    </Button>
                     {taskPending ? (
                       <span className="text-xs text-copy-muted">
                         Unsaved task text · save or discard before switching projects or drafts

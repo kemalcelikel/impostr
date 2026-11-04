@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProjectChat from "./ProjectChat";
 import {
@@ -106,6 +106,10 @@ beforeEach(() => {
     if (path.includes("/attachments")) return json({ attachments: uploaded, next_after: null });
     if (path.includes("/events?")) return json({ events: replay, after: replay.at(-1)?.id ?? 0 });
     if (path.endsWith("/reply")) return json({ state: replyState }, 202);
+    if (path.endsWith("/abort")) {
+      turnState = "cancelling";
+      return json({ id: "turn", prompt: "Original plan", state: turnState }, 202);
+    }
     if (path.endsWith("/turns")) {
       if (successfulTurn) return json(successfulTurn, 202);
       return json(turnFailure ?? { detail: "Another project turn is active" }, 409);
@@ -156,7 +160,99 @@ function mount(memory: ChatMemory = { drafts: {}, answers: {} }, expired = vi.fn
     compareProposal,
   };
 }
+async function openPdfInventory() {
+  const summary = (await screen.findByText(/^Manage PDFs ·/)).closest("summary")!;
+  const disclosure = summary.closest("details")!;
+  if (!disclosure.open) fireEvent.click(summary);
+  expect(disclosure).toHaveAttribute("open");
+  return disclosure;
+}
 describe("project chat", () => {
+  it("keeps composer text, ordered references and request identity when PDF disclosures toggle", async () => {
+    turnState = "completed";
+    uploaded = [
+      {
+        id: "pdf-1",
+        filename: "guide.pdf",
+        status: "stored",
+        original_size: 1234,
+        original_sha256: "a".repeat(64),
+        native_available: true,
+      },
+    ];
+    const view = mount({
+      drafts: {
+        first: {
+          text: "Unsent question",
+          requestId: "draft-request",
+          attachments: [
+            {
+              attachment_id: "pdf-1",
+              expected_sha256: "a".repeat(64),
+              reference_kind: "native-original-v1",
+              filename: "guide.pdf",
+              original_size: 1234,
+            },
+          ],
+        },
+      },
+      answers: {},
+    });
+    const composer = await screen.findByRole("textbox", { name: "Message tech-lead" });
+    const conversation = screen.getByRole("region", { name: "Project conversation" });
+    expect(within(conversation).getByRole("heading", { name: "Conversation" })).toBeInTheDocument();
+    const panel = composer.closest(".conversation-panel");
+    const history = within(conversation).getByRole("tabpanel");
+    expect(panel).toContainElement(history);
+    expect(history).toHaveClass("conversation-history");
+    expect(composer.closest(".conversation-composer")).not.toBeNull();
+    expect(history.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+      0,
+    );
+    await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    fireEvent.change(composer, { target: { value: "Keep this unsent question" } });
+    const draft = view.memoryChanged.mock.calls.at(-1)![0].drafts.first;
+    const inventorySummary = screen.getByText(/^Manage PDFs ·/).closest("summary")!;
+    const costSummary = screen.getByText("PDF limits, cost & privacy").closest("summary")!;
+    expect(inventorySummary.closest("details")).not.toHaveAttribute("open");
+    expect(costSummary.closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText(/Uploading alone does not send/)).toBeVisible();
+    expect(screen.getByRole("group", { name: "Ordered selected PDFs" })).toBeVisible();
+
+    await openPdfInventory();
+    const upload = screen.getByLabelText("Upload a PDF");
+    expect(upload).toBeVisible();
+    expect(upload).toHaveAttribute("accept", "application/pdf,.pdf");
+    expect(upload).toHaveAccessibleDescription(
+      "PDF only. Upload first, then select it for a future send.",
+    );
+    expect(screen.getByRole("button", { name: "Move guide.pdf earlier" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move guide.pdf later" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove guide.pdf from selection" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(costSummary);
+    expect(costSummary.closest("details")).toHaveAttribute("open");
+    expect(screen.getByText(/including retained earlier-turn references/)).toBeVisible();
+    expect(screen.getByText(/parsing or comprehension/)).toBeVisible();
+    fireEvent.click(inventorySummary);
+    fireEvent.click(costSummary);
+    expect(inventorySummary.closest("details")).not.toHaveAttribute("open");
+    expect(costSummary.closest("details")).not.toHaveAttribute("open");
+    expect(composer).toHaveValue("Keep this unsent question");
+    expect(composer).toHaveAccessibleDescription("Ctrl / ⌘ + Enter sends. Enter adds a line.");
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(view.memoryChanged.mock.calls.at(-1)![0].drafts.first).toEqual(draft);
+    expect(
+      fetchMock.mock.calls.some(
+        ([path, options]) =>
+          String(path).endsWith("/turns") ||
+          options?.method === "POST" ||
+          options?.method === "DELETE",
+      ),
+    ).toBe(false);
+  });
   it("appends replay without stealing composer focus, keeps separate drafts and aborts old streams", async () => {
     mount();
     const composer = await screen.findByLabelText("Message tech-lead");
@@ -181,8 +277,10 @@ describe("project chat", () => {
     expect(screen.getByText("Incremental answer")).toBeInTheDocument();
     expect(fetchMock.mock.calls).toHaveLength(callsBeforeDelta);
     const old = streamSignal;
-    fireEvent.click(screen.getByRole("tab", { name: "Second" }));
+    fireEvent.keyDown(screen.getByRole("tab", { name: "First" }), { key: "ArrowRight" });
     await waitFor(() => expect(old.aborted).toBe(true));
+    expect(screen.getByRole("tab", { name: "Second" })).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: "Second" })).toBeInTheDocument();
     expect(composer).toHaveValue("");
     fireEvent.change(composer, { target: { value: "Second unsent" } });
     fireEvent.click(screen.getByRole("tab", { name: "First" }));
@@ -196,7 +294,36 @@ describe("project chat", () => {
     const call = fetchMock.mock.calls.find(([path]) => String(path).endsWith("/reply"));
     expect(call).toBeDefined();
     expect(JSON.parse(call![1].body).answer).toEqual({ answers: [["Yes"]] });
+    expect(call![0]).toBe(
+      "/api/projects/project/chat/first/turns/turn/interactions/question/reply",
+    );
     expect(screen.queryByRole("button", { name: /always/i })).not.toBeInTheDocument();
+  });
+  it("keeps the next draft through confirmed stopping without submitting it", async () => {
+    mount();
+    const composer = await screen.findByLabelText("Message tech-lead");
+    await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    fireEvent.change(composer, { target: { value: "Next message" } });
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(
+      await screen.findByText("Stop requested · waiting for confirmation."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeDisabled();
+    expect(composer).toHaveValue("Next message");
+    const stop = fetchMock.mock.calls.find(([path]) => String(path).endsWith("/abort"));
+    expect(stop![0]).toBe("/api/projects/project/chat/first/turns/turn/abort");
+    expect(stop![1].method).toBe("POST");
+    turnState = "cancelled";
+    act(() => deliver({ id: 4, turn_id: "turn", sequence: 4, type: "cancelled", data: {} }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(composer).toHaveValue("Next message");
+    expect(fetchMock.mock.calls.filter(([path]) => String(path).endsWith("/turns"))).toHaveLength(
+      0,
+    );
   });
   it("retains failed-send text and idempotency key for explicit retry", async () => {
     turnState = "completed";
@@ -207,6 +334,7 @@ describe("project chat", () => {
     const key = memoryChanged.mock.calls.at(-1)![0].drafts.first.requestId;
     fireEvent.keyDown(composer, { key: "Enter", ctrlKey: true });
     expect(await screen.findByText(/Another project turn is active/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Another project turn is active");
     expect(composer).toHaveValue("Keep this");
     expect(memoryChanged.mock.calls.at(-1)![0].drafts.first.requestId).toBe(key);
     expect(memory).toEqual({ drafts: {}, answers: {} });
@@ -244,6 +372,7 @@ describe("project chat", () => {
     mount();
     const composer = await screen.findByLabelText("Message tech-lead");
     await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    await openPdfInventory();
     fireEvent.change(screen.getByLabelText("Upload a PDF"), {
       target: { files: [new File(["%PDF-1.7"], "guide.pdf", { type: "application/pdf" })] },
     });
@@ -303,6 +432,7 @@ describe("project chat", () => {
     mount();
     const composer = await screen.findByLabelText("Message tech-lead");
     await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    await openPdfInventory();
     fireEvent.change(screen.getByLabelText("Upload a PDF"), {
       target: { files: [new File(["%PDF-1.7"], "guide.pdf", { type: "application/pdf" })] },
     });
@@ -327,6 +457,7 @@ describe("project chat", () => {
     mount();
     await screen.findByLabelText("Message tech-lead");
     await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    await openPdfInventory();
     fireEvent.change(screen.getByLabelText("Upload a PDF"), {
       target: { files: [new File(["%PDF-1.7"], "guide.pdf", { type: "application/pdf" })] },
     });
@@ -347,6 +478,7 @@ describe("project chat", () => {
     mount();
     await screen.findByLabelText("Message tech-lead");
     await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    await openPdfInventory();
     fireEvent.change(screen.getByLabelText("Upload a PDF"), {
       target: { files: [new File(["%PDF-1.7"], "guide.pdf", { type: "application/pdf" })] },
     });
@@ -376,6 +508,88 @@ describe("project chat", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Ordered selected PDFs")).not.toBeInTheDocument();
   });
+  it("distinguishes a pending upload from a stored, unselected PDF without sending", async () => {
+    turnState = "completed";
+    let finishUpload!: (response: Response) => void;
+    const pendingUpload = new Promise<Response>((resolve) => {
+      finishUpload = resolve;
+    });
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((path: string, options?: RequestInit) =>
+      path.includes("/attachments/upload") ? pendingUpload : original(path, options),
+    );
+    mount();
+    const composer = await screen.findByLabelText("Message tech-lead");
+    await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    fireEvent.change(composer, { target: { value: "Still drafting" } });
+    await openPdfInventory();
+    const upload = screen.getByLabelText("Upload a PDF");
+    fireEvent.change(upload, {
+      target: { files: [new File(["%PDF-1.7"], "guide.pdf", { type: "application/pdf" })] },
+    });
+    expect(await screen.findByText("Uploading PDF… not yet stored or sent.")).toBeInTheDocument();
+    expect(upload).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Attach guide.pdf" })).not.toBeInTheDocument();
+    await act(async () =>
+      finishUpload(
+        json(
+          {
+            id: "pdf-1",
+            filename: "guide.pdf",
+            status: "stored",
+            original_size: 1234,
+            original_sha256: "a".repeat(64),
+            native_available: true,
+          },
+          201,
+        ),
+      ),
+    );
+    expect(await screen.findByText("guide.pdf stored. It has not been sent.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Attach guide.pdf" })).toBeEnabled();
+    expect(screen.getByText("0 selected · not yet sent")).toBeInTheDocument();
+    expect(composer).toHaveValue("Still drafting");
+    expect(fetchMock.mock.calls.filter(([path]) => String(path).endsWith("/turns"))).toHaveLength(
+      0,
+    );
+  });
+  it("keeps a selected PDF and shows the stop-before-delete recovery on conflict", async () => {
+    uploaded = [
+      {
+        id: "pdf-1",
+        filename: "guide.pdf",
+        status: "stored",
+        original_size: 1234,
+        original_sha256: "a".repeat(64),
+        native_available: true,
+      },
+    ];
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((path: string, options?: RequestInit) =>
+      path.includes("/attachments/") && options?.method === "DELETE"
+        ? Promise.resolve(json({ detail: "PDF is used by an active turn." }, 409))
+        : original(path, options),
+    );
+    mount();
+    await waitFor(() => expect(vi.mocked(streamChat)).toHaveBeenCalled());
+    await openPdfInventory();
+    fireEvent.click(screen.getByRole("button", { name: "Attach guide.pdf" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete guide.pdf" }));
+    const warning = await screen.findByRole("alert");
+    expect(warning).toHaveTextContent(
+      "PDF is used by an active turn. The PDF is still stored; stop the turn before deleting it.",
+    );
+    expect(screen.getByRole("group", { name: "Ordered selected PDFs" })).toHaveTextContent(
+      "guide.pdf",
+    );
+    expect(
+      screen.getByRole("button", { name: "Remove guide.pdf from ordered send selection" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    expect(fetchMock.mock.calls.filter(([path]) => String(path).endsWith("/turns"))).toHaveLength(
+      0,
+    );
+  });
   it("expires the session rather than exposing a denied attachment response", async () => {
     turnState = "completed";
     const expired = vi.fn();
@@ -386,7 +600,7 @@ describe("project chat", () => {
         ? Promise.resolve(json({ detail: "Sign in" }, 401))
         : original(path, options),
     );
-    await screen.findByLabelText("Upload a PDF");
+    await openPdfInventory();
     fireEvent.change(screen.getByLabelText("Upload a PDF"), {
       target: { files: [new File(["%PDF-1.7"], "private.pdf", { type: "application/pdf" })] },
     });
@@ -396,12 +610,20 @@ describe("project chat", () => {
   });
   it.each([
     {
+      submission: { status: "queued", reconciliation_pending: false } as const,
+      label: "Sending · awaiting submission receipt",
+    },
+    {
       submission: { status: "failed-before-send", reconciliation_pending: false } as const,
       label: "Not sent (receipt confirms no model submission)",
     },
     {
       submission: { status: "uncertain", reconciliation_pending: true } as const,
       label: "Uncertain · checking receipt",
+    },
+    {
+      submission: { status: "uncertain", reconciliation_pending: false } as const,
+      label: "Uncertain · no automatic resubmission",
     },
   ])(
     "uses the recorded $submission.status receipt and marks unavailable history",
@@ -419,6 +641,9 @@ describe("project chat", () => {
       ];
       mount();
       expect(await screen.findByText(label)).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("tabpanel", { name: "First" })).getByRole("status"),
+      ).toHaveTextContent(label);
       expect(
         screen.getByText("deleted.pdf · 123 bytes historical reference; original unavailable"),
       ).toBeInTheDocument();
@@ -527,6 +752,9 @@ describe("project chat", () => {
     });
     expect(await screen.findByText("Saved partial output")).toBeInTheDocument();
     expect(screen.getByText(/Turn failed: native_session_error/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tabpanel", { name: "First" })).getByRole("alert"),
+    ).toHaveTextContent("Turn failed: native_session_error. No automatic resubmission.");
   });
   it("uses the real permission history shape and preserves a replied retry acknowledgement", async () => {
     interactions = [

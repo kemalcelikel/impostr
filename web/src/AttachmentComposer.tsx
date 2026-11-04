@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiRequest } from "./api";
 import type { ChatAttachment } from "./chat";
+import { Badge, Button, Disclosure, Feedback, Field, IconButton, Input } from "./ui/controls";
+import { Icon } from "./ui/Icon";
 
 type AttachmentRecord = {
   id: string;
@@ -12,8 +14,6 @@ type AttachmentRecord = {
 };
 type AttachmentPage = { attachments: AttachmentRecord[]; next_after: string | null };
 
-const button =
-  "min-h-11 rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50";
 function formatSize(size: number): string {
   return `${size.toLocaleString()} bytes`;
 }
@@ -47,6 +47,7 @@ export default function AttachmentComposer({
   const [attachments, setAttachments] = useState<AttachmentRecord[]>([]);
   const [nextAfter, setNextAfter] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activity, setActivity] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -135,6 +136,7 @@ export default function AttachmentComposer({
     const controller = scope.current;
     if (!file || !controller || disabled || busy) return;
     setBusy(true);
+    setActivity("Uploading PDF… not yet stored or sent.");
     setError("");
     setNotice("");
     try {
@@ -225,6 +227,7 @@ export default function AttachmentComposer({
     const controller = scope.current;
     if (!controller || busy || disabled) return;
     setBusy(true);
+    setActivity("Deleting stored PDF…");
     setError("");
     setNotice("");
     try {
@@ -253,79 +256,68 @@ export default function AttachmentComposer({
   }
 
   return (
-    <section aria-labelledby={`pdf-heading-${conversationId}`} className="grid min-w-0 gap-3">
-      <h3 className="font-medium" id={`pdf-heading-${conversationId}`}>
-        Original PDF references
-      </h3>
-      <p className="text-xs leading-5 text-copy-muted">
-        Selected original PDFs are sent to Azure with the request. The model may receive extracted
-        text and page images; page images add context and cost. Removing a selection only affects a
-        future send. Deleting a stored PDF cannot retract an earlier send. Each PDF and the combined
-        original files included in a request, including retained earlier-turn references, must be
-        under 50,000,000 bytes; page images and model context limits still apply.
+    <section aria-labelledby={`pdf-heading-${conversationId}`} className="attachment-composer">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="sr-only" id={`pdf-heading-${conversationId}`}>
+          <Icon name="attachment" />
+          Original PDF references
+        </h3>
+        <Badge tone={selected.length ? "info" : "neutral"}>
+          {selected.length} selected · not yet sent
+        </Badge>
+      </div>
+      <p className="attachment-consequence" id={`pdf-summary-${conversationId}`}>
+        Selected PDFs go to Azure with Send. Uploading alone does not send them; prior sends cannot
+        be retracted.
       </p>
-      <label className="grid gap-2 text-sm">
-        Upload a PDF
-        <input
-          accept="application/pdf,.pdf"
-          aria-label="Upload a PDF"
-          className="min-h-11 min-w-0 rounded-lg border border-line bg-canvas px-3 py-2 text-sm file:mr-3 file:min-h-8 file:rounded-md file:border-0 file:bg-surface-raised file:px-3 file:text-sm"
-          disabled={disabled || busy}
-          onChange={(event) => {
-            const input = event.currentTarget;
-            void upload(input.files?.[0]);
-            input.value = "";
-          }}
-          type="file"
-        />
-      </label>
       {selected.length ? (
         <div aria-label="Ordered selected PDFs" className="grid min-w-0 gap-2" role="group">
-          <p className="text-sm font-medium">Selected, in send order</p>
-          <ol className="grid min-w-0 gap-2">
+          <p className="sr-only">Selected, in send order</p>
+          <ol className="attachment-selection">
             {selected.map((item, index) => {
               const available = attachments.some(
                 (record) => record.id === item.attachment_id && record.native_available,
               );
               return (
-                <li
-                  className="grid min-w-0 gap-2 rounded-lg border border-accent/30 bg-accent/5 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                  key={item.attachment_id}
-                >
-                  <div className="min-w-0">
-                    <p className="break-all text-sm font-medium">{item.filename}</p>
-                    <p className="text-xs text-copy-muted">
-                      {formatSize(item.original_size)} · {available ? "Selected" : "Unavailable"}
-                    </p>
+                <li className="attachment-selected-row" key={item.attachment_id}>
+                  <div className="flex min-w-0 items-start gap-2">
+                    <span className="min-w-5 text-center text-xs leading-6 text-copy-muted">
+                      {index + 1}.
+                    </span>
+                    <Icon name="document" className="mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <p className="attachment-filename">{item.filename}</p>
+                      <Badge className="mt-1" tone={available ? "info" : "warning"}>
+                        {formatSize(item.original_size)} · {available ? "Selected" : "Unavailable"}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      aria-label={`Move ${item.filename} earlier`}
-                      className={button}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <IconButton
+                      label={`Move ${item.filename} earlier`}
+                      className="workbench-quiet"
+                      icon="chevronLeft"
                       disabled={disabled || busy || index === 0}
                       onClick={() => move(index, -1)}
                       type="button"
-                    >
-                      Earlier
-                    </button>
-                    <button
-                      aria-label={`Move ${item.filename} later`}
-                      className={button}
+                    />
+                    <IconButton
+                      label={`Move ${item.filename} later`}
+                      className="workbench-quiet"
+                      icon="chevronRight"
                       disabled={disabled || busy || index === selected.length - 1}
                       onClick={() => move(index, 1)}
                       type="button"
-                    >
-                      Later
-                    </button>
-                    <button
-                      aria-label={`Remove ${item.filename} from ordered send selection`}
-                      className={button}
+                    />
+                    <IconButton
+                      label={`Remove ${item.filename} from ordered send selection`}
+                      className="workbench-quiet"
+                      icon="close"
+                      variant="ghost"
                       disabled={disabled || busy}
                       onClick={() => removeSelection(item.attachment_id)}
                       type="button"
-                    >
-                      Remove selection
-                    </button>
+                    />
                   </div>
                 </li>
               );
@@ -333,116 +325,169 @@ export default function AttachmentComposer({
           </ol>
         </div>
       ) : null}
-      <div className="grid min-w-0 gap-2">
-        <p className="text-sm font-medium">Stored PDFs</p>
-        {attachments.length ? (
-          <ul className="grid min-w-0 gap-2">
-            {attachments.map((item) => {
-              const isSelected = selected.some((entry) => entry.attachment_id === item.id);
-              const usable = item.status === "stored" && item.native_available;
-              return (
-                <li
-                  className="grid min-w-0 gap-2 rounded-lg border border-line bg-canvas p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                  key={item.id}
-                >
-                  <div className="min-w-0">
-                    <p className="break-all text-sm font-medium">{item.filename}</p>
-                    <p className="text-xs text-copy-muted">
-                      {item.original_size === null
-                        ? "Original unavailable"
-                        : formatSize(item.original_size)}
-                      {" · "}
-                      {isSelected ? "Selected" : usable ? "Stored" : "Unavailable for new sends"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      aria-label={`Download ${item.filename}`}
-                      className={button}
-                      disabled={busy}
-                      onClick={() => void download(item)}
-                      type="button"
-                    >
-                      Download
-                    </button>
-                    <button
-                      aria-label={`${isSelected ? "Remove" : "Attach"} ${item.filename}${
-                        isSelected ? " from selection" : ""
-                      }`}
-                      className={button}
-                      disabled={
-                        disabled ||
-                        busy ||
-                        (!usable && !isSelected) ||
-                        (!isSelected && selected.length >= 32)
-                      }
-                      onClick={() => toggle(item)}
-                      type="button"
-                    >
-                      {isSelected ? "Remove selection" : "Attach"}
-                    </button>
-                    <button
-                      aria-label={`Delete ${item.filename}`}
-                      className={button}
-                      disabled={disabled || busy}
-                      onClick={() => void remove(item)}
-                      type="button"
-                    >
-                      Delete stored PDF
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-sm text-copy-muted">
-            {loading ? "Loading stored PDFs…" : "No stored PDFs in this conversation."}
-          </p>
-        )}
-        {nextAfter ? (
-          <button
-            className={`${button} justify-self-start`}
-            disabled={busy}
-            onClick={() => {
-              const controller = scope.current;
-              if (!controller || !nextAfter) return;
-              setBusy(true);
-              void loadPage(nextAfter, controller.signal)
-                .catch((failure: unknown) => {
-                  if (controller.signal.aborted) return;
-                  if (failure instanceof ApiError && failure.status === 401) {
-                    onSessionExpired();
-                  } else {
-                    setError(
-                      failure instanceof Error ? failure.message : "PDF list is unavailable.",
-                    );
-                  }
-                })
-                .finally(() => {
-                  if (!controller.signal.aborted) setBusy(false);
-                });
-            }}
-            type="button"
+      <Disclosure
+        className="attachment-disclosure"
+        title={`Manage PDFs · ${loading ? "loading" : `${attachments.length} stored${nextAfter ? "+" : ""}`}`}
+        icon="attachment"
+      >
+        <div className="grid min-w-0 gap-3 pt-3">
+          <Field
+            id={`pdf-upload-${conversationId}`}
+            label="Upload a PDF"
+            hint="PDF only. Upload first, then select it for a future send."
           >
-            Load more PDFs
-          </button>
-        ) : null}
-      </div>
+            <Input
+              id={`pdf-upload-${conversationId}`}
+              accept="application/pdf,.pdf"
+              aria-describedby={`pdf-upload-${conversationId}-hint`}
+              className="file:mr-3 file:min-h-8 file:rounded-sm file:border-0 file:bg-surface-raised file:px-3 file:text-sm file:font-medium file:text-foreground"
+              disabled={disabled || busy}
+              onChange={(event) => {
+                const input = event.currentTarget;
+                void upload(input.files?.[0]);
+                input.value = "";
+              }}
+              type="file"
+            />
+          </Field>
+          <p className="text-xs font-medium text-copy-muted">
+            Stored PDFs · select to include in a message
+          </p>
+          {attachments.length ? (
+            <ul
+              aria-label="Stored PDFs"
+              className="grid max-h-64 min-w-0 gap-2 overflow-y-auto p-1"
+            >
+              {attachments.map((item) => {
+                const isSelected = selected.some((entry) => entry.attachment_id === item.id);
+                const usable = item.status === "stored" && item.native_available;
+                return (
+                  <li className="attachment-inventory-row" key={item.id}>
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Icon name="document" className="mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm font-medium">{item.filename}</p>
+                        <Badge
+                          className="mt-1"
+                          tone={isSelected ? "info" : usable ? "neutral" : "warning"}
+                        >
+                          {item.original_size === null
+                            ? "Original unavailable"
+                            : formatSize(item.original_size)}
+                          {" · "}
+                          {isSelected
+                            ? "Selected"
+                            : usable
+                              ? "Stored"
+                              : "Unavailable for new sends"}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <IconButton
+                        label={`Download ${item.filename}`}
+                        icon="download"
+                        disabled={busy}
+                        onClick={() => void download(item)}
+                        type="button"
+                      />
+                      <Button
+                        aria-label={`${isSelected ? "Remove" : "Attach"} ${item.filename}${
+                          isSelected ? " from selection" : ""
+                        }`}
+                        icon={isSelected ? "close" : "attachment"}
+                        className="workbench-quiet"
+                        variant="ghost"
+                        aria-pressed={isSelected}
+                        disabled={
+                          disabled ||
+                          busy ||
+                          (!usable && !isSelected) ||
+                          (!isSelected && selected.length >= 32)
+                        }
+                        onClick={() => toggle(item)}
+                        type="button"
+                      >
+                        {isSelected ? "Remove selection" : "Attach"}
+                      </Button>
+                      <IconButton
+                        label={`Delete ${item.filename}`}
+                        icon="trash"
+                        variant="danger"
+                        disabled={disabled || busy}
+                        onClick={() => void remove(item)}
+                        type="button"
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-sm text-copy-muted">
+              {loading ? "Loading stored PDFs…" : "No stored PDFs in this conversation."}
+            </p>
+          )}
+          {nextAfter ? (
+            <Button
+              className="justify-self-start"
+              disabled={busy}
+              onClick={() => {
+                const controller = scope.current;
+                if (!controller || !nextAfter) return;
+                setBusy(true);
+                setActivity("Loading stored PDFs…");
+                void loadPage(nextAfter, controller.signal)
+                  .catch((failure: unknown) => {
+                    if (controller.signal.aborted) return;
+                    if (failure instanceof ApiError && failure.status === 401) {
+                      onSessionExpired();
+                    } else {
+                      setError(
+                        failure instanceof Error ? failure.message : "PDF list is unavailable.",
+                      );
+                    }
+                  })
+                  .finally(() => {
+                    if (!controller.signal.aborted) setBusy(false);
+                  });
+              }}
+              type="button"
+            >
+              Load more PDFs
+            </Button>
+          ) : null}
+        </div>
+      </Disclosure>
+      <Disclosure className="attachment-disclosure" title="PDF limits, cost & privacy" icon="info">
+        <div className="grid gap-2 pt-2 text-xs leading-5 text-copy-muted">
+          <p>
+            Each PDF and the combined original files in a request must be under 50,000,000 bytes,
+            including retained earlier-turn references. Page images, transport overhead and model
+            context limits still apply; starting a new conversation can reduce retained references.
+          </p>
+          <p>
+            The model may receive extracted text and page images from the original PDFs. Page images
+            add context and cost. A sent receipt confirms submission, not provider acceptance,
+            parsing or comprehension.
+          </p>
+          <p>
+            Removing a selection only affects a future send. Deleting a stored PDF fences future
+            use, but cannot retract prior provider requests, quotations or backups; cleanup may
+            remain pending. Stop an active turn before deleting its PDFs.
+          </p>
+        </div>
+      </Disclosure>
       {busy ? (
-        <p className="text-xs text-copy-muted" role="status">
-          Updating PDFs…
-        </p>
+        <Feedback className="text-xs" role="status">
+          {activity}
+        </Feedback>
       ) : null}
-      {notice ? (
-        <p className="text-sm text-accent" role="status">
-          {notice}
-        </p>
-      ) : null}
+      {notice ? <Feedback role="status">{notice}</Feedback> : null}
       {error ? (
-        <p className="text-sm text-red-200" role="alert">
+        <Feedback tone="danger" role="alert">
           {error}
-        </p>
+        </Feedback>
       ) : null}
     </section>
   );

@@ -4,8 +4,7 @@
 
 Impostr is a one-owner, same-PC planning application for projects that use the
 `overnight-agent` toolkit. Users plan with OpenCode's `tech-lead`, edit and approve
-three Markdown documents, and download the exact approved versions. It is a dark,
-terminal-inspired application, not a terminal emulator.
+three Markdown documents, and download the exact approved versions.
 
 The current scope includes admin-managed accounts, private projects, versioned
 documents, resumable conversation tabs, native PDF attachments, human approvals,
@@ -34,17 +33,17 @@ existing [history documents](docs/agent-history.md).
 - Creating a project records its creator and UTC creation time, assigns server IDs
   and seeds drafts from the selected template with immutable provenance. Names do
   not select filesystem paths; collisions have an explicit response.
-- **Specify:** show chat beside editable `PROJECT.md` and `AGENTS.md`, with revisions
+- **Specify:** support chat and editing `PROJECT.md` and `AGENTS.md`, with revisions
   and diffs. A human explicitly approves their exact saved pair before backlog
   planning. Changing either document invalidates the pair approval.
-- **Plan:** show chat, a collapsible backlog list and task details. Humans edit
+- **Plan:** support chat and backlog/task editing. Humans edit
   title/body/dependencies and toggle `[-]`/`[ ]`; Markdown and list stay synchronized.
   Whole-backlog approval is separate and binds one saved revision. Editing it makes
   that approval stale; the planning UI cannot set `[~]`, `[x]` or `[!]`.
-- **Review:** show all three files with revision/approval status, side by side on
-  wide screens and through an accessible switcher on narrow screens. Downloads are
-  individual UTF-8 `PROJECT.md`, `AGENTS.md` and `BACKLOG.md`, from the approved tuple
-  only. Missing/stale/invalid approval blocks download with a recovery path.
+- **Review:** make all three files and their revision/approval status available.
+  Downloads are individual UTF-8 `PROJECT.md`, `AGENTS.md` and `BACKLOG.md`, from the
+  approved tuple only. Missing/stale/invalid approval blocks download with a recovery
+  path.
 - **Conversations:** restore the last used tab after refresh/re-login. New tabs have
   separate conversations/history but share project documents. Preserve context and
   user input through recoverable disconnects; visibly reject/queue simultaneous
@@ -125,19 +124,14 @@ file edit. It does not imply task eligibility or installation of the exported fi
 
 ## Sample card canvas
 
-- Separate project-scoped view alongside planning/review; navigation preserves
+- Project-scoped sample canvas; navigation preserves
   unsaved document/task/chat state and in-flight turns.
-- React Flow custom HTML cards have title headers, bounded lorem-ipsum bodies and
-  arbitrary sample-metadata footers, joined by SVG parent/child connectors.
-- Drag headers without blocking body text selection. Support background/Space/middle-
-  mouse pan, trackpad/pinch navigation, visible zoom controls/percentage and Fit view.
-  Provide keyboard-accessible tabs and non-drag movement controls.
 - Independent predefined boards retain project-local positions, selection and viewport
   in page-session memory; refresh resets them. Keep content IDs, hierarchy and visual
   coordinates separate: moving a card changes only position, never relationships,
-  readiness, approvals or Markdown. Fixed initial positions are not continually reset.
-- No content/connection editing, add/delete/resize/reparent, automatic layout engine,
-  real directories, Markdown loading, localStorage or API/database persistence yet.
+  readiness, approvals or Markdown.
+- The current prototype has no content/connection editing, add/delete/reparent,
+  real directories, Markdown loading, localStorage or API/database persistence.
   Future directory/content loading and durable layouts require separate contracts.
 
 ## Stack and boundaries
@@ -167,19 +161,16 @@ choose filesystem paths or DB access. Use safe Markdown rendering and auditable
 administration/approvals without logging secrets. These controls do not qualify a
 shared-server deployment.
 
-## Interface and local operations
+## Interface behavior
 
-- Dark layered surfaces, restrained green accents, readable sans-serif prose and
-  monospace filenames/IDs/status. No fake terminal syntax, neon or scanlines.
-- Useful chat/editor/backlog widths on desktop; narrow screens switch primary regions
-  without horizontal page scrolling or lost input. Canvas has a bounded viewport;
-  its library stylesheet follows Tailwind's import.
-- Textual empty/streaming/saving/approval/validation/disconnection/conflict states,
-  compare/reapply recovery, keyboard/focus/dialog return and screen-reader names/states.
-  Normal text contrast is at least 4.5:1; controls/focus 3:1. Respect reduced motion.
+- Expose empty/streaming/saving/approval/validation/disconnection/conflict states and
+  compare/reapply recovery.
 - Attachment UI distinguishes uploading, stored/available, selected, sending,
   sent/not-sent/uncertain and specific failures. Preserve composer text/selections
   through navigation/reconnect; explain original-PDF submission and deletion limits.
+
+## Local operations
+
 - Provider settings come from explicit operator-supplied endpoint/deployment/version
   and API-key facts through the foreground connection. Keys stay in host transport,
   outside API/worker/browser/DB/transcripts/exports/logs; no automatic host-auth reuse.

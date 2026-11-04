@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ApiError, apiRequest } from "./api";
 import type { BacklogTaskDocument } from "./BacklogPlanning";
+import { Badge, Button, Disclosure, Feedback, TabButton } from "./ui/controls";
 
 export type ReviewDocumentKind = "project" | "agents" | "backlog";
 
@@ -11,6 +12,11 @@ export type ReviewDocument = {
   revision_number: number;
   content: string;
   content_sha256: string;
+  origin?: "template" | "human" | "agent";
+  author_user_id?: string | null;
+  created_at?: string;
+  template_source?: string | null;
+  template_sha256?: string | null;
 };
 
 type RevisionReference = {
@@ -46,6 +52,7 @@ type ReviewProps = {
   localChangesPending: boolean;
   documentsLoading: boolean;
   focusHeadingOnMount?: boolean;
+  pageTitleId?: string;
   onSessionExpired: () => void;
   onReviewDocument: (kind: ReviewDocumentKind) => void;
   onReviewPair: () => void;
@@ -191,6 +198,7 @@ export default function FinalReview({
   localChangesPending,
   documentsLoading,
   focusHeadingOnMount = false,
+  pageTitleId,
   onSessionExpired,
   onReviewDocument,
   onReviewPair,
@@ -211,25 +219,6 @@ export default function FinalReview({
   const approvalButtonRef = useRef<HTMLButtonElement>(null);
   const finalApprovalStatusRef = useRef<HTMLSpanElement>(null);
   const requestNumber = useRef(0);
-  const selectedKindRef = useRef<ReviewDocumentKind>("project");
-  const focusedPaneKind = useRef<ReviewDocumentKind | null>(null);
-  const focusedPaneElement = useRef<HTMLElement | null>(null);
-  const focusedTabElement = useRef<HTMLElement | null>(null);
-  const tabNavigationHasFocus = useRef(false);
-  const viewportIsWide = useRef(
-    typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(min-width: 1280px)").matches,
-  );
-  const responsiveFocus = useRef<{
-    kind: ReviewDocumentKind;
-    target: "last-focused" | "content";
-  } | null>(null);
-  const contentRegionRefs = useRef<Record<ReviewDocumentKind, HTMLPreElement | null>>({
-    project: null,
-    agents: null,
-    backlog: null,
-  });
 
   const headsMatch = status ? statusMatchesDocuments(status, documents) : false;
   const taskSnapshotMatches = Boolean(
@@ -261,7 +250,6 @@ export default function FinalReview({
   );
 
   function selectFile(kind: ReviewDocumentKind): void {
-    selectedKindRef.current = kind;
     setSelectedKind(kind);
   }
 
@@ -335,49 +323,6 @@ export default function FinalReview({
   useLayoutEffect(() => {
     if (focusHeadingOnMount) headingRef.current?.focus();
   }, [focusHeadingOnMount]);
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia("(min-width: 1280px)");
-    viewportIsWide.current = query.matches;
-    const handleViewportChange = (event: MediaQueryListEvent): void => {
-      const wasWide = viewportIsWide.current;
-      viewportIsWide.current = event.matches;
-      if (
-        wasWide &&
-        !event.matches &&
-        focusedPaneKind.current &&
-        focusedPaneElement.current === document.activeElement
-      ) {
-        const kind = focusedPaneKind.current;
-        selectFile(kind);
-        responsiveFocus.current = { kind, target: "last-focused" };
-      } else if (
-        !wasWide &&
-        event.matches &&
-        tabNavigationHasFocus.current &&
-        focusedTabElement.current === document.activeElement
-      ) {
-        responsiveFocus.current = {
-          kind: selectedKindRef.current,
-          target: "content",
-        };
-      }
-    };
-    query.addEventListener("change", handleViewportChange);
-    return () => query.removeEventListener("change", handleViewportChange);
-  }, []);
-
-  useLayoutEffect(() => {
-    const intent = responsiveFocus.current;
-    if (!intent) return;
-    responsiveFocus.current = null;
-    const target =
-      intent.target === "content"
-        ? contentRegionRefs.current[intent.kind]
-        : focusedPaneElement.current;
-    if (target?.isConnected) target.focus({ preventScroll: true });
-  }, [selectedKind]);
 
   useLayoutEffect(() => {
     if (!actionBusy && restoreApprovalFocus.current) {
@@ -507,350 +452,532 @@ export default function FinalReview({
   const snapshotMismatch = Boolean(
     status && (!headsMatch || (taskDocument !== null && !taskSnapshotMatches)),
   );
-  const pairState =
-    !status || !headsMatch
-      ? "Unknown"
-      : status.pair_approved
-        ? "Approved for the displayed PROJECT.md + AGENTS.md pair"
-        : "Pair approval needed";
-  const finalState = !isStatusCurrent
-    ? "Unknown or stale"
-    : currentManifestMatches
-      ? "Approved for the displayed three-file tuple"
-      : status?.latest_manifest
-        ? "Re-review required"
-        : "Not yet approved";
+  const pairState = localChangesPending
+    ? "Resolve local changes"
+    : documentsLoading || statusBusy
+      ? "Checking saved revisions"
+      : !status || !headsMatch || statusError
+        ? "Unknown"
+        : status.pair_approved
+          ? "Approved for the displayed PROJECT.md + AGENTS.md pair"
+          : "Pair approval needed";
+  const finalState = localChangesPending
+    ? "Resolve local changes"
+    : documentsLoading || statusBusy
+      ? "Checking saved revisions"
+      : !isStatusCurrent || statusError
+        ? "Unknown or stale"
+        : currentManifestMatches
+          ? "Approved for the displayed three-file tuple"
+          : status?.latest_manifest
+            ? "Re-review required"
+            : "Not yet approved";
+
+  const validationEntries = status ? Object.entries(status.validation_errors) : [];
+  const snapshotBlockers = [
+    ...(localChangesPending
+      ? ["Save or discard local document and task changes before approving or downloading."]
+      : []),
+    ...(documentsLoading ? ["Wait for the saved documents to finish loading."] : []),
+    ...(statusBusy ? ["Checking server approval and saved task readiness…"] : []),
+    ...(statusError ? [`Final-review status is unavailable: ${statusError}`] : []),
+    ...(snapshotMismatch
+      ? [
+          "Saved files or task readiness do not match this snapshot. Reload the saved drafts and refresh status.",
+        ]
+      : []),
+    ...(!reviewSnapshotKnown &&
+    !statusBusy &&
+    !statusError &&
+    !snapshotMismatch &&
+    !documentsLoading
+      ? ["Approval and downloads stay disabled until the server and saved task snapshots match."]
+      : []),
+  ];
+  const approvalBlockers = [
+    ...snapshotBlockers,
+    ...(reviewSnapshotKnown && (!status?.pair_approved || !status.current_pair_approval_id)
+      ? ["Approve the saved PROJECT.md + AGENTS.md pair first."]
+      : []),
+    ...validationEntries.map(
+      ([filename, messages]) =>
+        `${filename}: ${messages[0] ?? "Saved file validation needs attention."}`,
+    ),
+    ...(!csrfToken
+      ? ["Your approval session is unavailable. Sign in again before approving."]
+      : []),
+    ...(actionBusy ? ["Wait for the current approval or download to finish."] : []),
+  ];
+  const nextAction = snapshotBlockers.length
+    ? snapshotBlockers[0]
+    : actionBusy
+      ? "Wait for the current action to finish."
+      : currentManifestMatches
+        ? "Download the approved files individually."
+        : !status?.pair_approved || !status.current_pair_approval_id
+          ? "Review and approve the saved document pair."
+          : validationEntries.length
+            ? "Resolve saved file validation, then return for final approval."
+            : !csrfToken
+              ? "Sign in again before approving."
+              : "Review all three files, then approve this saved snapshot.";
+
+  const ReviewHeading = pageTitleId ? "h1" : "h2";
+  const titleId = pageTitleId ?? `${instanceId}-title`;
 
   return (
-    <section
-      aria-labelledby={`${instanceId}-title`}
-      className="grid min-w-0 gap-5"
-      data-testid="final-review"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
-        <div className="min-w-0">
-          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
-            Stage 3 · Final review
-          </p>
-          <h2
-            className="mt-2 text-2xl font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            id={`${instanceId}-title`}
-            ref={headingRef}
-            tabIndex={-1}
-          >
-            Review and download approved files
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-copy-muted">
-            Final approval records the exact saved PROJECT.md, AGENTS.md and BACKLOG.md revisions
-            shown here. Task readiness, pair approval and final approval are separate states.
-          </p>
-        </div>
-        <div className="flex min-w-0 flex-wrap gap-2">
-          <span
-            className="rounded-full border border-line bg-canvas px-3 py-2 text-xs text-copy-muted"
-            data-testid="pair-approval-state"
-          >
-            Pair: {pairState}
-          </span>
-          <span
-            aria-live="polite"
-            className={`rounded-full border px-3 py-2 text-xs ${currentManifestMatches ? "border-accent/40 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted"}`}
-            data-testid="final-approval-state"
-            ref={finalApprovalStatusRef}
-            tabIndex={-1}
-          >
-            Final: {finalState}
-          </span>
-        </div>
-      </div>
-
-      {localChangesPending ? (
-        <div className="grid gap-2 rounded-lg border border-amber-200/35 bg-amber-100/5 p-4">
-          <p className="text-sm leading-6 text-amber-100" role="status">
-            Local document or task changes are not part of this saved revision tuple. Save or
-            discard them, then refresh final-review status before approving or downloading.
-          </p>
-          <button
-            className="min-h-11 justify-self-start rounded-lg border border-line px-4 py-2 text-sm text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() => onReviewDocument("backlog")}
-            type="button"
-          >
-            Return to planning and resolve local changes
-          </button>
-        </div>
-      ) : null}
-
-      {notice ? (
-        <p aria-live="polite" className="text-sm leading-6 text-copy-muted" role="status">
-          {notice}
+    <section aria-labelledby={titleId} className="final-review-surface" data-testid="final-review">
+      <header className="workbench-heading">
+        <ReviewHeading className="app-page-title" id={titleId} ref={headingRef} tabIndex={-1}>
+          {pageTitleId ? "Review & downloads" : "Review and download approved files"}
+        </ReviewHeading>
+        <p className="review-next-action" data-testid="review-next-action">
+          <strong className="font-medium">Next: </strong>
+          {nextAction}
         </p>
-      ) : null}
-      {statusError ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300/35 bg-red-300/5 p-4">
-          <p className="text-sm leading-6 text-red-100" role="alert">
-            Final-review status is unavailable: {statusError}
-          </p>
-          <button
-            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            disabled={statusBusy}
-            onClick={() => void loadStatus()}
-            type="button"
-          >
-            {statusBusy ? "Refreshing…" : "Refresh final-review status"}
-          </button>
-        </div>
-      ) : null}
-      {snapshotMismatch ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/35 bg-amber-100/5 p-4">
-          <p className="text-sm leading-6 text-amber-100" role="status">
-            Saved document heads or task readiness do not match the server snapshot. Reload the
-            drafts before reviewing or approving this tuple.
-          </p>
-          <button
-            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            disabled={documentsLoading || statusBusy}
-            onClick={onRefreshDocuments}
-            type="button"
-          >
-            Reload current saved drafts
-          </button>
-          <button
-            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            disabled={statusBusy}
-            onClick={() => void loadStatus()}
-            type="button"
-          >
-            Refresh approval status
-          </button>
-        </div>
-      ) : null}
-
-      <dl className="grid min-w-0 gap-3 rounded-xl border border-line bg-canvas p-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-copy-muted">
-            Saved backlog revision
-          </dt>
-          <dd className="mt-1 font-mono text-sm text-foreground">
-            r{documents.backlog.revision_number}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-copy-muted">Draft tasks</dt>
-          <dd className="mt-1 font-mono text-sm text-foreground">
-            {taskSnapshotMatches ? taskDocument?.summary.draft_count : "Unknown"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-copy-muted">Owner-ready tasks</dt>
-          <dd className="mt-1 font-mono text-sm text-foreground">
-            {taskSnapshotMatches ? taskDocument?.summary.ready_count : "Unknown"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-copy-muted">Dependency-eligible</dt>
-          <dd className="mt-1 font-mono text-sm text-foreground">
-            {taskSnapshotMatches ? taskDocument?.summary.eligible_count : "Unknown"}
-          </dd>
-        </div>
-        <p className="text-xs leading-5 text-copy-muted sm:col-span-2 xl:col-span-4">
-          Ready is owner-set backlog metadata; dependency eligibility is a separate task summary.
-          Neither means the three-file snapshot has final approval.
-        </p>
-      </dl>
-
-      <div
-        aria-label="Approved file navigation"
-        className="flex flex-wrap gap-2 min-[1280px]:hidden focus-within:flex"
-        onFocusCapture={(event) => {
-          tabNavigationHasFocus.current = true;
-          focusedTabElement.current = event.target as HTMLElement;
-        }}
-        role="tablist"
-      >
-        {documentOptions.map((option) => (
-          <button
-            aria-controls={`${instanceId}-panel-${option.kind}`}
-            aria-selected={selectedKind === option.kind}
-            className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${selectedKind === option.kind ? "border-accent/60 bg-accent/10 text-accent" : "border-line bg-canvas text-copy-muted hover:border-accent/40"}`}
-            id={`${instanceId}-tab-${option.kind}`}
-            key={option.kind}
-            onClick={() => selectFile(option.kind)}
-            onKeyDown={(event) => handleTabKeyDown(event, option.kind)}
-            role="tab"
-            tabIndex={selectedKind === option.kind ? 0 : -1}
-            type="button"
-          >
-            {option.filename}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid min-w-0 gap-4 min-[1280px]:grid-cols-3" data-testid="review-panes">
-        {documentOptions.map((option) => {
-          const item = documents[option.kind];
-          const paneSelected = selectedKind === option.kind;
-          const paneClasses = paneSelected
-            ? "grid min-w-0 content-start gap-3"
-            : "hidden min-w-0 content-start gap-3 min-[1280px]:grid focus-within:grid";
-          return (
-            <article
-              aria-labelledby={`${instanceId}-pane-title-${option.kind}`}
-              className={`${paneClasses} rounded-xl border border-line bg-surface/95 p-4 sm:p-5`}
-              id={`${instanceId}-panel-${option.kind}`}
-              key={option.kind}
-              onFocusCapture={(event) => {
-                tabNavigationHasFocus.current = false;
-                focusedPaneKind.current = option.kind;
-                focusedPaneElement.current = event.target as HTMLElement;
-              }}
-              role="tabpanel"
-              tabIndex={-1}
-            >
-              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3
-                    className="font-mono text-sm font-semibold text-foreground"
-                    id={`${instanceId}-pane-title-${option.kind}`}
-                  >
-                    {option.filename}
-                  </h3>
-                  <p className="mt-1 text-xs text-copy-muted">
-                    Saved revision {item.revision_number}
-                  </p>
-                </div>
-                <button
-                  className="min-h-11 rounded-lg border border-line px-3 py-2 text-xs text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  onClick={() => onReviewDocument(option.kind)}
-                  type="button"
+      </header>
+      <div className="review-grid">
+        <section
+          className="review-inspection"
+          aria-labelledby={`${instanceId}-files-title`}
+          data-testid="review-panes"
+        >
+          <header className="workbench-section-heading">
+            <h2 id={`${instanceId}-files-title`}>Saved files</h2>
+            <span className="text-xs text-copy-muted">Read-only snapshots</span>
+          </header>
+          <div className="workbench-panel review-document-panel">
+            <div aria-label="Saved file navigation" className="workbench-tab-strip" role="tablist">
+              {documentOptions.map((option) => (
+                <TabButton
+                  aria-controls={`${instanceId}-panel-${option.kind}`}
+                  className="workbench-tab"
+                  title={option.label}
+                  id={`${instanceId}-tab-${option.kind}`}
+                  key={option.kind}
+                  onClick={() => selectFile(option.kind)}
+                  onKeyDown={(event) => handleTabKeyDown(event, option.kind)}
+                  selected={selectedKind === option.kind}
                 >
-                  Review {option.filename}
-                </button>
-              </div>
-              <p className="break-all font-mono text-[11px] leading-5 text-copy-muted">
-                Revision ID <code>{item.id}</code>
-              </p>
-              <p className="break-all font-mono text-[11px] leading-5 text-copy-muted">
-                SHA-256 <code>{item.content_sha256}</code>
-              </p>
-              <pre
-                aria-label={`${option.filename} saved revision ${item.revision_number} content`}
-                className="max-h-[58vh] min-h-48 min-w-0 overflow-auto rounded-lg border border-line bg-canvas p-3 font-mono text-xs leading-6 text-foreground whitespace-pre-wrap break-words focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                role="region"
-                ref={(element) => {
-                  contentRegionRefs.current[option.kind] = element;
-                }}
-                tabIndex={0}
-              >
-                {item.content}
-              </pre>
-              <button
-                className="min-h-11 w-full rounded-lg border border-line bg-surface-raised px-4 py-2 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={downloadDisabled}
-                onClick={() => void downloadDocument(option.kind)}
-                type="button"
-              >
-                {actionBusy === `download-${option.kind}`
-                  ? "Preparing download…"
-                  : `Download ${option.filename}`}
-              </button>
-            </article>
-          );
-        })}
-      </div>
-
-      {status && Object.keys(status.validation_errors).length ? (
-        <div className="grid gap-2 rounded-lg border border-amber-200/35 bg-amber-100/5 p-4">
-          <h3 className="font-medium text-amber-100">Review validation details</h3>
-          {Object.entries(status.validation_errors).map(([filename, messages]) => (
-            <div className="text-sm leading-6 text-amber-50" key={filename}>
-              <p className="font-mono">{filename}</p>
-              <ul className="ml-5 list-disc">
-                {messages.map((message) => (
-                  <li className="break-words" key={message}>
-                    {message}
-                  </li>
-                ))}
-              </ul>
+                  {option.filename}
+                </TabButton>
+              ))}
             </div>
-          ))}
-          <button
-            className="min-h-11 justify-self-start rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={() => onReviewDocument("backlog")}
-            type="button"
-          >
-            Review saved backlog
-          </button>
-        </div>
-      ) : null}
-
-      {actionError ? (
-        <div
-          className="grid gap-3 rounded-lg border border-red-300/35 bg-red-300/5 p-4"
-          role="alert"
-        >
-          <p className="text-sm leading-6 text-red-100">{actionError}</p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={() => void loadStatus()}
-              type="button"
-            >
-              Refresh approval status
-            </button>
-            <button
-              className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={onReviewPair}
-              type="button"
-            >
-              Review document pair
-            </button>
-            <button
-              className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={() => onReviewDocument("backlog")}
-              type="button"
-            >
-              Review saved backlog
-            </button>
+            {documentOptions.map((option) => {
+              const item = documents[option.kind];
+              return (
+                <article
+                  aria-labelledby={`${instanceId}-tab-${option.kind}`}
+                  className="review-file-panel"
+                  hidden={selectedKind !== option.kind}
+                  id={`${instanceId}-panel-${option.kind}`}
+                  key={option.kind}
+                  role="tabpanel"
+                >
+                  <div className="document-toolbar">
+                    <div className="document-file-info">
+                      <h3 className="document-filename">{option.filename}</h3>
+                      <p className="document-file-state">Saved revision {item.revision_number}</p>
+                    </div>
+                    <Button
+                      className="workbench-quiet"
+                      variant="ghost"
+                      aria-label={`Review ${option.filename}`}
+                      icon="document"
+                      onClick={() => onReviewDocument(option.kind)}
+                    >
+                      Open in planning
+                    </Button>
+                  </div>
+                  <pre
+                    aria-label={`${option.filename} saved revision ${item.revision_number} content`}
+                    className="review-saved-content"
+                    role="region"
+                    tabIndex={0}
+                  >
+                    {item.content}
+                  </pre>
+                </article>
+              );
+            })}
+            <footer className="document-foot">
+              Saved snapshot · Unsaved buffers are not shown here
+            </footer>
           </div>
-        </div>
-      ) : null}
-      <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
-        <button
-          className="min-h-11 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-canvas hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={!canApprove}
-          onClick={() => void approveSnapshot()}
-          ref={approvalButtonRef}
-          type="button"
-        >
-          {actionBusy === "approval"
-            ? "Approving displayed revisions…"
-            : currentManifestMatches
-              ? "Approved at last check"
-              : "Approve displayed three-file snapshot"}
-        </button>
-        {status?.pair_approved ? (
-          <span className="text-sm text-copy-muted">
-            The saved pair is approved; final approval also validates the current backlog.
-          </span>
-        ) : (
-          <button
-            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            onClick={onReviewPair}
-            type="button"
-          >
-            Review and approve PROJECT.md + AGENTS.md
-          </button>
-        )}
-        {statusBusy ? (
-          <span aria-live="polite" className="text-xs text-copy-muted" role="status">
-            Refreshing server approval and readiness…
-          </span>
-        ) : null}
-        {!reviewSnapshotKnown && !statusBusy && !statusError ? (
-          <span className="text-xs text-copy-muted">
-            Approval and downloads stay disabled until the server and saved task snapshots match.
-          </span>
-        ) : null}
+        </section>
+
+        <section aria-label="Approval and downloads" className="review-approval">
+          <header className="workbench-section-heading">
+            <h2>Approval &amp; downloads</h2>
+          </header>
+          <div className="workbench-panel review-approval-panel">
+            <p className="review-summary">
+              Final approval freezes all three saved revisions for download; it does not mark tasks
+              ready.
+            </p>
+            {notice ? (
+              <p aria-live="polite" className="text-sm text-success" role="status">
+                {notice}
+              </p>
+            ) : null}
+            <dl className="review-approval-states">
+              <div>
+                <dt className="mb-1 font-medium">Document-pair approval</dt>
+                <dd>
+                  <Badge
+                    data-testid="pair-approval-state"
+                    tone={
+                      status?.pair_approved &&
+                      headsMatch &&
+                      !localStateBlocked &&
+                      !statusBusy &&
+                      !statusError
+                        ? "success"
+                        : "neutral"
+                    }
+                  >
+                    Pair: {pairState}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="mb-1 font-medium">Final three-file approval</dt>
+                <dd>
+                  <Badge
+                    aria-live="polite"
+                    className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    data-testid="final-approval-state"
+                    ref={finalApprovalStatusRef}
+                    tabIndex={-1}
+                    tone={
+                      currentManifestMatches && !localStateBlocked && reviewSnapshotKnown
+                        ? "success"
+                        : "neutral"
+                    }
+                  >
+                    Final: {finalState}
+                  </Badge>
+                </dd>
+              </div>
+            </dl>
+            <dl className="review-revisions" aria-label="Displayed saved revisions">
+              {documentOptions.map((option) => (
+                <div key={option.kind}>
+                  <dt>{option.filename}</dt>
+                  <dd>r{documents[option.kind].revision_number}</dd>
+                </div>
+              ))}
+            </dl>
+            {actionError ? (
+              <Feedback tone="danger" role="alert">
+                <p>{actionError}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    className="workbench-quiet"
+                    variant="ghost"
+                    onClick={() => void loadStatus()}
+                    icon="refresh"
+                  >
+                    Refresh approval status
+                  </Button>
+                  <Button className="workbench-quiet" variant="ghost" onClick={onReviewPair}>
+                    Review document pair
+                  </Button>
+                </div>
+              </Feedback>
+            ) : null}
+            <div className="grid gap-2">
+              <div
+                id={`${instanceId}-approval-reasons`}
+                className="review-disabled-reasons"
+                aria-live="polite"
+              >
+                {approvalBlockers.length ? (
+                  <ul className="grid gap-1">
+                    {approvalBlockers.map((reason) => (
+                      <li className="break-words" key={reason}>
+                        {reason}
+                      </li>
+                    ))}
+                  </ul>
+                ) : currentManifestMatches ? (
+                  <p>The displayed saved three-file tuple is already approved.</p>
+                ) : (
+                  <p>
+                    The saved pair is approved; final approval also validates the current backlog.
+                  </p>
+                )}
+              </div>
+              {validationEntries.length ? (
+                <p className="text-xs leading-5 text-copy-muted">
+                  All validation messages are available in Validation and revision details below.
+                </p>
+              ) : null}
+              {reviewSnapshotKnown &&
+              (!status?.pair_approved || !status.current_pair_approval_id) ? (
+                <Button
+                  className="workbench-quiet review-recovery"
+                  icon="shield"
+                  variant="ghost"
+                  onClick={onReviewPair}
+                >
+                  Review and approve PROJECT.md + AGENTS.md
+                </Button>
+              ) : null}
+              {localChangesPending ? (
+                <Button
+                  className="workbench-quiet review-recovery"
+                  variant="ghost"
+                  onClick={() => onReviewDocument("backlog")}
+                >
+                  Return to planning and resolve local changes
+                </Button>
+              ) : null}
+              <Button
+                aria-describedby={`${instanceId}-approval-reasons`}
+                className="workbench-save review-approve"
+                icon="check"
+                variant="primary"
+                disabled={!canApprove}
+                onClick={() => void approveSnapshot()}
+                ref={approvalButtonRef}
+              >
+                {actionBusy === "approval"
+                  ? "Approving displayed revisions…"
+                  : currentManifestMatches && !localStateBlocked && reviewSnapshotKnown
+                    ? "Approved at last check"
+                    : "Approve displayed three-file snapshot"}
+              </Button>
+            </div>
+            <div className="review-downloads">
+              <h3 className="text-sm font-semibold">Downloads</h3>
+              <p
+                id={`${instanceId}-download-reasons`}
+                className="text-xs leading-5 text-copy-muted"
+              >
+                {downloadDisabled
+                  ? snapshotBlockers.length
+                    ? snapshotBlockers[0]
+                    : actionBusy
+                      ? "Wait for the current approval or download to finish."
+                      : "Downloads require final approval of the displayed saved three-file tuple."
+                  : "Individual UTF-8 files from the exact approved revisions. Downloads do not install the toolkit."}
+              </p>
+              {documentOptions.map((option) => (
+                <Button
+                  aria-describedby={`${instanceId}-download-reasons`}
+                  className="review-download workbench-quiet"
+                  variant="ghost"
+                  disabled={downloadDisabled}
+                  icon="download"
+                  key={option.kind}
+                  onClick={() => void downloadDocument(option.kind)}
+                >
+                  {actionBusy === `download-${option.kind}`
+                    ? "Preparing download…"
+                    : `Download ${option.filename}`}
+                </Button>
+              ))}
+            </div>
+            {statusError || snapshotMismatch ? (
+              <div className="grid gap-2">
+                {statusError ? (
+                  <Feedback role="alert" tone="danger">
+                    Final-review status is unavailable: {statusError}
+                  </Feedback>
+                ) : null}
+                {snapshotMismatch ? (
+                  <Button
+                    className="workbench-quiet"
+                    variant="ghost"
+                    disabled={documentsLoading || statusBusy}
+                    onClick={onRefreshDocuments}
+                  >
+                    Reload current saved drafts
+                  </Button>
+                ) : null}
+                <Button
+                  className="workbench-quiet"
+                  variant="ghost"
+                  disabled={statusBusy}
+                  icon="refresh"
+                  onClick={() => void loadStatus()}
+                >
+                  {statusBusy ? "Refreshing…" : "Refresh final-review status"}
+                </Button>
+              </div>
+            ) : null}
+            <section className="review-readiness" aria-label="Task readiness">
+              <h3 className="text-sm font-semibold">Task readiness</h3>
+              <p className="mt-1 text-xs text-copy-muted">
+                Saved backlog revision r{documents.backlog.revision_number}
+              </p>
+              <dl className="review-readiness-counts">
+                {(
+                  [
+                    ["Draft tasks", "draft_count"],
+                    ["Owner-ready tasks", "ready_count"],
+                    ["Dependency-eligible", "eligible_count"],
+                    ["Waiting on dependencies", "waiting_count"],
+                  ] as const
+                ).map(([label, key]) => (
+                  <div key={key}>
+                    <dt className="text-xs text-copy-muted">{label}</dt>
+                    <dd className="mt-1 font-semibold">
+                      {taskSnapshotMatches ? taskDocument?.summary[key] : "Unknown"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 text-xs leading-5 text-copy-muted">
+                Ready is owner-set; eligible tasks also have completed dependencies. Neither is
+                final approval.
+              </p>
+              <Button
+                className="workbench-quiet"
+                variant="ghost"
+                onClick={() => onReviewDocument("backlog")}
+              >
+                Review saved backlog
+              </Button>
+            </section>
+            <Disclosure
+              className="review-details"
+              title="Validation and revision details"
+              icon="info"
+            >
+              <div className="mt-3 grid min-w-0 gap-4">
+                <section aria-label="Review validation details">
+                  <h3 className="text-sm font-semibold">Review validation details</h3>
+                  {validationEntries.length ? (
+                    validationEntries.map(([filename, messages]) => (
+                      <div className="mt-3 text-sm leading-6" key={filename}>
+                        <p className="font-medium">{filename}</p>
+                        <ul className="ml-5 list-disc">
+                          {messages.map((message) => (
+                            <li className="break-words" key={message}>
+                              {message}
+                            </li>
+                          ))}
+                        </ul>
+                        <Button
+                          className="workbench-quiet mt-2"
+                          variant="ghost"
+                          onClick={() =>
+                            onReviewDocument(
+                              documentOptions.find((option) => option.filename === filename)
+                                ?.kind ?? "backlog",
+                            )
+                          }
+                        >
+                          Review {filename}
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="mt-2 text-sm text-copy-muted">
+                      {reviewSnapshotKnown
+                        ? "No saved-file validation blockers at last check."
+                        : "Refresh the matching saved snapshot to check validation."}
+                    </p>
+                  )}
+                </section>
+                <section
+                  aria-label="Saved revision identities and provenance"
+                  className="grid min-w-0 gap-3"
+                >
+                  <h3 className="text-sm font-semibold">
+                    Saved revision identities and provenance
+                  </h3>
+                  <p className="text-xs leading-5 text-copy-muted">
+                    Document IDs identify files; revision IDs identify immutable saved versions.
+                    They are not interchangeable.
+                  </p>
+                  {documentOptions.map((option) => {
+                    const item = documents[option.kind];
+                    const reference = status?.[`current_${option.kind}_revision`];
+                    return (
+                      <div className="min-w-0 rounded-md border border-line p-3" key={option.kind}>
+                        <h4 className="text-sm font-medium">
+                          {option.filename} · saved revision {item.revision_number}
+                        </h4>
+                        <dl className="mt-2 grid min-w-0 gap-2 text-xs leading-5">
+                          <div>
+                            <dt className="text-copy-muted">Document ID</dt>
+                            <dd className="break-all">
+                              <code>{item.id}</code>
+                            </dd>
+                          </div>
+                          {headsMatch && reference ? (
+                            <div>
+                              <dt className="text-copy-muted">Revision ID</dt>
+                              <dd className="break-all">
+                                <code>{reference.id}</code>
+                              </dd>
+                            </div>
+                          ) : null}
+                          <div>
+                            <dt className="text-copy-muted">SHA-256</dt>
+                            <dd className="break-all">
+                              <code>{item.content_sha256}</code>
+                            </dd>
+                          </div>
+                          {item.origin ? (
+                            <div>
+                              <dt className="text-copy-muted">Saved origin</dt>
+                              <dd>{item.origin}</dd>
+                            </div>
+                          ) : null}
+                          {item.created_at ? (
+                            <div>
+                              <dt className="text-copy-muted">Saved at</dt>
+                              <dd>{item.created_at}</dd>
+                            </div>
+                          ) : null}
+                          {item.author_user_id ? (
+                            <div>
+                              <dt className="text-copy-muted">Author ID</dt>
+                              <dd className="break-all">
+                                <code>{item.author_user_id}</code>
+                              </dd>
+                            </div>
+                          ) : null}
+                          {item.template_source ? (
+                            <div>
+                              <dt className="text-copy-muted">Template source</dt>
+                              <dd className="break-words">{item.template_source}</dd>
+                            </div>
+                          ) : null}
+                          {item.template_sha256 ? (
+                            <div>
+                              <dt className="text-copy-muted">Template SHA-256</dt>
+                              <dd className="break-all">
+                                <code>{item.template_sha256}</code>
+                              </dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </div>
+                    );
+                  })}
+                  {status?.current_pair_approval_id ? (
+                    <p className="break-all text-xs text-copy-muted">
+                      Pair approval ID <code>{status.current_pair_approval_id}</code>
+                    </p>
+                  ) : null}
+                  {status?.latest_manifest ? (
+                    <p className="break-all text-xs text-copy-muted">
+                      Latest final approval ID <code>{status.latest_manifest.id}</code> · PROJECT.md
+                      r{status.latest_manifest.project.revision_number}, AGENTS.md r
+                      {status.latest_manifest.agents.revision_number}, BACKLOG.md r
+                      {status.latest_manifest.backlog.revision_number}
+                    </p>
+                  ) : null}
+                </section>
+              </div>
+            </Disclosure>
+          </div>
+        </section>
       </div>
     </section>
   );
