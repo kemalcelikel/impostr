@@ -487,7 +487,7 @@ describe("account access", () => {
       });
       revoked = true;
       fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
-      expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
       expect(screen.queryByRole("textbox", { name: "Edit PROJECT.md" })).not.toBeInTheDocument();
       expect(screen.queryByText(/Private unsent editor/)).not.toBeInTheDocument();
       fireEvent.change(screen.getByLabelText("Username"), {
@@ -909,7 +909,7 @@ describe("account access", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
-    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     await signIn(memberB.username);
     fireEvent.click(await screen.findByRole("button", { name: "Open project Bob private plan" }));
     const bEditor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
@@ -970,14 +970,22 @@ describe("account access", () => {
 
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Sign in", level: 1 })).toBeInTheDocument();
-    const signInForm = screen.getByRole("form", { name: "Sign in" });
-    expect(signInForm).toHaveClass("login-form", "workbench-panel");
+    expect(await screen.findByRole("heading", { name: "Welcome back", level: 1 })).toHaveAttribute(
+      "id",
+      "sign-in-title",
+    );
+    const signInForm = screen.getByRole("form", { name: "Welcome back" });
+    expect(signInForm).toHaveClass("login-form");
     expect(
       screen.getByRole("link", { name: "Impostr home" }).closest(".login-header"),
     ).not.toBeNull();
     expect(signInForm.tagName).toBe("FORM");
     expect(signInForm.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(
+      within(signInForm).getByText("Open your projects and planning documents."),
+    ).toBeVisible();
+    expect(screen.getByRole("contentinfo")).toHaveTextContent("Private planning workspace");
+    expect(within(signInForm).queryByText("Private planning workspace")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toHaveAttribute("autocomplete", "username");
     expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "current-password");
     expect(screen.queryByRole("link", { name: /sign up/i })).not.toBeInTheDocument();
@@ -993,14 +1001,23 @@ describe("account access", () => {
     expect(document.documentElement.dataset.theme).not.toBe(previousTheme);
     expect(screen.getByLabelText("Password")).toBe(password);
     expect(password).toHaveValue("correct passphrase");
-    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    const visibilityToggle = screen.getByRole("button", { name: "Show password" });
+    expect(visibilityToggle.tagName).toBe("BUTTON");
+    expect(visibilityToggle).toHaveAttribute("type", "button");
+    expect(visibilityToggle).toHaveAttribute("aria-controls", "login-password");
+    expect(visibilityToggle).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(visibilityToggle);
     expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("correct passphrase");
     expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
     expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveValue("correct passphrase");
+    expect(visibilityToggle).toHaveAttribute("aria-pressed", "false");
+    expect(fetchMock.mock.calls.some(([input]) => pathOf(input) === "/api/auth/login")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("navigation", { name: "Application" })).toBeInTheDocument();
@@ -1048,7 +1065,14 @@ describe("account access", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid username or password");
-    expect(screen.getByRole("textbox", { name: "Username" })).toBeInTheDocument();
+    const signInForm = screen.getByRole("form", { name: "Welcome back" });
+    expect(within(signInForm).getByRole("textbox", { name: "Username" })).toHaveValue(
+      "unknown-user",
+    );
+    expect(within(signInForm).getByLabelText("Password")).toHaveValue("incorrect password");
+    expect(within(signInForm).getByRole("alert")).toHaveAttribute("aria-live", "assertive");
+    expect(within(signInForm).getByRole("button", { name: "Sign in" })).toBeEnabled();
+    expect(screen.queryByRole("navigation", { name: "Application" })).not.toBeInTheDocument();
   });
 
   it("clears a CSRF service error when retry restores anonymous sign-in", async () => {
@@ -1079,7 +1103,7 @@ describe("account access", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
     expect(csrfRequests).toBe(2);
@@ -1323,7 +1347,7 @@ describe("account access", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
 
-    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     await waitFor(() => expect(finishCsrfRefresh).toBeDefined());
     expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
     expect(screen.getByLabelText("Password")).toHaveValue("");

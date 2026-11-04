@@ -924,7 +924,7 @@ export default function App() {
         </>
       ) : (
         <header className="login-header">
-          <a aria-label="Impostr home" className="app-brand-link" href="/">
+          <a aria-label="Impostr home" className="login-brand-link" href="/">
             <Brand />
           </a>
           <ThemeToggle />
@@ -996,14 +996,13 @@ export default function App() {
           <section className="login-surface">
             <form
               aria-labelledby="sign-in-title"
-              className="workbench-panel login-form"
+              className="login-form"
               onSubmit={(event) => void submitLogin(event)}
             >
               <header className="login-heading">
-                <h1 className="app-page-title" id="sign-in-title">
-                  Sign in
+                <h1 className="login-title" id="sign-in-title">
+                  Welcome back
                 </h1>
-                <p className="text-xs text-copy-muted">Private planning workspace</p>
               </header>
               <p className="login-intro">Open your projects and planning documents.</p>
               {notice ? (
@@ -1011,7 +1010,7 @@ export default function App() {
                   {notice}
                 </Feedback>
               ) : null}
-              <div className="mt-5 grid gap-4">
+              <div className="login-fields">
                 <TextField
                   autoComplete="username"
                   id="login-username"
@@ -1033,9 +1032,8 @@ export default function App() {
                   </Feedback>
                 ) : null}
                 <Button
-                  className="workbench-save w-full"
+                  className="login-submit"
                   disabled={busyAction === "login" || !csrfToken}
-                  icon="logIn"
                   type="submit"
                   variant="primary"
                 >
@@ -1405,11 +1403,8 @@ export default function App() {
         </div>
       </dialog>
 
-      <footer
-        hidden={Boolean(user)}
-        className="mx-auto mt-8 w-full max-w-6xl px-5 py-5 text-center text-xs text-copy-muted sm:px-8"
-      >
-        <span>Administrator-managed access</span>
+      <footer hidden={Boolean(user)} className="login-footer">
+        <span>Private planning workspace</span>
       </footer>
     </div>
   );
