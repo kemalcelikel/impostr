@@ -19,7 +19,7 @@ Keep superseded decisions in the existing history documents, not duplicate hando
 
 ## Keep execution simple
 
-- Reuse existing code and dependencies; choose the smallest adequate change.
+- Choose the smallest adequate implementation.
 - Coordinator owns planning documents, task state, Git and Docker operations;
   delegate application implementation. Use one coordinator per checkout.
 - Check changed behavior and realistic risks. Reuse valid evidence; no coverage targets,
@@ -45,8 +45,10 @@ Use the root backlog parser/helper, not the nested toolkit's sprint defaults.
 Native candidate/fixture checks retain their exact-input and cleanup requirements.
 
 Web checks use the existing `web/Dockerfile` **checks** target with pinned
-Node22.17.0/npm10.9.2. Inside `/web`: `npm run build` and
-`npm run test -- src/canvasState.test.ts src/CardCanvas.test.tsx src/ProjectWorkspace.test.tsx`.
+Node22.17.0/npm10.9.2. Run checks sequentially, not parallel build/test containers.
+For disposable check containers use `--cpus=1 --memory=1536m --memory-swap=1536m`.
+Inside `/web`: `npm run build` and
+`npm run test -- src/canvasState.test.ts src/CardCanvas.test.tsx src/ProjectWorkspace.test.tsx --maxWorkers=1 --no-file-parallelism`.
 Use existing ESLint/Prettier for changed files. Do not use incompatible host Node24/npm11.
 
 ## Code and environment conventions
@@ -63,7 +65,7 @@ Use existing ESLint/Prettier for changed files. Do not use incompatible host Nod
 
 ## Git and task state
 
-- Work on the owner-selected branch, currently `feature/canvas`; do not use the old
+- Work on the owner-selected branch, currently `redesign`; do not use the old
   batch's branch or sprint fields as instructions to switch.
 - Inspect status, intended diff and recent history before Git writes. Stage only
   intended files/hunks. Commit, push or change branches only when authorized.

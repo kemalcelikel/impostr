@@ -5,6 +5,10 @@ The owner requested notes, not application changes or changes to the current run
 This file does not alter PROJECT.md, AGENTS.md, BACKLOG.md, task readiness, runner
 assignments, or Git publication permissions. The active native-PDF batch is separate.
 
+The visual and interaction proposals below are retained discussion history, not a
+design brief for the interface overhaul. No prior Figma-like direction, canvas layout
+or side-editor arrangement is required.
+
 ## Problem and owner-requested direction
 
 A single BACKLOG.md becomes difficult to navigate and expensive to load into an

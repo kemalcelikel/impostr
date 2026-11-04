@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactFlowInstance, ReactFlowProps } from "@xyflow/react";
 import CardCanvas from "./CardCanvas";
 import { createCanvasState, type CanvasNode } from "./canvasState";
+import { initializeTheme } from "./theme";
 
 const flowMock = vi.hoisted(() => ({
   props: null as ReactFlowProps<CanvasNode> | null,
@@ -113,11 +114,16 @@ describe("CardCanvas controlled interaction", () => {
     expect(firstTab).toHaveFocus();
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "ideas-root" } });
     const moveGroup = screen.getByRole("group", { name: "Move selected card with arrow keys" });
+    moveGroup.focus();
     fireEvent.keyDown(moveGroup, { key: "ArrowDown" });
     expect(flowMock.props!.nodes![0].position).toEqual({ x: 0, y: 170 });
     fireEvent.keyDown(moveGroup, { key: "ArrowDown", ctrlKey: true });
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Move selected card down" }), {
+      key: "ArrowDown",
+    });
     expect(flowMock.props!.nodes![0].position).toEqual({ x: 0, y: 170 });
+    expect(moveGroup).toHaveFocus();
     const viewport = screen.getByRole("group", { name: "Canvas viewport" });
     viewport.focus();
     fireEvent.keyDown(viewport, { key: " " });
@@ -127,6 +133,9 @@ describe("CardCanvas controlled interaction", () => {
     fireEvent.keyDown(screen.getByRole("combobox"), { key: " " });
     expect(flowMock.props!.nodesDraggable).toBe(true);
     fireEvent.keyDown(viewport, { key: " ", ctrlKey: true });
+    expect(flowMock.props!.nodesDraggable).toBe(true);
+    fireEvent.keyDown(viewport, { key: " " });
+    fireEvent(window, new Event("blur"));
     expect(flowMock.props!.nodesDraggable).toBe(true);
     expect(flowMock.props).toMatchObject({
       deleteKeyCode: null,
@@ -149,6 +158,16 @@ describe("CardCanvas controlled interaction", () => {
 
   it("uses visible zoom and explicit Fit view controls, never automatic fitting", () => {
     renderCanvas();
+    const viewport = screen.getByRole("group", { name: "Canvas viewport" });
+    const panel = viewport.closest(".canvas-panel");
+    expect(panel).toHaveClass("workbench-panel");
+    expect(panel).toContainElement(screen.getByRole("tablist", { name: "Sample canvas boards" }));
+    expect(screen.getByRole("tablist", { name: "Sample canvas boards" })).toHaveClass(
+      "workbench-tab-strip",
+    );
+    expect(screen.getByRole("button", { name: "Fit view" })).toHaveClass("workbench-quiet");
+    expect(screen.getByText("Demo boards")).toBeInTheDocument();
+    expect(screen.getByText("Sample data, not project files or tasks.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     fireEvent.click(screen.getByRole("button", { name: "Fit view" }));
@@ -158,5 +177,58 @@ describe("CardCanvas controlled interaction", () => {
     act(() => flowMock.props!.onViewportChange!({ x: 1, y: 2, zoom: 1.5 }));
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
     expect(screen.getByLabelText("Canvas zoom")).toHaveTextContent("150%");
+    act(() => flowMock.props!.onViewportChange!({ x: 1, y: 2, zoom: 0.25 }));
+    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
+    expect(zoomOut).toBeDisabled();
+    fireEvent.click(zoomOut);
+    expect(flowMock.zoomOut).toHaveBeenCalledOnce();
+    expect(zoomOut.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("button", { name: "Fit view" }).querySelector("svg")).toHaveAttribute(
+      "focusable",
+      "false",
+    );
+  });
+
+  it("keeps board layout, selection and focus while changing the renderer's theme", () => {
+    renderCanvas();
+    expect(screen.getByText(/Sample data, not project files or tasks/)).toBeInTheDocument();
+    const moveButton = screen.getByRole("button", { name: "Move selected card right" });
+    expect(moveButton).toBeDisabled();
+    expect(moveButton.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "ideas-root" } });
+    act(() => flowMock.props!.onViewportChange!({ x: 45, y: -30, zoom: 0.8 }));
+    const nodes = flowMock.props!.nodes;
+    const edges = flowMock.props!.edges;
+    expect(edges!.every((edge) => edge.style?.stroke === "var(--theme-copy-muted)")).toBe(true);
+    expect(
+      edges!.every(
+        (edge) =>
+          typeof edge.markerEnd === "object" && edge.markerEnd.color === "var(--theme-copy-muted)",
+      ),
+    ).toBe(true);
+    const renderer = screen.getByTestId("mock-flow");
+    const moveGroup = screen.getByRole("group", { name: "Move selected card with arrow keys" });
+    moveGroup.focus();
+    const store = initializeTheme();
+    const original = store.getSnapshot();
+    const next = original === "dark" ? "light" : "dark";
+    try {
+      act(() => store.setTheme(next));
+      expect(flowMock.props!.colorMode).toBe(next);
+      expect(screen.getByTestId("mock-flow")).toBe(renderer);
+      expect(flowMock.props!.nodes).toBe(nodes);
+      expect(flowMock.props!.nodes!.map((node) => node.id)).toEqual(nodes!.map((node) => node.id));
+      expect(flowMock.props!.edges).toBe(edges);
+      expect(flowMock.props!.viewport).toEqual({ x: 45, y: -30, zoom: 0.8 });
+      expect(screen.getByRole("combobox")).toHaveValue("ideas-root");
+      expect(moveGroup).toHaveFocus();
+      fireEvent.keyDown(document.body, { key: "ArrowRight" });
+      fireEvent.keyDown(document.body, { key: " " });
+      expect(flowMock.props!.nodes).toBe(nodes);
+      expect(flowMock.props!.nodesDraggable).toBe(true);
+      expect(flowMock.fitView).not.toHaveBeenCalled();
+    } finally {
+      act(() => store.setTheme(original));
+    }
   });
 });

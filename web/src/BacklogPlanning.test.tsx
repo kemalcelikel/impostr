@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BacklogPlanning, { type BacklogTask, type BacklogTaskDocument } from "./BacklogPlanning";
@@ -160,6 +160,39 @@ afterEach(() => {
 });
 
 describe("human backlog planning", () => {
+  it("retains unsaved task details across list and Markdown regions without submitting writes", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (pathOf(input).endsWith("/backlog/tasks"))
+        return Promise.resolve(jsonResponse(initialSnapshot));
+      throw new Error(`Unexpected request ${pathOf(input)}`);
+    });
+    renderPlanner(fetchMock);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select task IMP-101: Draft discovery" }),
+    );
+    const title = screen.getByRole("textbox", { name: "Task title" });
+    const views = screen.getByRole("group", { name: "Backlog view" });
+    expect(views).toHaveClass("backlog-view-choice");
+    expect(within(views).getByRole("button", { name: "Detail" })).toHaveClass(
+      "workbench-surface-choice",
+    );
+    fireEvent.change(title, { target: { value: "Unsent task decisions" } });
+    const layout = document.querySelector(".backlog-layout");
+    expect(layout).toHaveAttribute("data-panel", "detail");
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    expect(layout).toHaveAttribute("data-panel", "tasks");
+    expect(
+      screen.getByRole("button", { name: "Select task IMP-102: Ready prerequisite" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+    expect(layout).toHaveAttribute("hidden");
+    expect(title).toHaveValue("Unsent task decisions");
+    fireEvent.click(screen.getByRole("button", { name: "Detail" }));
+    expect(layout).not.toHaveAttribute("hidden");
+    expect(screen.getByRole("textbox", { name: "Task title" })).toBe(title);
+    expect(title).toHaveValue("Unsent task decisions");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
   it("loads a saved revision, changes only draft/ready on-row, and leaves runner outcomes read-only", async () => {
     let current = initialSnapshot;
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

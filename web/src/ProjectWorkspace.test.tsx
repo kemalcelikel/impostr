@@ -144,6 +144,17 @@ function showProjectList(): void {
   if (toggle) fireEvent.click(toggle);
 }
 
+function showProjectCreation(): void {
+  showProjectList();
+  const toggle = screen.getByRole("button", { name: "New project" });
+  if (toggle.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
+}
+
+async function openPairReview(): Promise<void> {
+  const toggle = await screen.findByRole("button", { name: "Review document pair" });
+  if (toggle.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
+}
+
 function renderWorkspace(
   fetchMock: ReturnType<typeof vi.fn>,
   props: {
@@ -225,6 +236,76 @@ afterEach(() => {
 });
 
 describe("private project drafts", () => {
+  it("attaches document tabs and tools to Documents and bounds the secondary pair review", async () => {
+    const fetchMock = vi.fn<typeof fetch>((input: RequestInfo | URL) => {
+      if (pathOf(input).endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      throw new Error(`Unexpected request ${pathOf(input)}`);
+    });
+    renderWorkspace(fetchMock);
+    expect(screen.queryByRole("textbox", { name: "Project name" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    const save = screen.getByRole("button", { name: "Save draft" });
+    const documents = screen.getByRole("region", { name: "Documents" });
+    const panel = editor.closest(".document-panel");
+    const tools = within(documents).getByRole("group", { name: "Document tools" });
+    const tabs = within(documents).getByRole("tablist", { name: "Draft document switcher" });
+    expect(panel).toContainElement(tools);
+    expect(panel).toContainElement(tabs);
+    expect(tools.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(tabs.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(save).toBeDisabled();
+    expect(save).toHaveClass("workbench-save");
+    expect(within(documents).getByRole("button", { name: "View history" })).toHaveClass(
+      "workbench-quiet",
+    );
+    expect(save.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(screen.getByRole("button", { name: "Review document pair" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(editor, { target: { value: "# Kept while reviewing\n" } });
+    await openPairReview();
+    expect(
+      screen
+        .getByRole("heading", { name: "Approve the saved document pair" })
+        .closest(".pair-review-content"),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).toBeDisabled();
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Approve the saved document pair" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review document pair" }));
+    expect(editor).toHaveValue("# Kept while reviewing\n");
+    expect(save).toBeEnabled();
+    expect(fetchMock.mock.calls.every(([, init]) => (init?.method ?? "GET") === "GET")).toBe(true);
+  });
+  it("keeps failed save feedback beside the toolbar and above the retained plain editor", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (pathOf(input).endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (pathOf(input).endsWith("/documents/project") && init?.method === "PUT")
+        return Promise.resolve(jsonResponse({ detail: "Draft storage is unavailable" }, 503));
+      throw new Error(`Unexpected request ${pathOf(input)}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.change(editor, { target: { value: "# Keep this failed save\n" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    const failure = await screen.findByText("Draft storage is unavailable");
+    expect(failure).toHaveAttribute("role", "alert");
+    expect(failure.closest(".document-feedback")).not.toBeNull();
+    expect(failure.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(editor).toHaveValue("# Keep this failed save\n");
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+  });
   it("opens Canvas without losing unsaved source, chat text or an in-flight chat request", async () => {
     const sending = deferred<Response>();
     let sendSignal: AbortSignal | null | undefined;
@@ -240,7 +321,21 @@ describe("private project drafts", () => {
         return sending.promise;
       }
       if (path.includes("/attachments"))
-        return Promise.resolve(jsonResponse({ attachments: [], next_after: null }));
+        return Promise.resolve(
+          jsonResponse({
+            attachments: [
+              {
+                id: "canvas-pdf",
+                filename: "reference.pdf",
+                status: "stored",
+                original_size: 123,
+                original_sha256: "a".repeat(64),
+                native_available: true,
+              },
+            ],
+            next_after: null,
+          }),
+        );
       if (path.includes("/events?")) return Promise.resolve(jsonResponse({ events: [], after: 0 }));
       if (path.endsWith("/chat/canvas-chat"))
         return Promise.resolve(jsonResponse({ turns: [], interactions: [] }));
@@ -250,25 +345,40 @@ describe("private project drafts", () => {
       projects: [project, secondProject],
       onWideReviewChange: wideView,
     });
-    expect(screen.queryByRole("button", { name: "Canvas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sample canvas" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
     const chat = screen.getByRole("region", { name: "Project conversation" });
     fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
     const composer = screen.getByRole("textbox", { name: "Message tech-lead" });
     await waitFor(() => expect(composer).toBeEnabled());
+    const inventorySummary = (await screen.findByText(/^Manage PDFs ·/)).closest("summary")!;
+    fireEvent.click(inventorySummary);
+    fireEvent.click(await screen.findByRole("button", { name: "Attach reference.pdf" }));
+    const inventory = inventorySummary.closest("details")!;
+    const upload = screen.getByLabelText("Upload a PDF");
+    const selectedPdfs = screen.getByRole("group", { name: "Ordered selected PDFs" });
+    fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    expect(editor.closest(".workspace-layout")).toHaveAttribute("data-region", "work");
+    expect(chat).toBeInTheDocument();
+    expect(selectedPdfs).toHaveTextContent("reference.pdf");
+    fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
+    expect(screen.getByLabelText("Upload a PDF")).toBe(upload);
+    expect(inventory).toHaveAttribute("open");
     fireEvent.change(composer, { target: { value: "Keep this pending message" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(sendSignal).toBeDefined());
     fireEvent.change(editor, { target: { value: "# Unsaved source survives Canvas\n" } });
     const requestsAtEntry = fetchMock.mock.calls.length;
 
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sample canvas" }));
     expect(wideView).toHaveBeenLastCalledWith(true);
     expect(editor).toBeInTheDocument();
     expect(editor.closest("[hidden]")).not.toBeNull();
     expect(chat).toBeInTheDocument();
     expect(composer).toHaveValue("Keep this pending message");
+    expect(selectedPdfs).toHaveTextContent("reference.pdf");
     expect(sendSignal?.aborted).toBe(false);
     expect(fetchMock.mock.calls).toHaveLength(requestsAtEntry);
     showProjectList();
@@ -277,13 +387,16 @@ describe("private project drafts", () => {
     window.dispatchEvent(exit);
     expect(exit.defaultPrevented).toBe(true);
     sending.resolve(jsonResponse({ detail: "Another project turn is active" }, 409));
-    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Planning" }));
     expect(wideView).toHaveBeenLastCalledWith(false);
     expect(screen.getByRole("textbox", { name: "Edit PROJECT.md" })).toBe(editor);
     expect(screen.getByRole("region", { name: "Project conversation" })).toBe(chat);
     expect(editor).toHaveValue("# Unsaved source survives Canvas\n");
     expect(screen.getByRole("textbox", { name: "Message tech-lead" })).toBe(composer);
     expect(composer).toHaveValue("Keep this pending message");
+    expect(screen.getByRole("group", { name: "Ordered selected PDFs" })).toBe(selectedPdfs);
+    expect(screen.getByLabelText("Upload a PDF")).toBe(upload);
+    expect(inventory).toHaveAttribute("open");
     expect(await screen.findByText("Another project turn is active")).toBeInTheDocument();
     expect(sendSignal?.aborted).toBe(false);
   });
@@ -297,7 +410,7 @@ describe("private project drafts", () => {
     renderWorkspace(fetchMock, { projects: [project, secondProject] });
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sample canvas" }));
     fireEvent.click(screen.getByRole("tab", { name: "Journey tree" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Select a sample card" }), {
       target: { value: "journey-arrive" },
@@ -306,14 +419,14 @@ describe("private project drafts", () => {
     showProjectList();
     fireEvent.click(screen.getByRole("button", { name: "Open project Second private plan" }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sample canvas" }));
     expect(screen.getByRole("tab", { name: "Idea tree" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("combobox", { name: "Select a sample card" })).toHaveValue("");
     fireEvent.click(screen.getByRole("tab", { name: "Release tree" }));
     showProjectList();
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sample canvas" }));
     expect(screen.getByRole("tab", { name: "Journey tree" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -370,26 +483,31 @@ describe("private project drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
-    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Planning" }));
     expect(
       screen.queryByRole("button", { name: "Return to final review" }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Final review and downloads" }));
+    fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
+    const layout = document.querySelector(".workspace-layout");
+    expect(layout).toHaveAttribute("data-region", "conversation");
+    fireEvent.click(screen.getByRole("button", { name: "Review and downloads" }));
     const reviewHeading = await screen.findByRole("heading", {
       name: "Review and download approved files",
     });
     expect(wideReviewChange).toHaveBeenLastCalledWith(true);
+    expect(layout).toHaveAttribute("data-region", "work");
+    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Download PROJECT.md" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sample canvas" }));
     expect(reviewHeading).toBeInTheDocument();
     expect(reviewHeading.closest("[hidden]")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Final review and downloads" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review and downloads" }));
     expect(screen.getByRole("heading", { name: "Review and download approved files" })).toBe(
       reviewHeading,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Planning" }));
     expect(wideReviewChange).toHaveBeenLastCalledWith(false);
     expect(screen.getByRole("textbox", { name: "Edit PROJECT.md" })).toBeInTheDocument();
   });
@@ -604,10 +722,10 @@ describe("private project drafts", () => {
     });
 
     const taskTitle = screen.getByRole("textbox", { name: "Task title" });
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sample canvas" }));
     expect(taskTitle).toBeInTheDocument();
     expect(taskTitle.closest("[hidden]")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Planning and editing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Planning" }));
     expect(screen.getByRole("textbox", { name: "Task title" })).toBe(taskTitle);
     expect(taskTitle).toHaveValue("Updated task");
 
@@ -656,6 +774,7 @@ describe("private project drafts", () => {
       fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
       const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
       showProjectList();
+      showProjectCreation();
       fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), {
         target: { value: created.name },
       });
@@ -1449,6 +1568,7 @@ describe("private project drafts", () => {
     });
     renderWorkspace(fetchMock, { projects: [] });
 
+    showProjectCreation();
     const nameField = screen.getByRole("textbox", { name: "Project name" });
     fireEvent.change(nameField, { target: { value: "Existing project" } });
     fireEvent.click(screen.getByRole("button", { name: "Create project" }));
@@ -1484,6 +1604,7 @@ describe("private project drafts", () => {
     });
     renderWorkspace(fetchMock, { projects: [] });
 
+    showProjectCreation();
     const nameField = screen.getByRole("textbox", { name: "Project name" });
     fireEvent.change(nameField, { target: { value: "../escape" } });
     fireEvent.click(screen.getByRole("button", { name: "Create project" }));
@@ -2027,6 +2148,7 @@ describe("private project drafts", () => {
     expect(screen.getByRole("button", { name: "View history" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Discard editor changes" })).toBeDisabled();
     showProjectList();
+    showProjectCreation();
     expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Open project Second private plan" })).toBeDisabled();
     fireEvent.submit(screen.getByRole("button", { name: "Create project" }).closest("form")!);
@@ -2088,6 +2210,7 @@ describe("private project drafts", () => {
       );
       expect(editor).toHaveValue("# Typed during request\n");
       showProjectList();
+      showProjectCreation();
       expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
     },
   );
@@ -2319,12 +2442,20 @@ describe("private project drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     const approveButton = await screen.findByRole("button", {
       name: "Approve saved PROJECT.md + AGENTS.md pair",
     });
     expect(approveButton).toBeEnabled();
+    expect(approveButton).toHaveAccessibleDescription(
+      /Review both saved files, then approve this document pair/,
+    );
     fireEvent.change(editor, { target: { value: "# Saved project revision\n" } });
     expect(approveButton).toBeDisabled();
+    expect(approveButton).toHaveAccessibleDescription(/Save or discard unsaved editor text/);
+    expect(screen.getByTestId("workspace-pair-approval-state")).toHaveTextContent(
+      "Local changes pending",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     expect(await screen.findByText("Saved PROJECT.md as revision 2.")).toBeInTheDocument();
     await waitFor(() => expect(approveButton).toBeEnabled());
@@ -2392,6 +2523,7 @@ describe("private project drafts", () => {
     renderWorkspace(fetchMock);
 
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    await openPairReview();
     const approvalSection = await screen.findByRole("region", {
       name: "Approve the saved document pair",
     });
@@ -2409,18 +2541,75 @@ describe("private project drafts", () => {
 
     expect(approvedButton).toBeDisabled();
     expect(actions).toHaveClass("grid", "min-w-0", "gap-3", "lg:flex", "lg:flex-wrap");
-    expect(approvedButton).toHaveClass(
-      "w-full",
-      "lg:w-auto",
-      "whitespace-normal",
-      "focus-visible:outline-2",
-    );
+    expect(approvedButton).toHaveClass("w-full", "lg:w-auto", "whitespace-normal", "ui-button");
     expect(olderApprovalsButton).toHaveClass("w-full", "lg:w-auto");
     expect(historyControl).not.toBeNull();
     expect(historyControl).toHaveClass("w-full", "min-w-0", "lg:flex-1", "lg:min-w-56");
     expect(historyControl).toContainElement(historySummary);
     expect(historySummary.tagName).toBe("SUMMARY");
     expect(historySummary).toHaveClass("break-words", "focus-visible:outline-2");
+    expect(approvedButton).toHaveAccessibleDescription(
+      /Plan the backlog.*not final three-file approval/,
+    );
+    expect(within(approvalSection).getByRole("button", { name: "Plan the backlog" })).toBeEnabled();
+    expect(approvalSection).toHaveTextContent(/saving BACKLOG.md does not/);
+    const revisionSummary = within(approvalSection).getByText("PROJECT.md revision details");
+    expect(revisionSummary.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(revisionSummary);
+    revisionSummary.closest("details")!.open = true;
+    expect(
+      within(revisionSummary.closest("details")!).getByText("revision-project-1").closest("div"),
+    ).toHaveTextContent("Revision ID");
+
+    const editor = screen.getByRole("textbox", { name: "Edit PROJECT.md" });
+    fireEvent.change(editor, { target: { value: "# Unsaved after approval\n" } });
+    expect(screen.getByTestId("workspace-pair-approval-state")).toHaveTextContent(
+      "Local changes pending",
+    );
+    expect(
+      screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
+    ).toHaveAccessibleDescription(/Save or discard unsaved editor text/);
+    expect(screen.queryByRole("button", { name: "Plan the backlog" })).not.toBeInTheDocument();
+    expect(editor).toHaveValue("# Unsaved after approval\n");
+  });
+
+  it("does not present a newer server-approved pair as approval of the visible saved drafts", async () => {
+    const newerProject = makeDocument("project", "# Newer specification\n", 2);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") throw new Error("A mismatched saved pair must not be approved.");
+      const path = pathOf(input);
+      if (path.endsWith("/documents"))
+        return Promise.resolve(jsonResponse(Object.values(initialDocuments)));
+      if (path.includes("/document-pair-approval"))
+        return Promise.resolve(
+          jsonResponse(makeApprovalStatus(newerProject, initialDocuments.agents, true)),
+        );
+      throw new Error(`Unexpected request ${path}`);
+    });
+    renderWorkspace(fetchMock);
+    fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
+    const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
+    const approve = screen.getByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    await waitFor(() =>
+      expect(approve).toHaveAccessibleDescription(/saved snapshots do not match/),
+    );
+    expect(approve).toBeDisabled();
+    expect(screen.getByTestId("workspace-pair-approval-state")).toHaveTextContent(
+      "Re-review required",
+    );
+    expect(screen.getByTestId("workspace-pair-approval-state")).not.toHaveClass("ui-tone--success");
+    expect(
+      screen.queryByRole("button", { name: "Approved at last check" }),
+    ).not.toBeInTheDocument();
+    expect(editor).toHaveValue(initialDocuments.project.content);
+    fireEvent.click(approve);
+    expect(fetchMock.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
   });
 
   it("refreshes both saved heads and approval on tab return without erasing dirty typing", async () => {
@@ -2468,6 +2657,7 @@ describe("private project drafts", () => {
     renderWorkspace(fetchMock);
     fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     expect(await screen.findByRole("button", { name: "Approved at last check" })).toBeDisabled();
     expect(screen.getByText(/Another tab may have saved since then/)).toBeInTheDocument();
 
@@ -2481,6 +2671,12 @@ describe("private project drafts", () => {
     expect(screen.getByText("Saved revision 2")).toBeInTheDocument();
     expect(editor).toHaveValue("# My unsaved idea\n");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+    const approveButton = screen.getByRole("button", {
+      name: "Approve saved PROJECT.md + AGENTS.md pair",
+    });
+    expect(approveButton).toBeDisabled();
+    expect(approveButton).toHaveAccessibleDescription(/Save or discard unsaved editor text/);
+    expect(screen.getByTestId("workspace-pair-approval-state")).not.toHaveClass("ui-tone--success");
 
     fireEvent.click(screen.getByRole("button", { name: "Reload saved pair and status" }));
     await waitFor(() => expect(documentCalls).toBe(3));
@@ -2650,6 +2846,7 @@ describe("private project drafts", () => {
     renderWorkspace(fetchMock);
     fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     const approvalButton = await screen.findByRole("button", {
       name: "Approve saved PROJECT.md + AGENTS.md pair",
     });
@@ -2772,6 +2969,7 @@ describe("private project drafts", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
       const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      await openPairReview();
       const approveButton = await screen.findByRole("button", {
         name: "Approve saved PROJECT.md + AGENTS.md pair",
       });
@@ -2958,6 +3156,7 @@ describe("private project drafts", () => {
     });
     renderWorkspace(fetchMock);
     fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
+    await openPairReview();
     const olderButton = await screen.findByRole("button", { name: "Load earlier approvals" });
     fireEvent.click(olderButton);
     expect(olderRequests).toBe(1);
@@ -3020,6 +3219,7 @@ describe("private project drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     const approvalSection = screen.getByRole("region", { name: "Approve the saved document pair" });
     const olderButton = await within(approvalSection).findByRole("button", {
       name: "Load earlier approvals",
@@ -3119,6 +3319,7 @@ describe("private project drafts", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
       await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+      await openPairReview();
       const approveButton = await screen.findByRole("button", {
         name: "Approve saved PROJECT.md + AGENTS.md pair",
       });
@@ -3291,6 +3492,7 @@ describe("private project drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     const approveButton = await screen.findByRole("button", {
       name: "Approve saved PROJECT.md + AGENTS.md pair",
     });
@@ -3367,6 +3569,7 @@ describe("private project drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     const approveButton = await screen.findByRole("button", {
       name: "Approve saved PROJECT.md + AGENTS.md pair",
     });
@@ -3394,6 +3597,9 @@ describe("private project drafts", () => {
       name: "I reviewed both latest documents",
     });
     expect(reviewButton).toBeDisabled();
+    expect(approveButton).toHaveAccessibleDescription(
+      /Compare both latest saved files, then confirm/,
+    );
 
     const switcher = screen.getByRole("combobox", { name: "Compare saved document" });
     fireEvent.change(switcher, { target: { value: "agents" } });
@@ -3460,6 +3666,7 @@ describe("private project drafts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open project Twin tab plan" }));
     const editor = await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     const approveButton = await screen.findByRole("button", {
       name: "Approve saved PROJECT.md + AGENTS.md pair",
     });
@@ -3527,6 +3734,7 @@ describe("private project drafts", () => {
     renderWorkspace(fetchMock);
     fireEvent.click(screen.getByRole("button", { name: /Twin tab plan/ }));
     await screen.findByRole("textbox", { name: "Edit PROJECT.md" });
+    await openPairReview();
     fireEvent.click(
       await screen.findByRole("button", { name: "Approve saved PROJECT.md + AGENTS.md pair" }),
     );

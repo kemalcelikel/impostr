@@ -1,5 +1,8 @@
 # Impostr — backlog
 
+Completed specifications and delivery history are in `docs/backlog-completed.md`.
+No runner, branch change or publication is authorized.
+
 ## [!] IMP-002 — Prove safe OpenCode web-session integration
 
 **Depends on:** None
